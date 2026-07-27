@@ -1,0 +1,269 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any, Iterable
+
+import h5py
+import numpy as np
+import yaml
+
+
+def project_root() -> Path:
+    return Path(__file__).resolve().parents[1]
+
+
+def load_config() -> dict[str, Any]:
+    path = project_root() / "config" / "benchmark.yaml"
+    with path.open("r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def cif_path(config: dict[str, Any]) -> Path:
+    return project_root() / config["dataset"]["cif_path"]
+
+
+def normalize(v: np.ndarray, *, eps: float = 1e-12) -> np.ndarray:
+    v = np.asarray(v, dtype=float)
+    n = float(np.linalg.norm(v))
+    if n < eps:
+        raise ValueError("Cannot normalize a near-zero vector.")
+    return v / n
+
+
+def direction_cartesian(lattice_matrix: np.ndarray, uvw: Iterable[float]) -> np.ndarray:
+    """Convert a direct-lattice direction [u v w] to Cartesian coordinates.
+
+    pymatgen stores a, b, c as rows of lattice_matrix.
+    """
+    return np.asarray(uvw, dtype=float) @ np.asarray(lattice_matrix, dtype=float)
+
+
+def make_orientation_matrix(
+    lattice_matrix: np.ndarray,
+    zone_axis_uvw: Iterable[float],
+    x_reference_uvw: Iterable[float],
+    in_plane_rotation_deg: float,
+) -> np.ndarray:
+    """Return R_sample_to_crystal with columns [x_crystal, y_crystal, z_crystal]."""
+    z = normalize(direction_cartesian(lattice_matrix, zone_axis_uvw))
+    x_ref = direction_cartesian(lattice_matrix, x_reference_uvw)
+    x0 = x_ref - np.dot(x_ref, z) * z
+    x0 = normalize(x0)
+    y0 = normalize(np.cross(z, x0))
+
+    phi = np.deg2rad(float(in_plane_rotation_deg))
+    x = np.cos(phi) * x0 + np.sin(phi) * y0
+    y = -np.sin(phi) * x0 + np.cos(phi) * y0
+    R = np.column_stack([normalize(x), normalize(y), z])
+
+    if not np.allclose(R.T @ R, np.eye(3), atol=1e-8):
+        raise ValueError("Orientation matrix is not orthonormal.")
+    if not np.isclose(np.linalg.det(R), 1.0, atol=1e-8):
+        raise ValueError("Orientation matrix determinant is not +1.")
+    return R
+
+
+
+def quaternion_wxyz_to_matrix(quaternion_wxyz: Iterable[float]) -> np.ndarray:
+    """Convert a unit quaternion [w, x, y, z] to a proper rotation matrix.
+
+    The returned matrix uses the benchmark convention R_sample_to_crystal.
+    """
+    q = np.asarray(quaternion_wxyz, dtype=float)
+    if q.shape != (4,):
+        raise ValueError(f"Quaternion must have shape (4,), got {q.shape}.")
+    q = q / np.linalg.norm(q)
+    if q[0] < 0:
+        q = -q
+    w, x, y, z = q
+    R = np.array(
+        [
+            [1 - 2 * (y * y + z * z), 2 * (x * y - w * z), 2 * (x * z + w * y)],
+            [2 * (x * y + w * z), 1 - 2 * (x * x + z * z), 2 * (y * z - w * x)],
+            [2 * (x * z - w * y), 2 * (y * z + w * x), 1 - 2 * (x * x + y * y)],
+        ],
+        dtype=float,
+    )
+    return nearest_rotation(R)
+
+
+def low_discrepancy_so3_quaternion(index: int, offset: float = 0.0) -> np.ndarray:
+    """Return a deterministic quasi-uniform SO(3) quaternion [w, x, y, z].
+
+    This is a low-discrepancy variant of Shoemake's uniform quaternion map.
+    """
+    if index < 0:
+        raise ValueError("index must be non-negative")
+    golden = (np.sqrt(5.0) - 1.0) / 2.0
+    silver = np.sqrt(2.0) - 1.0
+    u1 = np.mod((index + 0.5) * golden + offset, 1.0)
+    u2 = np.mod((index + 0.5) * silver + 0.5 * offset, 1.0)
+    u3 = np.mod((index + 0.5) * (np.sqrt(3.0) - 1.0) + 0.25 * offset, 1.0)
+    q_xyzw = np.array(
+        [
+            np.sqrt(1.0 - u1) * np.sin(2.0 * np.pi * u2),
+            np.sqrt(1.0 - u1) * np.cos(2.0 * np.pi * u2),
+            np.sqrt(u1) * np.sin(2.0 * np.pi * u3),
+            np.sqrt(u1) * np.cos(2.0 * np.pi * u3),
+        ],
+        dtype=float,
+    )
+    q_wxyz = q_xyzw[[3, 0, 1, 2]]
+    if q_wxyz[0] < 0:
+        q_wxyz = -q_wxyz
+    return q_wxyz / np.linalg.norm(q_wxyz)
+
+
+def symmetry_aware_misorientation_deg(
+    R_a: np.ndarray,
+    R_b: np.ndarray,
+    symmetry_rotations: Iterable[np.ndarray],
+) -> float:
+    """Minimum misorientation between two sample-to-crystal matrices."""
+    R_a = nearest_rotation(np.asarray(R_a, dtype=float))
+    R_b = nearest_rotation(np.asarray(R_b, dtype=float))
+    return min(
+        rotation_angle_deg(R_a @ (nearest_rotation(S) @ R_b).T)
+        for S in symmetry_rotations
+    )
+
+
+# Right-acting sample-frame rotations used by the Clean-Peak evaluation.
+# FRIEDEL_SAMPLE_ROTATION maps every diffraction vector q to -q while
+# keeping the beam axis fixed. Ideal kinematical diffraction contains
+# Friedel pairs, so R and R @ FRIEDEL_SAMPLE_ROTATION are observationally
+# equivalent for the peak-set input used by this benchmark.
+FRIEDEL_SAMPLE_ROTATION = np.diag([-1.0, -1.0, 1.0])
+
+# py4DSTEM ACOM represents its optional projected mirror branch by
+# negating columns 1 and 2 of the sample-to-crystal matrix, i.e. by
+# right-multiplication with this 180 degree sample-x rotation.
+ACOM_MIRROR_SAMPLE_ROTATION = np.diag([1.0, -1.0, -1.0])
+
+
+def friedel_aware_misorientation_deg(
+    R_a: np.ndarray,
+    R_b: np.ndarray,
+    symmetry_rotations: Iterable[np.ndarray],
+) -> float:
+    """Minimum Clean-Peak misorientation including Friedel equivalence.
+
+    Both matrices use the benchmark sample-to-crystal convention. The
+    crystal point-group symmetry acts on the left, while the 180 degree
+    detector-plane/Friedel ambiguity acts on the sample frame on the right.
+    """
+    R_a = nearest_rotation(np.asarray(R_a, dtype=float))
+    R_b = nearest_rotation(np.asarray(R_b, dtype=float))
+    sample_branches = (np.eye(3), FRIEDEL_SAMPLE_ROTATION)
+    return min(
+        rotation_angle_deg(
+            R_a
+            @ (nearest_rotation(S) @ R_b @ sample_branch).T
+        )
+        for S in symmetry_rotations
+        for sample_branch in sample_branches
+    )
+
+
+def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for record in records:
+            f.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    with path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                records.append(json.loads(line))
+    return records
+
+
+def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    offsets = [0]
+    qx_parts: list[np.ndarray] = []
+    qy_parts: list[np.ndarray] = []
+    intensity_parts: list[np.ndarray] = []
+    sample_ids: list[str] = []
+
+    for sample in samples:
+        sample_ids.append(str(sample["sample_id"]))
+        qx = np.asarray(sample["qx"], dtype=np.float32)
+        qy = np.asarray(sample["qy"], dtype=np.float32)
+        intensity = np.asarray(sample["intensity"], dtype=np.float32)
+        if not (len(qx) == len(qy) == len(intensity)):
+            raise ValueError(f"Peak array length mismatch for {sample['sample_id']}")
+        qx_parts.append(qx)
+        qy_parts.append(qy)
+        intensity_parts.append(intensity)
+        offsets.append(offsets[-1] + len(qx))
+
+    qx_all = np.concatenate(qx_parts) if qx_parts else np.empty(0, dtype=np.float32)
+    qy_all = np.concatenate(qy_parts) if qy_parts else np.empty(0, dtype=np.float32)
+    i_all = (
+        np.concatenate(intensity_parts)
+        if intensity_parts
+        else np.empty(0, dtype=np.float32)
+    )
+
+    with h5py.File(path, "w") as h5:
+        h5.create_dataset("sample_id", data=np.asarray(sample_ids, dtype=h5py.string_dtype("utf-8")))
+        peaks = h5.create_group("peaks")
+        peaks.create_dataset("qx", data=qx_all, compression="gzip")
+        peaks.create_dataset("qy", data=qy_all, compression="gzip")
+        peaks.create_dataset("intensity", data=i_all, compression="gzip")
+        peaks.create_dataset("offsets", data=np.asarray(offsets, dtype=np.int64))
+        for key, value in attrs.items():
+            if isinstance(value, (dict, list, tuple)):
+                h5.attrs[key] = json.dumps(value, ensure_ascii=False)
+            else:
+                h5.attrs[key] = value
+
+
+def read_peak_h5(path: Path) -> list[dict[str, Any]]:
+    samples: list[dict[str, Any]] = []
+    with h5py.File(path, "r") as h5:
+        ids = [x.decode() if isinstance(x, bytes) else str(x) for x in h5["sample_id"][:]]
+        offsets = h5["peaks/offsets"][:]
+        qx = h5["peaks/qx"][:]
+        qy = h5["peaks/qy"][:]
+        intensity = h5["peaks/intensity"][:]
+        for i, sample_id in enumerate(ids):
+            s, e = int(offsets[i]), int(offsets[i + 1])
+            samples.append(
+                {
+                    "sample_id": sample_id,
+                    "qx": qx[s:e],
+                    "qy": qy[s:e],
+                    "intensity": intensity[s:e],
+                }
+            )
+    return samples
+
+
+def normalize_intensities(intensity: np.ndarray) -> np.ndarray:
+    intensity = np.asarray(intensity, dtype=float)
+    max_value = float(np.max(intensity)) if intensity.size else 0.0
+    if max_value > 0:
+        intensity = intensity / max_value
+    return intensity.astype(np.float32)
+
+
+def nearest_rotation(matrix: np.ndarray) -> np.ndarray:
+    U, _, Vt = np.linalg.svd(np.asarray(matrix, dtype=float))
+    R = U @ Vt
+    if np.linalg.det(R) < 0:
+        U[:, -1] *= -1
+        R = U @ Vt
+    return R
+
+
+def rotation_angle_deg(R: np.ndarray) -> float:
+    value = (np.trace(R) - 1.0) / 2.0
+    value = float(np.clip(value, -1.0, 1.0))
+    return float(np.degrees(np.arccos(value)))

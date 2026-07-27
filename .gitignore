@@ -1,0 +1,154 @@
+# ============================================================
+# OR4D / NCM811 Clean-Peak Benchmark
+# ============================================================
+
+# -----------------------------
+# Operating systems
+# -----------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+
+# -----------------------------
+# Python caches and bytecode
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.pyright/
+.coverage
+.coverage.*
+htmlcov/
+.cache/
+
+# -----------------------------
+# Python environments
+# -----------------------------
+.venv/
+venv/
+env/
+ENV/
+.python-version
+.conda/
+conda-meta/
+
+# -----------------------------
+# Packaging and build outputs
+# -----------------------------
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# -----------------------------
+# Jupyter
+# -----------------------------
+.ipynb_checkpoints/
+
+# -----------------------------
+# IDE / editor settings
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# -----------------------------
+# Typst and document build files
+# Keep .typ and source images under version control.
+# Put generated documents in build/ or out/.
+# -----------------------------
+.typst-cache/
+*.typst.log
+*.aux
+*.log
+*.toc
+*.out
+*.synctex.gz
+
+# -----------------------------
+# Local benchmark runs
+# -----------------------------
+runs/
+outputs/
+artifacts/
+tmp/
+temp/
+scratch/
+logs/
+
+# Local-only baseline submissions and reports
+submissions/local/
+reports/local/
+
+# Timing / profiling / debug dumps
+*.prof
+*.profile
+*.trace
+*.dump
+
+# -----------------------------
+# Private benchmark material
+# Never publish hidden labels or answer keys.
+# -----------------------------
+private/
+hidden/
+ground_truth/
+answer_keys/
+data/private/
+data/hidden/
+data/ground_truth/
+data/answer_keys/
+
+# -----------------------------
+# Backups and local archives
+# -----------------------------
+backup_before_*/
+backup_*/
+*.bak
+*.backup
+*.tmp
+*.temp
+*.orig
+*.rej
+*.zip
+*.tar
+*.tar.gz
+*.7z
+
+# -----------------------------
+# Large local caches / downloaded models
+# -----------------------------
+.cache/
+huggingface/
+.huggingface/
+models/
+checkpoints/
+wandb/
+
+# -----------------------------
+# Optional local environment files
+# -----------------------------
+.env
+.env.*
+!.env.example
+
+# -----------------------------
+# Keep empty project directories when needed
+# -----------------------------
+!.gitkeep
+
+
+AGENTS.md
+CLAUDE.md
+.cache
+.claude

@@ -1,0 +1,171 @@
+{
+  "primary_metric": "friedel_equivalent_misorientation_deg",
+  "metrics": {
+    "track": "clean",
+    "num_samples": 17,
+    "mean_misorientation_deg": 1.581240133849321,
+    "median_misorientation_deg": 2.0046633982633977,
+    "p90_misorientation_deg": 2.5933026123488316,
+    "accuracy_within_1deg": 0.29411764705882354,
+    "accuracy_within_2deg": 0.47058823529411764,
+    "accuracy_within_5deg": 1.0
+  },
+  "metrics_strict": {
+    "track": "clean",
+    "num_samples": 17,
+    "mean_misorientation_deg": 5.1106518677708,
+    "median_misorientation_deg": 2.107899535863716,
+    "p90_misorientation_deg": 2.728802646001137,
+    "accuracy_within_1deg": 0.23529411764705882,
+    "accuracy_within_2deg": 0.4117647058823529,
+    "accuracy_within_5deg": 0.9411764705882353
+  },
+  "samples": [
+    {
+      "sample_id": "clean_ori_000",
+      "track": "clean",
+      "sampling_type": "low_index_anchor",
+      "strict_misorientation_deg": 59.99999947658705,
+      "friedel_equivalent_misorientation_deg": 0.0,
+      "misorientation_deg": 0.0
+    },
+    {
+      "sample_id": "clean_ori_001",
+      "track": "clean",
+      "sampling_type": "low_index_anchor",
+      "strict_misorientation_deg": 0.018733286992638636,
+      "friedel_equivalent_misorientation_deg": 0.018733286992638636,
+      "misorientation_deg": 0.018733286992638636
+    },
+    {
+      "sample_id": "clean_ori_002",
+      "track": "clean",
+      "sampling_type": "low_index_anchor",
+      "strict_misorientation_deg": 0.01873423542233176,
+      "friedel_equivalent_misorientation_deg": 0.01873423534451386,
+      "misorientation_deg": 0.01873423534451386
+    },
+    {
+      "sample_id": "clean_ori_003",
+      "track": "clean",
+      "sampling_type": "low_index_anchor",
+      "strict_misorientation_deg": 2.2323722565400757,
+      "friedel_equivalent_misorientation_deg": 2.2323722565400757,
+      "misorientation_deg": 2.2323722565400757
+    },
+    {
+      "sample_id": "clean_ori_004",
+      "track": "clean",
+      "sampling_type": "low_index_anchor",
+      "strict_misorientation_deg": 2.420119954658056,
+      "friedel_equivalent_misorientation_deg": 2.420119954658056,
+      "misorientation_deg": 2.420119954658056
+    },
+    {
+      "sample_id": "clean_ori_005",
+      "track": "clean",
+      "sampling_type": "nonzero_in_plane",
+      "strict_misorientation_deg": 0.06338715000701124,
+      "friedel_equivalent_misorientation_deg": 0.06338715000701124,
+      "misorientation_deg": 0.06338715000701124
+    },
+    {
+      "sample_id": "clean_ori_006",
+      "track": "clean",
+      "sampling_type": "nonzero_in_plane",
+      "strict_misorientation_deg": 2.7287073248091676,
+      "friedel_equivalent_misorientation_deg": 2.7287073248089,
+      "misorientation_deg": 2.7287073248089
+    },
+    {
+      "sample_id": "clean_ori_007",
+      "track": "clean",
+      "sampling_type": "nonzero_in_plane",
+      "strict_misorientation_deg": 2.7289456277890913,
+      "friedel_equivalent_misorientation_deg": 2.7289456277890913,
+      "misorientation_deg": 2.7289456277890913
+    },
+    {
+      "sample_id": "clean_ori_008",
+      "track": "clean",
+      "sampling_type": "nonzero_in_plane",
+      "strict_misorientation_deg": 2.222503718733855,
+      "friedel_equivalent_misorientation_deg": 2.222503718733855,
+      "misorientation_deg": 2.222503718733855
+    },
+    {
+      "sample_id": "clean_ori_009",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 2.0046633982633977,
+      "friedel_equivalent_misorientation_deg": 2.0046633982633977,
+      "misorientation_deg": 2.0046633982633977
+    },
+    {
+      "sample_id": "clean_ori_010",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 2.5030328040421193,
+      "friedel_equivalent_misorientation_deg": 2.5030328040421193,
+      "misorientation_deg": 2.5030328040421193
+    },
+    {
+      "sample_id": "clean_ori_011",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 2.257554561119588,
+      "friedel_equivalent_misorientation_deg": 2.257554561119588,
+      "misorientation_deg": 2.257554561119588
+    },
+    {
+      "sample_id": "clean_ori_012",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 2.107899535863716,
+      "friedel_equivalent_misorientation_deg": 2.107899535863716,
+      "misorientation_deg": 2.107899535863716
+    },
+    {
+      "sample_id": "clean_ori_013",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 1.5018787072842372,
+      "friedel_equivalent_misorientation_deg": 1.5018787072842372,
+      "misorientation_deg": 1.5018787072842372
+    },
+    {
+      "sample_id": "clean_ori_014",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 1.6230900093627056,
+      "friedel_equivalent_misorientation_deg": 1.6230900093627056,
+      "misorientation_deg": 1.6230900093627056
+    },
+    {
+      "sample_id": "clean_ori_015",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 0.8014549132282287,
+      "friedel_equivalent_misorientation_deg": 0.8014549132282287,
+      "misorientation_deg": 0.8014549132282287
+    },
+    {
+      "sample_id": "clean_ori_016",
+      "track": "clean",
+      "sampling_type": "so3_low_discrepancy",
+      "strict_misorientation_deg": 1.6480047914003202,
+      "friedel_equivalent_misorientation_deg": 1.6480047914003202,
+      "misorientation_deg": 1.6480047914003202
+    }
+  ],
+  "metrics_friedel_equivalent": {
+    "track": "clean",
+    "num_samples": 17,
+    "mean_misorientation_deg": 1.581240133849321,
+    "median_misorientation_deg": 2.0046633982633977,
+    "p90_misorientation_deg": 2.5933026123488316,
+    "accuracy_within_1deg": 0.29411764705882354,
+    "accuracy_within_2deg": 0.47058823529411764,
+    "accuracy_within_5deg": 1.0
+  }
+}

@@ -1,0 +1,648 @@
+{
+  "py4DSTEM_version": "0.14.18",
+  "plan_build_seconds": 0.037489040987566113,
+  "total_prediction_seconds": 0.3770046249846928,
+  "average_prediction_seconds": 0.0221767426461584,
+  "primary_metric": "friedel_equivalent_misorientation_deg",
+  "metrics": {
+    "num_samples": 17,
+    "mean_misorientation_deg": 1.5812401338491766,
+    "median_misorientation_deg": 2.0046633982633977,
+    "p90_misorientation_deg": 2.5933026123488316,
+    "accuracy_within_1deg": 0.29411764705882354,
+    "accuracy_within_2deg": 0.47058823529411764,
+    "accuracy_within_5deg": 1.0
+  },
+  "metrics_strict": {
+    "num_samples": 17,
+    "mean_misorientation_deg": 5.110651867768351,
+    "median_misorientation_deg": 2.107899535863716,
+    "p90_misorientation_deg": 2.72880264600087,
+    "accuracy_within_1deg": 0.23529411764705882,
+    "accuracy_within_2deg": 0.4117647058823529,
+    "accuracy_within_5deg": 0.9411764705882353
+  },
+  "metrics_friedel_equivalent": {
+    "num_samples": 17,
+    "mean_misorientation_deg": 1.5812401338491766,
+    "median_misorientation_deg": 2.0046633982633977,
+    "p90_misorientation_deg": 2.5933026123488316,
+    "accuracy_within_1deg": 0.29411764705882354,
+    "accuracy_within_2deg": 0.47058823529411764,
+    "accuracy_within_5deg": 1.0
+  },
+  "samples": [
+    {
+      "sample_id": "clean_ori_000",
+      "sampling_type": "low_index_anchor",
+      "num_peaks": 30,
+      "correlation_score": 3.2565235445005976,
+      "zone_axis_plan_index": 0,
+      "in_plane_plan_index": 0,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        0.0,
+        0.0,
+        180.00000052341298
+      ],
+      "prediction_seconds": 0.02552187500987202,
+      "strict_misorientation_deg": 59.99999947658705,
+      "friedel_equivalent_misorientation_deg": 0.0,
+      "misorientation_deg": 0.0,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -1.0,
+          9.135279521392395e-09,
+          0.0
+        ],
+        [
+          9.135279521392395e-09,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_001",
+      "sampling_type": "low_index_anchor",
+      "num_peaks": 106,
+      "correlation_score": 4.546918040140284,
+      "zone_axis_plan_index": 264,
+      "in_plane_plan_index": 0,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.0,
+        90.0,
+        -89.98126671306312
+      ],
+      "prediction_seconds": 0.022925624973140657,
+      "strict_misorientation_deg": 0.018733286953727717,
+      "friedel_equivalent_misorientation_deg": 0.018733286953727717,
+      "misorientation_deg": 0.018733286953727717,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.0,
+          3.310968882980857e-16,
+          0.9999999999999999
+        ],
+        [
+          -0.0003269575309442161,
+          0.9999999465493851,
+          -2.0198171796479132e-16
+        ],
+        [
+          -0.9999999465493848,
+          -0.00032695753094421617,
+          4.1458085938023583e-16
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_002",
+      "sampling_type": "low_index_anchor",
+      "num_peaks": 106,
+      "correlation_score": 4.546918040103039,
+      "zone_axis_plan_index": 264,
+      "in_plane_plan_index": 0,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        90.0,
+        90.0,
+        90.01873423538929
+      ],
+      "prediction_seconds": 0.02386291598668322,
+      "strict_misorientation_deg": 0.01873423542233176,
+      "friedel_equivalent_misorientation_deg": 0.01873423538342281,
+      "misorientation_deg": 0.01873423538342281,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.0,
+          2.959730317241207e-16,
+          -1.0000000000000002
+        ],
+        [
+          0.000326974084560538,
+          0.9999999465439727,
+          -8.857029201624102e-17
+        ],
+        [
+          0.9999999465439726,
+          -0.00032697408456053805,
+          6.518171913360255e-17
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_003",
+      "sampling_type": "low_index_anchor",
+      "num_peaks": 27,
+      "correlation_score": 2.0256441990094056,
+      "zone_axis_plan_index": 7,
+      "in_plane_plan_index": 60,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        100.0,
+        12.27272727272727,
+        140.49439250105831
+      ],
+      "prediction_seconds": 0.02183170901844278,
+      "strict_misorientation_deg": 2.2323722565400757,
+      "friedel_equivalent_misorientation_deg": 2.2323722565400757,
+      "misorientation_deg": 2.2323722565400757,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.2402139052738086,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.47819149878778777,
+          -0.8529427604157226,
+          0.20933594517305634
+        ],
+        [
+          0.8677829828982009,
+          -0.4955706107216779,
+          -0.0369115751661178
+        ],
+        [
+          0.13522420300889215,
+          0.1640073694787851,
+          0.9771468659711595
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_004",
+      "sampling_type": "low_index_anchor",
+      "num_peaks": 23,
+      "correlation_score": 2.359526885693653,
+      "zone_axis_plan_index": 4,
+      "in_plane_plan_index": 60,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.0,
+        8.181818181818182,
+        150.08154256581784
+      ],
+      "prediction_seconds": 0.02166716702049598,
+      "strict_misorientation_deg": 2.420119954658056,
+      "friedel_equivalent_misorientation_deg": 2.420119954658056,
+      "misorientation_deg": 2.420119954658056,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.4229731286578042,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.4936902499214928,
+          -0.8579139956544029,
+          0.14231483827328525
+        ],
+        [
+          0.866736119621869,
+          -0.498766978601055,
+          7.671141697319251e-17
+        ],
+        [
+          0.07098194189566422,
+          0.12334941068960097,
+          0.9898214418809328
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_005",
+      "sampling_type": "nonzero_in_plane",
+      "num_peaks": 30,
+      "correlation_score": 2.9206788602788514,
+      "zone_axis_plan_index": 0,
+      "in_plane_plan_index": 17,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        0.0,
+        0.0,
+        246.16338715000717
+      ],
+      "prediction_seconds": 0.021802958042826504,
+      "strict_misorientation_deg": 0.06338715000701124,
+      "friedel_equivalent_misorientation_deg": 0.06338715000701124,
+      "misorientation_deg": 0.06338715000701124,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.8999999999997184,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.4041298866724772,
+          0.9147016096509784,
+          0.0
+        ],
+        [
+          0.9147016096509784,
+          0.4041298866724772,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          -1.0
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_006",
+      "sampling_type": "nonzero_in_plane",
+      "num_peaks": 106,
+      "correlation_score": 4.36026211761112,
+      "zone_axis_plan_index": 263,
+      "in_plane_plan_index": 42,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        92.72727272727272,
+        90.0,
+        75.71152054625027
+      ],
+      "prediction_seconds": 0.02243991696741432,
+      "strict_misorientation_deg": 2.7287073248089,
+      "friedel_equivalent_misorientation_deg": 2.7287073248089,
+      "misorientation_deg": 2.7287073248089,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.7999999999995167,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.011743415066765461,
+          -0.046109987161430964,
+          0.9988673391830077
+        ],
+        [
+          -0.24652462091088523,
+          -0.9679677538902247,
+          -0.04758191582374211
+        ],
+        [
+          0.9690653762710303,
+          -0.24680416631954588,
+          4.871219547935415e-16
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_007",
+      "sampling_type": "nonzero_in_plane",
+      "num_peaks": 106,
+      "correlation_score": 4.41983770126486,
+      "zone_axis_plan_index": 265,
+      "in_plane_plan_index": 50,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        87.27272727272728,
+        90.0,
+        292.3955480733594
+      ],
+      "prediction_seconds": 0.02255387499462813,
+      "strict_misorientation_deg": 2.7289456277888244,
+      "friedel_equivalent_misorientation_deg": 2.7289456277888244,
+      "misorientation_deg": 2.7289456277888244,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6999999999996414,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.018128640328586743,
+          0.04399308028877307,
+          -0.9988673391830081
+        ],
+        [
+          -0.38056699513947884,
+          -0.9235284096859451,
+          -0.047581915823741994
+        ],
+        [
+          -0.9245756402860421,
+          0.3809985372539577,
+          -9.400600637691594e-18
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_008",
+      "sampling_type": "nonzero_in_plane",
+      "num_peaks": 27,
+      "correlation_score": 1.8464977681671666,
+      "zone_axis_plan_index": 7,
+      "in_plane_plan_index": 53,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        100.0,
+        12.27272727272727,
+        110.29640505440095
+      ],
+      "prediction_seconds": 0.02200212504249066,
+      "strict_misorientation_deg": 2.222503718733527,
+      "friedel_equivalent_misorientation_deg": 2.222503718733527,
+      "misorientation_deg": 2.222503718733527,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.795487983534227,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.8423186394980826,
+          -0.4966666604601139,
+          0.20933594517305631
+        ],
+        [
+          0.500751440657093,
+          -0.8648037524771746,
+          -0.036911575166117774
+        ],
+        [
+          0.1993672596840933,
+          0.07373396835106667,
+          0.9771468659711595
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_009",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 29,
+      "correlation_score": 2.1906206448247167,
+      "zone_axis_plan_index": 168,
+      "in_plane_plan_index": 7,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        67.05882352941178,
+        69.54545454545455,
+        -39.34980858647665
+      ],
+      "prediction_seconds": 0.022085625038016587,
+      "strict_misorientation_deg": 2.0046633982633977,
+      "friedel_equivalent_misorientation_deg": 2.0046633982633977,
+      "misorientation_deg": 2.0046633982633977,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.0356004374910017,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.5054705098694596,
+          0.0017176245964797825,
+          0.8628421717892878
+        ],
+        [
+          -0.6257580489668402,
+          0.6892377604238896,
+          0.3652097667903676
+        ],
+        [
+          -0.5940761128050199,
+          -0.724533201014009,
+          0.3494641795990984
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_010",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 28,
+      "correlation_score": 2.540696665613488,
+      "zone_axis_plan_index": 139,
+      "in_plane_plan_index": 49,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        108.74999999999999,
+        65.45454545454545,
+        87.15433497268843
+      ],
+      "prediction_seconds": 0.02066479198401794,
+      "strict_misorientation_deg": 2.5030328040421193,
+      "friedel_equivalent_misorientation_deg": 2.5030328040421193,
+      "misorientation_deg": 2.5030328040421193,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.4996658714924687,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.4088420453827575,
+          -0.3015139726328575,
+          0.8613579431539456
+        ],
+        [
+          0.08635500989249949,
+          -0.9523917006821403,
+          -0.2923916222094039
+        ],
+        [
+          0.9085103159533796,
+          -0.045159415174833205,
+          0.4154150130018863
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_011",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 30,
+      "correlation_score": 2.4144405820944588,
+      "zone_axis_plan_index": 42,
+      "in_plane_plan_index": 73,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        75.0,
+        32.727272727272734,
+        217.79464755838035
+      ],
+      "prediction_seconds": 0.020736042002681643,
+      "strict_misorientation_deg": 2.257554561119588,
+      "friedel_equivalent_misorientation_deg": 2.257554561119588,
+      "misorientation_deg": 2.257554561119588,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.476335144427706,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.2934592649227594,
+          -0.8007303233477698,
+          0.5222189283263955
+        ],
+        [
+          0.8967201087939577,
+          0.4198966088072928,
+          0.13992814011730398
+        ],
+        [
+          -0.33132266194081317,
+          0.42722100508227623,
+          0.8412535328311811
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_012",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 29,
+      "correlation_score": 2.0290802171517073,
+      "zone_axis_plan_index": 243,
+      "in_plane_plan_index": 62,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        85.71428571428572,
+        85.9090909090909,
+        162.33655806916875
+      ],
+      "prediction_seconds": 0.020933833031449467,
+      "strict_misorientation_deg": 2.107899535863716,
+      "friedel_equivalent_misorientation_deg": 2.107899535863716,
+      "misorientation_deg": 2.107899535863716,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.1107570170126313,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.09279253924389708,
+          -0.0451108533120005,
+          0.9946630361957428
+        ],
+        [
+          0.9485732864047405,
+          -0.30765655356741073,
+          0.07453968987280064
+        ],
+        [
+          0.302652052661105,
+          0.9504275122072625,
+          0.07133918319923245
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_013",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 28,
+      "correlation_score": 2.264700066332875,
+      "zone_axis_plan_index": 84,
+      "in_plane_plan_index": 5,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.0,
+        49.090909090909086,
+        -69.80723556347962
+      ],
+      "prediction_seconds": 0.020636458008084446,
+      "strict_misorientation_deg": 1.5018787072837516,
+      "friedel_equivalent_misorientation_deg": 1.5018787072837516,
+      "misorientation_deg": 1.5018787072837516,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.5234915592820548,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.6146107804979186,
+          0.22604461807151383,
+          0.7557495743542582
+        ],
+        [
+          -0.34517967921161125,
+          0.9385366210539519,
+          -9.61936594160641e-17
+        ],
+        [
+          -0.7092986518774078,
+          -0.2608693956399146,
+          0.6548607339452851
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_014",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 29,
+      "correlation_score": 2.90183821264349,
+      "zone_axis_plan_index": 111,
+      "in_plane_plan_index": 38,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        94.28571428571429,
+        57.27272727272727,
+        57.75245204782476
+      ],
+      "prediction_seconds": 0.02094625000609085,
+      "strict_misorientation_deg": 1.6230900093631548,
+      "friedel_equivalent_misorientation_deg": 1.6230900093631548,
+      "misorientation_deg": 1.6230900093631548,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6221253669333828,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.4958431285506284,
+          0.22446456163307113,
+          0.8389012173313365
+        ],
+        [
+          -0.4979161926593282,
+          -0.8649434727348915,
+          -0.06286695523838444
+        ],
+        [
+          0.711490728651304,
+          -0.4488746479187475,
+          0.5406408174555976
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_015",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 29,
+      "correlation_score": 1.960579146634067,
+      "zone_axis_plan_index": 203,
+      "in_plane_plan_index": 66,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        78.94736842105264,
+        77.72727272727272,
+        184.9556424737933
+      ],
+      "prediction_seconds": 0.020340541028417647,
+      "strict_misorientation_deg": 0.8014549132264096,
+      "friedel_equivalent_misorientation_deg": 0.8014549132264096,
+      "misorientation_deg": 0.8014549132264096,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.8378606222255772,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.17297224593754312,
+          -0.22440348645199634,
+          0.959022250734315
+        ],
+        [
+          0.9813029602074287,
+          0.04418348123891622,
+          0.18732944315763134
+        ],
+        [
+          -0.08441032178270629,
+          0.9734941680635788,
+          0.21256528955297724
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_016",
+      "sampling_type": "so3_low_discrepancy",
+      "num_peaks": 31,
+      "correlation_score": 1.9964083014612557,
+      "zone_axis_plan_index": 173,
+      "in_plane_plan_index": 3,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        113.33333333333334,
+        73.63636363636364,
+        -101.41139333330732
+      ],
+      "prediction_seconds": 0.021278333966620266,
+      "strict_misorientation_deg": 1.6480047914003202,
+      "friedel_equivalent_misorientation_deg": 1.6480047914003202,
+      "misorientation_deg": 1.6480047914003202,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6362282112437292,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.33194280056000824,
+          0.33706732847187637,
+          0.8810219028112816
+        ],
+        [
+          0.07228847029280686,
+          0.9221427242462777,
+          -0.3800357525054449
+        ],
+        [
+          -0.9405255733998438,
+          0.18983785764827293,
+          0.2817325568414297
+        ]
+      ]
+    }
+  ]
+}

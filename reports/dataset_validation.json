@@ -1,0 +1,15 @@
+[
+  {
+    "track": "clean",
+    "num_samples": 17,
+    "peak_count_min": 23,
+    "peak_count_max": 106,
+    "peak_count_mean": 46.705882352941174,
+    "baseline_input_dtype": [
+      "qx",
+      "qy",
+      "intensity"
+    ],
+    "baseline_output_field": "orientation_matrix_sample_to_crystal"
+  }
+]

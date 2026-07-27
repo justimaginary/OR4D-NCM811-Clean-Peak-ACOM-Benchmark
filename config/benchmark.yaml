@@ -1,0 +1,123 @@
+dataset:
+  id: OR4D-NCM811-CleanPeak-acom-smoke-v1
+  description: Clean-Peak benchmark with low-index anchors, non-zero in-plane rotations, and deterministic SO(3) samples.
+  structure_id: NCM811_113035
+  cif_path: data/structure/NCM811_113035.cif
+  orientation_convention: sample_to_crystal
+  beam_axis_sample: [0.0, 0.0, 1.0]
+
+# Hand-designed anchor orientations. ori_005--ori_008 use non-zero
+# in-plane angles deliberately placed between the 4-degree ACOM plan bins.
+orientations:
+  - orientation_id: ori_000
+    sampling_type: low_index_anchor
+    zone_axis_uvw: [0, 0, 1]
+    x_reference_uvw: [1, 0, 0]
+    in_plane_rotation_deg: 0.0
+  - orientation_id: ori_001
+    sampling_type: low_index_anchor
+    zone_axis_uvw: [1, 0, 0]
+    x_reference_uvw: [0, 0, 1]
+    in_plane_rotation_deg: 0.0
+  - orientation_id: ori_002
+    sampling_type: low_index_anchor
+    zone_axis_uvw: [1, 1, 0]
+    x_reference_uvw: [0, 0, 1]
+    in_plane_rotation_deg: 0.0
+  - orientation_id: ori_003
+    sampling_type: low_index_anchor
+    zone_axis_uvw: [1, 0, 1]
+    x_reference_uvw: [0, 1, 0]
+    in_plane_rotation_deg: 0.0
+  - orientation_id: ori_004
+    sampling_type: low_index_anchor
+    zone_axis_uvw: [1, 0, 2]
+    x_reference_uvw: [0, 1, 0]
+    in_plane_rotation_deg: 0.0
+  - orientation_id: ori_005
+    sampling_type: nonzero_in_plane
+    zone_axis_uvw: [0, 0, 1]
+    x_reference_uvw: [1, 0, 0]
+    in_plane_rotation_deg: 6.1
+  - orientation_id: ori_006
+    sampling_type: nonzero_in_plane
+    zone_axis_uvw: [1, 0, 0]
+    x_reference_uvw: [0, 0, 1]
+    in_plane_rotation_deg: 14.2
+  - orientation_id: ori_007
+    sampling_type: nonzero_in_plane
+    zone_axis_uvw: [1, 1, 0]
+    x_reference_uvw: [0, 0, 1]
+    in_plane_rotation_deg: 22.3
+  - orientation_id: ori_008
+    sampling_type: nonzero_in_plane
+    zone_axis_uvw: [1, 0, 1]
+    x_reference_uvw: [0, 1, 0]
+    in_plane_rotation_deg: 30.4
+
+# Additional deterministic, quasi-uniform samples in the full SO(3) rotation
+# space. The generator rejects candidates that are too close under NCM811
+# crystal symmetry, so these samples cover genuinely different orientations.
+so3_sampling:
+  enabled: true
+  count: 8
+  orientation_id_start: 9
+  method: shoemake_low_discrepancy
+  sequence_offset: 0.3819660112501051
+  min_pairwise_misorientation_deg: 10.0
+  max_candidates: 10000
+
+common:
+  accelerating_voltage_V: 300000.0
+  k_max_Ainv: 2.0
+  central_beam_exclusion_Ainv: 0.03
+  normalize_peak_intensity: max
+
+clean:
+  sigma_excitation_error_Ainv: 0.02
+  tol_excitation_error_mult: 3.0
+  tol_structure_factor: 0.0001
+  tol_intensity: 0.0001
+
+# py4DSTEM ACOM baseline. The test orientations are generated independently
+# from this orientation plan. The audit script checks that no test orientation
+# is an exact plan node, including crystal-symmetry equivalents.
+acom:
+  zone_axis_range: auto
+  angle_step_zone_axis_deg: 4.0
+  angle_step_in_plane_deg: 4.0
+  corr_kernel_size_Ainv: 0.08
+  sigma_excitation_error_Ainv: 0.02
+  power_radial: 1.0
+  power_intensity_simulated: 0.25
+  power_intensity_experiment: 0.25
+  tol_distance_Ainv: 0.01
+  min_number_peaks: 3
+  inversion_symmetry: true
+  num_matches_return: 1
+  cuda: false
+  progress_bar: true
+  min_offgrid_misorientation_deg: 0.25
+
+# These values remain available for the later Dynamical track.
+dynamical:
+  thickness_nm: 5.0
+  disorder_supercell: [2, 5, 1]
+  disorder_seed_base: 4200
+  orthogonalize_max_repetitions: 8
+  xy_repeat: [2, 2]
+  real_space_sampling_A: 0.12
+  slice_thickness_A: 1.0
+  semiangle_cutoff_mrad: 0.5
+  defocus_A: 0.0
+  scan_gpts: [2, 2]
+  frozen_phonon_configs: 2
+  frozen_phonon_sigma_A: 0.08
+  frozen_phonon_seed_base: 8200
+  max_angle_mrad: 40.0
+  peak_extraction:
+    gaussian_sigma_px: 1.0
+    threshold_rel: 0.005
+    min_distance_px: 3
+    integration_radius_px: 2
+    max_num_peaks: 256

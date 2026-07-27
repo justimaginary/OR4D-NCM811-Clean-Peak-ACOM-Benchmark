@@ -1,0 +1,17 @@
+name: or4d-dynamical
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy>=2
+  - scipy
+  - h5py
+  - pyyaml
+  - scikit-image
+  - matplotlib
+  - ase
+  - pymatgen
+  - pyfftw
+  - pip:
+      - abtem==1.0.10

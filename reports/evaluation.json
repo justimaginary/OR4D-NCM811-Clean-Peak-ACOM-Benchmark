@@ -1,0 +1,33 @@
+{
+  "metrics": {
+    "num_samples": 5,
+    "mean_misorientation_deg": 0.0,
+    "median_misorientation_deg": 0.0,
+    "p90_misorientation_deg": 0.0,
+    "accuracy_within_1deg": 1.0,
+    "accuracy_within_2deg": 1.0,
+    "accuracy_within_5deg": 1.0
+  },
+  "samples": [
+    {
+      "sample_id": "clean_ori_000",
+      "misorientation_deg": 0.0
+    },
+    {
+      "sample_id": "clean_ori_001",
+      "misorientation_deg": 0.0
+    },
+    {
+      "sample_id": "clean_ori_002",
+      "misorientation_deg": 0.0
+    },
+    {
+      "sample_id": "clean_ori_003",
+      "misorientation_deg": 0.0
+    },
+    {
+      "sample_id": "clean_ori_004",
+      "misorientation_deg": 0.0
+    }
+  ]
+}

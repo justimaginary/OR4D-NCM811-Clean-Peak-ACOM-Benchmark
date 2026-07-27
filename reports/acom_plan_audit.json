@@ -1,0 +1,172 @@
+{
+  "py4DSTEM_version": "0.14.18",
+  "orientation_plan": {
+    "zone_axis_range": "auto",
+    "angle_step_zone_axis_deg": 4.0,
+    "angle_step_in_plane_deg": 4.0,
+    "inversion_symmetry": true,
+    "num_zone_axes": 276,
+    "num_in_plane_steps": 90,
+    "num_normal_plan_nodes": 24840,
+    "num_search_nodes_including_mirror": 49680,
+    "build_seconds": 0.037489040987566113
+  },
+  "evaluation_equivalence": {
+    "crystal_symmetry": "proper point-group rotations only",
+    "friedel_sample_rotation": [
+      [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0
+      ],
+      [
+        0.0,
+        0.0,
+        1.0
+      ]
+    ]
+  },
+  "samples": [
+    {
+      "sample_id": "clean_ori_000",
+      "sampling_type": "low_index_anchor",
+      "require_offgrid": false,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_001",
+      "sampling_type": "low_index_anchor",
+      "require_offgrid": false,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_002",
+      "sampling_type": "low_index_anchor",
+      "require_offgrid": false,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.0,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_003",
+      "sampling_type": "low_index_anchor",
+      "require_offgrid": false,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.2402139052738086,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_004",
+      "sampling_type": "low_index_anchor",
+      "require_offgrid": false,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.4229731286578042,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_005",
+      "sampling_type": "nonzero_in_plane",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.8999999999997184,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_006",
+      "sampling_type": "nonzero_in_plane",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.7999999999995167,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_007",
+      "sampling_type": "nonzero_in_plane",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6999999999996414,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_008",
+      "sampling_type": "nonzero_in_plane",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.795487983534227,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_009",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.0356004374910017,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_010",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.4996658714924687,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_011",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.476335144427706,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_012",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 2.1107570170126313,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_013",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.5234915592820548,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_014",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6221253669333828,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_015",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 0.8378606222255772,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    },
+    {
+      "sample_id": "clean_ori_016",
+      "sampling_type": "so3_low_discrepancy",
+      "require_offgrid": true,
+      "nearest_search_node_friedel_equivalent_misorientation_deg": 1.6362282112437292,
+      "offgrid_threshold_deg": 0.25,
+      "passed": true
+    }
+  ]
+}

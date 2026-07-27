@@ -1,0 +1,15 @@
+name: or4d-clean
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pip
+  - numpy<2
+  - scipy
+  - h5py
+  - pyyaml
+  - matplotlib
+  - scikit-image
+  - pymatgen
+  - pip:
+      - "py4DSTEM[acom]==0.14.18"
