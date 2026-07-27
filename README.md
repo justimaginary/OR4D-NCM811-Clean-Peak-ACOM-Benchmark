@@ -1,5 +1,11 @@
 # OR4D NCM811 Peak Benchmark — five-orientation smoke test
 
+> **Note**
+>
+> Currently, only the Clean-Peak track has been evaluated. For more details,
+> see `OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v2.pdf`.
+
+
 This project creates two tracks with one shared input/output contract.
 
 - Public input: variable-length peak sets `{qx, qy, intensity}` in `public/*.h5`.
@@ -22,3 +28,4 @@ conda run -n or4d-clean python scripts/04_validate_dataset.py
 conda run -n or4d-clean python scripts/05_make_submission_template.py
 conda run -n or4d-clean python scripts/06_evaluate_submission.py submissions/submission_example.jsonl
 ```
+
