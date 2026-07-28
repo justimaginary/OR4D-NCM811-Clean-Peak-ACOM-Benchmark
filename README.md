@@ -1,5 +1,14 @@
 # OR4D NCM811 Clean-Peak ACOM Benchmark
 
+> **Full benchmark report**
+>
+> Start with the comprehensive 44-page
+> [OR4D NCM811 Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
+> It covers the benchmark design, coordinate conventions, simulation and ACOM
+> parameters, evaluation protocol, complete results, failure analysis,
+> per-reflection HKL/reciprocal-space tracing, reproducibility information, and
+> the full run procedure.
+
 > **Status**
 >
 > Clean-Peak v3 is the only evaluated track. It tests matched-model
