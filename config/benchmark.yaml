@@ -1,10 +1,16 @@
 dataset:
-  id: OR4D-NCM811-CleanPeak-acom-smoke-v1
-  description: Clean-Peak benchmark with low-index anchors, non-zero in-plane rotations, and deterministic SO(3) samples.
+  id: OR4D-NCM811-CleanPeak-acom-v2
+  description: Stratified Clean-Peak benchmark with legacy smoke controls, a Sobol-SO(3) headline core, and ACOM grid probes.
   structure_id: NCM811_113035
   cif_path: data/structure/NCM811_113035.cif
   orientation_convention: sample_to_crystal
   beam_axis_sample: [0.0, 0.0, 1.0]
+  headline_sample_role: headline_core
+  expected_sample_counts:
+    legacy_smoke: 17
+    headline_core: 512
+    acom_grid_probe: 40
+  expected_num_orientations: 569
 
 # Hand-designed anchor orientations. ori_005--ori_008 use non-zero
 # in-plane angles deliberately placed between the 4-degree ACOM plan bins.
@@ -55,17 +61,49 @@ orientations:
     x_reference_uvw: [0, 1, 0]
     in_plane_rotation_deg: 30.4
 
-# Additional deterministic, quasi-uniform samples in the full SO(3) rotation
-# space. The generator rejects candidates that are too close under NCM811
-# crystal symmetry, so these samples cover genuinely different orientations.
-so3_sampling:
+# Preserve the eight v1 SO(3) smoke samples exactly. Candidate 7 was rejected by
+# the v1 spacing filter, so the retained candidate indices are explicit.
+legacy_so3_sampling:
   enabled: true
-  count: 8
   orientation_id_start: 9
+  candidate_indices: [0, 1, 2, 3, 4, 5, 6, 8]
   method: shoemake_low_discrepancy
   sequence_offset: 0.3819660112501051
-  min_pairwise_misorientation_deg: 10.0
-  max_candidates: 10000
+
+clean_sampling:
+  # The headline cohort is ACOM-independent. A scrambled Sobol sequence is
+  # mapped to uniform SO(3) rotations with the Shoemake transform.
+  headline_core:
+    enabled: true
+    count: 512
+    orientation_id_prefix: core_
+    method: sobol_shoemake
+    scramble: true
+    seed: 20260728
+    duplicate_tolerance_deg: 0.000001
+
+  # Diagnostic-only probes for the 4-degree in-plane ACOM grid. These samples
+  # never enter the headline metric.
+  acom_grid_probes:
+    enabled: true
+    orientation_id_prefix: probe_
+    in_plane_offsets_deg: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    bases:
+      - probe_axis_id: za_001
+        zone_axis_uvw: [0, 0, 1]
+        x_reference_uvw: [1, 0, 0]
+      - probe_axis_id: za_100
+        zone_axis_uvw: [1, 0, 0]
+        x_reference_uvw: [0, 0, 1]
+      - probe_axis_id: za_110
+        zone_axis_uvw: [1, 1, 0]
+        x_reference_uvw: [0, 0, 1]
+      - probe_axis_id: za_101
+        zone_axis_uvw: [1, 0, 1]
+        x_reference_uvw: [0, 1, 0]
+      - probe_axis_id: za_102
+        zone_axis_uvw: [1, 0, 2]
+        x_reference_uvw: [0, 1, 0]
 
 common:
   accelerating_voltage_V: 300000.0
@@ -97,7 +135,13 @@ acom:
   num_matches_return: 1
   cuda: false
   progress_bar: true
-  min_offgrid_misorientation_deg: 0.25
+  min_probe_discrete_seed_misorientation_deg: 0.1
+
+evaluation:
+  headline_sample_role: headline_core
+  plan_distance_bin_edges_deg: [0.0, 0.5, 1.0, 2.0]
+  strict_friedel_disagreement_tolerance_deg: 0.001
+  max_peak_overlay_samples: 12
 
 # These values remain available for the later Dynamical track.
 dynamical:

@@ -94,10 +94,21 @@ def main() -> None:
                 "beam_direction_crystal_cartesian"
             ),
             "sampling_type": orientation.get("sampling_type", "manual"),
+            "sample_role": orientation["sample_role"],
+            "acom_offgrid_policy": orientation["acom_offgrid_policy"],
             "track": "clean",
         }
-        if orientation.get("quaternion_wxyz") is not None:
-            gt_record["quaternion_wxyz"] = orientation["quaternion_wxyz"]
+        for field in (
+            "quaternion_wxyz",
+            "sequence_candidate_index",
+            "sequence_index",
+            "probe_axis_id",
+            "probe_offset_deg",
+            "probe_index",
+            "nearest_previous_clean_equivalent_misorientation_deg",
+        ):
+            if orientation.get(field) is not None:
+                gt_record[field] = orientation[field]
         gt_records.append(gt_record)
 
         fields = data.dtype.names or ()

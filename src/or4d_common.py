@@ -115,6 +115,67 @@ def low_discrepancy_so3_quaternion(index: int, offset: float = 0.0) -> np.ndarra
     return q_wxyz / np.linalg.norm(q_wxyz)
 
 
+def shoemake_so3_quaternion(unit_cube_point: Iterable[float]) -> np.ndarray:
+    """Map one point in [0, 1)^3 to a uniform SO(3) quaternion [w, x, y, z]."""
+    u1, u2, u3 = np.asarray(unit_cube_point, dtype=float)
+    if not np.all((0.0 <= np.array([u1, u2, u3])) & (np.array([u1, u2, u3]) < 1.0)):
+        raise ValueError("Shoemake input coordinates must lie in [0, 1).")
+    q_xyzw = np.array(
+        [
+            np.sqrt(1.0 - u1) * np.sin(2.0 * np.pi * u2),
+            np.sqrt(1.0 - u1) * np.cos(2.0 * np.pi * u2),
+            np.sqrt(u1) * np.sin(2.0 * np.pi * u3),
+            np.sqrt(u1) * np.cos(2.0 * np.pi * u3),
+        ],
+        dtype=float,
+    )
+    q_wxyz = q_xyzw[[3, 0, 1, 2]]
+    if q_wxyz[0] < 0:
+        q_wxyz = -q_wxyz
+    return q_wxyz / np.linalg.norm(q_wxyz)
+
+
+def sobol_so3_quaternions(
+    count: int,
+    *,
+    scramble: bool,
+    seed: int,
+) -> np.ndarray:
+    """Generate a deterministic power-of-two Sobol sample on SO(3)."""
+    if count <= 0 or count & (count - 1):
+        raise ValueError("Sobol SO(3) count must be a positive power of two.")
+    from scipy.stats import qmc
+
+    exponent = count.bit_length() - 1
+    points = qmc.Sobol(d=3, scramble=scramble, seed=seed).random_base2(exponent)
+    return np.stack([shoemake_so3_quaternion(point) for point in points], axis=0)
+
+
+def proper_point_group_rotations(structure: Any) -> list[np.ndarray]:
+    """Return unique determinant +1 Cartesian point-group operations.
+
+    Improper operations must be rejected before numerical orthogonalization.
+    Otherwise ``nearest_rotation`` would turn mirrors or inversion into unrelated
+    proper rotations.
+    """
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
+    operations = SpacegroupAnalyzer(structure).get_point_group_operations(
+        cartesian=True
+    )
+    rotations: list[np.ndarray] = []
+    for operation in operations:
+        raw = np.asarray(operation.rotation_matrix, dtype=float)
+        if np.linalg.det(raw) < 0.0:
+            continue
+        matrix = nearest_rotation(raw)
+        if not any(np.allclose(matrix, existing, atol=1e-8) for existing in rotations):
+            rotations.append(matrix)
+    if not rotations:
+        raise RuntimeError("No proper crystal point-group rotations were found.")
+    return rotations
+
+
 def symmetry_aware_misorientation_deg(
     R_a: np.ndarray,
     R_b: np.ndarray,
