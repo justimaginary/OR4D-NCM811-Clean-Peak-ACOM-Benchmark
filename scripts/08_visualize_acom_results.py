@@ -109,6 +109,7 @@ def plot_error_comparison(rows: list[dict]) -> None:
     axes[1].set_xlabel("Sorted headline sample rank")
     axes[1].set_ylabel("Misorientation (degrees)")
     axes[1].set_title("Headline strict versus Friedel error")
+    axes[1].set_yscale("symlog", linthresh=5.0)
     axes[1].legend()
     axes[1].grid(alpha=0.25)
     fig.tight_layout()
@@ -123,15 +124,16 @@ def plot_offgrid_relation(rows: list[dict]) -> None:
     for row in rows:
         groups.setdefault(row.get("sample_role", "unspecified"), []).append(row)
 
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5), sharex=True)
     markers = ["o", "s", "^", "D"]
-    for marker, (name, group) in zip(markers, sorted(groups.items())):
-        x = [
-            row["nearest_zone_axis_node_misorientation_deg"]
-            for row in group
-        ]
-        y = [row["friedel_equivalent_misorientation_deg"] for row in group]
-        ax.scatter(x, y, marker=marker, s=28, alpha=0.65, label=name)
+    for ax in axes:
+        for marker, (name, group) in zip(markers, sorted(groups.items())):
+            x = [
+                row["nearest_zone_axis_node_misorientation_deg"]
+                for row in group
+            ]
+            y = [row["friedel_equivalent_misorientation_deg"] for row in group]
+            ax.scatter(x, y, marker=marker, s=28, alpha=0.65, label=name)
     limit = max(
         3.2,
         max(
@@ -140,14 +142,17 @@ def plot_offgrid_relation(rows: list[dict]) -> None:
         )
         + 0.3,
     )
-    ax.plot([0, limit], [0, limit], linestyle="--", label="y = x")
-    ax.set_xlim(left=0)
-    ax.set_ylim(bottom=0)
-    ax.set_xlabel("Distance to nearest searched zone-axis node (degrees)")
-    ax.set_ylabel("Friedel-equivalent prediction error (degrees)")
-    ax.set_title("Zone-axis discretization versus ACOM error")
-    ax.grid(alpha=0.25)
-    ax.legend()
+    for ax in axes:
+        ax.plot([0, limit], [0, limit], linestyle="--", label="y = x")
+        ax.set_xlim(left=0)
+        ax.set_ylim(bottom=0)
+        ax.set_xlabel("Nearest zone-axis node distance (degrees)")
+        ax.grid(alpha=0.25)
+    axes[0].set_ylim(0, 5)
+    axes[0].set_ylabel("Friedel-equivalent prediction error (degrees)")
+    axes[0].set_title("Typical-error view")
+    axes[0].legend()
+    axes[1].set_title("Full range with catastrophic mismatches")
     fig.tight_layout()
     path = ROOT / "reports" / "acom_offgrid_vs_error.png"
     fig.savefig(path, dpi=220)
@@ -234,9 +239,18 @@ def plot_peak_overlays(rows: list[dict], samples: list[dict], config: dict) -> N
     for ax in axes[len(rows):]:
         ax.axis("off")
     handles, labels = axes[0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="upper center", ncol=3)
-    fig.suptitle("Clean-Peak input versus peaks simulated from ACOM predictions", y=0.995)
-    fig.tight_layout(rect=(0, 0, 1, 0.975))
+    fig.suptitle(
+        "Clean-Peak input versus peaks simulated from ACOM predictions",
+        y=0.995,
+    )
+    fig.legend(
+        handles,
+        labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 0.973),
+        ncol=3,
+    )
+    fig.tight_layout(rect=(0, 0, 1, 0.93))
     path = ROOT / "reports" / "acom_peak_overlay.png"
     fig.savefig(path, dpi=200)
     plt.close(fig)

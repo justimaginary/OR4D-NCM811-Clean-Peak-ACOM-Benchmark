@@ -48,7 +48,7 @@ def main() -> None:
     gt_records = []
     diagnostic_rows = []
 
-    for orientation in orientations:
+    for orientation_index, orientation in enumerate(orientations):
         orientation_id = orientation["orientation_id"]
         sample_id = f"clean_{orientation_id}"
         R = np.asarray(orientation["orientation_matrix_sample_to_crystal"], dtype=float)
@@ -119,7 +119,13 @@ def main() -> None:
         for idx in range(len(qx)):
             diagnostic_rows.append((sample_id, qx[idx], qy[idx], intensity[idx], h[idx], k[idx], l[idx]))
 
-        print(f"{sample_id}: {len(qx)} peaks")
+        if (orientation_index + 1) % 50 == 0 or orientation_index + 1 == len(
+            orientations
+        ):
+            print(
+                f"Generated {orientation_index + 1}/{len(orientations)} samples; "
+                f"latest has {len(qx)} peaks"
+            )
 
     write_peak_h5(
         ROOT / "public" / "clean_peaks.h5",
