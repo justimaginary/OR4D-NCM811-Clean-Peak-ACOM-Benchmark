@@ -3,11 +3,14 @@ from __future__ import annotations
 
 import gzip
 import json
+from collections import Counter
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+CONFIG_PATH = ROOT / "config" / "benchmark.yaml"
 TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
 DETAILS_PATH = ROOT / "reports" / "acom_clean_details.json"
+PLAN_AUDIT_PATH = ROOT / "reports" / "acom_plan_audit.json"
 OUTPUT_PATH = ROOT / "reports" / "ACOM_COORDINATE_VISUALIZATION.html"
 
 
@@ -31,6 +34,136 @@ def rounded(value: object) -> object:
     if isinstance(value, list):
         return [rounded(item) for item in value]
     return value
+
+
+def parse_config() -> dict:
+    """Read the mapping/scalar subset used by this repository's YAML config."""
+    root: dict = {}
+    stack: list[tuple[int, dict]] = [(-1, root)]
+    for raw_line in CONFIG_PATH.read_text(encoding="utf-8").splitlines():
+        content = raw_line.split("#", 1)[0].rstrip()
+        if not content.strip() or content.lstrip().startswith("- "):
+            continue
+        indent = len(content) - len(content.lstrip())
+        key, separator, raw_value = content.strip().partition(":")
+        if not separator:
+            continue
+        while stack[-1][0] >= indent:
+            stack.pop()
+        parent = stack[-1][1]
+        value_text = raw_value.strip()
+        if not value_text:
+            child: dict = {}
+            parent[key] = child
+            stack.append((indent, child))
+            continue
+        try:
+            parent[key] = json.loads(value_text)
+        except json.JSONDecodeError:
+            parent[key] = value_text
+    return root
+
+
+def runtime_parameters() -> dict[str, list[list[str]]]:
+    config = parse_config()
+    dataset = config["dataset"]
+    common = config["common"]
+    clean = config["clean"]
+    acom = config["acom"]
+    evaluation = config["evaluation"]
+    sampling = config["clean_sampling"]["headline_core"]
+    details = json.loads(DETAILS_PATH.read_text(encoding="utf-8"))
+    role_counts = Counter(row["sample_role"] for row in details["samples"])
+    audit = json.loads(PLAN_AUDIT_PATH.read_text(encoding="utf-8"))
+    plan = audit["orientation_plan"]
+
+    benchmark = [
+        ["数据集", str(dataset["id"]), "本次结果对应的数据版本"],
+        [
+            "样本组成",
+            (
+                f"{sum(role_counts.values())} = "
+                f"{role_counts['legacy_smoke']} legacy + "
+                f"{role_counts['headline_core']} headline + "
+                f"{role_counts['acom_grid_probe']} probe"
+            ),
+            "headline 指标只统计 headline_core",
+        ],
+        [
+            "headline 取向采样",
+            f"{sampling['method']}; seed={sampling['seed']}; scramble={sampling['scramble']}",
+            "独立于 ACOM 搜索网格的 SO(3) 采样",
+        ],
+        [
+            "加速电压",
+            f"{float(common['accelerating_voltage_V']) / 1000:g} kV",
+            "电子波长与衍射几何",
+        ],
+        ["Kmax", f"{common['k_max_Ainv']} Å⁻¹", "保留的最大探测器倒空间半径"],
+        [
+            "中心束排除半径",
+            f"{common['central_beam_exclusion_Ainv']} Å⁻¹",
+            "去掉透射中心束附近峰",
+        ],
+        [
+            "激发误差 σ",
+            f"{clean['sigma_excitation_error_Ainv']} Å⁻¹",
+            "衍射峰沿 Ewald 球偏离的权重尺度",
+        ],
+        [
+            "激发误差截断",
+            (
+                f"{clean['tol_excitation_error_mult']}σ = "
+                f"{float(clean['tol_excitation_error_mult']) * float(clean['sigma_excitation_error_Ainv']):g} Å⁻¹"
+            ),
+            "超出该范围的反射不进入图样",
+        ],
+        ["结构因子阈值", str(clean["tol_structure_factor"]), "生成候选反射时过滤弱结构因子"],
+        ["峰强度阈值", str(clean["tol_intensity"]), "生成图样时过滤弱峰"],
+        ["强度归一化", str(common["normalize_peak_intensity"]), "每个样本以最强峰归一化为 1"],
+    ]
+    acom_rows = [
+        ["py4DSTEM", str(audit["py4DSTEM_version"]), "ACOM 实现版本"],
+        ["zone-axis 范围", str(acom["zone_axis_range"]), "取向搜索覆盖范围"],
+        [
+            "标准运行角步长",
+            f"zone={acom['angle_step_zone_axis_deg']}°; in-plane={acom['angle_step_in_plane_deg']}°",
+            "当前报告的 canonical ACOM 网格",
+        ],
+        [
+            "对照扫描角步长",
+            ", ".join(f"{value}°" for value in acom["sweep_angle_steps_deg"]),
+            "同一方法分别运行，不混用检测规则",
+        ],
+        [
+            "实际搜索网格",
+            (
+                f"{plan['num_zone_axes']} zone axes × "
+                f"{plan['num_in_plane_steps']} in-plane; "
+                f"{plan['num_discrete_seeds_including_mirror']} seeds"
+            ),
+            "由 canonical 2° 参数生成",
+        ],
+        ["相关核半径", f"{acom['corr_kernel_size_Ainv']} Å⁻¹", "峰位置相关的空间尺度"],
+        ["ACOM 激发误差 σ", f"{acom['sigma_excitation_error_Ainv']} Å⁻¹", "模拟模板中的激发误差尺度"],
+        ["径向权重指数", str(acom["power_radial"]), "相关评分中的径向权重"],
+        [
+            "强度权重指数",
+            f"sim={acom['power_intensity_simulated']}; exp={acom['power_intensity_experiment']}",
+            "模拟峰与观测峰的强度加权",
+        ],
+        ["ACOM 峰距离容差", f"{acom['tol_distance_Ainv']} Å⁻¹", "orientation_plan 内部峰相关容差"],
+        ["最少峰数", str(acom["min_number_peaks"]), "少于该数量不做可靠取向匹配"],
+        ["反演对称", str(acom["inversion_symmetry"]), "搜索时包含 Friedel / mirror 等价"],
+        ["返回候选数", str(acom["num_matches_return"]), "每个样本保留的 ACOM 取向候选"],
+        ["CUDA", str(acom["cuda"]), "本次运行是否使用 GPU"],
+        [
+            "评估峰匹配容差",
+            f"{evaluation['coordinate_match_tolerance_Ainv']} Å⁻¹",
+            "GT 与 ACOM 峰在探测器二维 q 空间的一对一匹配阈值",
+        ],
+    ]
+    return {"benchmark": benchmark, "acom": acom_rows}
 
 
 def compact_trace(row: dict, label: str) -> dict:
@@ -177,6 +310,14 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .process-grid article:last-child { border-top-color: var(--series-2); }
 .process-grid h2 { margin: 0 0 7px; font-size: 17px; }
 .process-grid p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
+.parameters { margin: 0 0 22px; }
+.parameters > h2 { margin: 0 0 9px; font-size: 17px; }
+.parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.parameter-grid h3 { margin: 0 0 7px; font-size: 15px; }
+.parameter-grid table { font-size: 12px; }
+.parameter-grid th, .parameter-grid td { white-space: normal; vertical-align: top; }
+.parameter-grid td:nth-child(1) { width: 27%; font-weight: 600; }
+.parameter-grid td:nth-child(2) { width: 31%; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 .view-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
 .view-control .tabs { margin-left: auto; }
 .plots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
@@ -215,7 +356,7 @@ th { color: var(--muted-foreground); font-weight: 600; background: var(--muted);
 tbody tr.is-selected { background: #eef4ff; }
 @media (max-width: 720px) {
   main { padding: 16px; }
-  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation, .process-grid { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation, .process-grid, .parameter-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -223,7 +364,7 @@ tbody tr.is-selected { background: #eef4ff; }
   body { color: #000000; background: #ffffff; }
   main { max-width: none; padding: 0; }
   button, select, pre, th { color: #000000; background: #ffffff; }
-  .process-grid, .notation, .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
+  .process-grid, .parameters, .notation, .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
   .all-reflections { break-before: page; }
 }
 </style>
@@ -249,6 +390,23 @@ tbody tr.is-selected { background: #eef4ff; }
       <h2>过程 B｜运行 ACOM 预测</h2>
       <p>读取公开观测峰 <code>{qₓ, qᵧ, I}</code> → ACOM 搜索取向 → 输出 R<sup>ACOM</sup> → 用该取向模拟预测峰 → 在探测器二维 q 空间与 GT 观测峰使用同一种一对一匹配方法计算指标。</p>
     </article>
+  </section>
+  <section class="parameters">
+    <h2>本次运行参数（从 config/benchmark.yaml 与实际 ACOM plan 读取）</h2>
+    <div class="parameter-grid">
+      <article>
+        <h3>过程 A｜Benchmark 生成参数</h3>
+        <div class="table-wrap">
+          <table><thead><tr><th>参数</th><th>本次取值</th><th>作用</th></tr></thead><tbody id="benchmark-parameters"></tbody></table>
+        </div>
+      </article>
+      <article>
+        <h3>过程 B｜ACOM 预测与评估参数</h3>
+        <div class="table-wrap">
+          <table><thead><tr><th>参数</th><th>本次取值</th><th>作用</th></tr></thead><tbody id="acom-parameters"></tbody></table>
+        </div>
+      </article>
+    </div>
   </section>
   <section class="notation">
     <h2>变量定义与坐标约定</h2>
@@ -328,7 +486,10 @@ tbody tr.is-selected { background: #eef4ff; }
   </section>
 </main>
 <script>
-const samples = __DATA__;
+const reportData = __DATA__;
+const samples = reportData.samples;
+const runtimeParameters = reportData.runtime_parameters;
+const kMaxAinv = Number(reportData.k_max_Ainv);
 const tabs = document.getElementById("tabs");
 const viewTabs = document.getElementById("view-tabs");
 const detector = document.getElementById("detector");
@@ -346,9 +507,21 @@ const esc = value => String(value).replace(/[&<>"']/g, character => {
 });
 const vector = values => `[${values.map(value => Number(value).toFixed(4)).join(", ")}]`;
 const matrix = values => values.map(vector).join("\\n");
-const qX = value => 280 + value * 110;
-const qY = value => 200 - value * 110;
+const qPixelsPerAinv = 165 / kMaxAinv;
+const qX = value => 280 + value * qPixelsPerAinv;
+const qY = value => 200 - value * qPixelsPerAinv;
 const axisScale = value => value * 125;
+
+function renderParameters() {
+  [
+    ["benchmark-parameters", runtimeParameters.benchmark],
+    ["acom-parameters", runtimeParameters.acom],
+  ].forEach(([elementId, rows]) => {
+    document.getElementById(elementId).innerHTML = rows.map(row =>
+      `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${esc(row[2])}</td></tr>`
+    ).join("");
+  });
+}
 
 function renderTabs() {
   tabs.innerHTML = "";
@@ -499,7 +672,7 @@ function renderTransform(sample) {
 
 function renderReflectionTable(sample) {
   document.getElementById("all-reflections-title").innerHTML =
-    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = 1.5 Å⁻¹）`;
+    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = ${kMaxAinv} Å⁻¹）`;
   document.getElementById("reflection-rows").innerHTML = sample.observed.map((peak, index) => {
     const delta = Math.hypot(
       peak.q_standard[0] - peak.q_acom_same_hkl[0],
@@ -537,6 +710,7 @@ reflection.addEventListener("change", event => {
   reflectionIndex = Number(event.target.value);
   render();
 });
+renderParameters();
 render();
 </script>
 </body>
@@ -546,7 +720,16 @@ render();
 
 def main() -> None:
     samples = load_samples()
-    payload = json.dumps(samples, ensure_ascii=False, separators=(",", ":"))
+    config = parse_config()
+    payload = json.dumps(
+        {
+            "samples": samples,
+            "runtime_parameters": runtime_parameters(),
+            "k_max_Ainv": config["common"]["k_max_Ainv"],
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
     output = HTML_TEMPLATE.replace("__DATA__", payload)
     OUTPUT_PATH.write_text(output, encoding="utf-8")
     print(f"Standalone coordinate visualization: {OUTPUT_PATH}")
