@@ -4,6 +4,8 @@
 >
 > Currently, only the Clean-Peak track has been evaluated. The generated v2
 > report is `reports/ACOM_CLEAN_REPORT.md`; the root PDF is the legacy v1 report.
+> Other v1 smoke artifacts are kept under `reports/legacy/` and
+> `submissions/legacy/`.
 
 
 This project creates two tracks with one shared input/output contract.
