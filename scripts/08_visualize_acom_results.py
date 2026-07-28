@@ -77,28 +77,40 @@ def simulate_filtered_peaks(crystal, R: np.ndarray, config: dict) -> dict:
 
 
 def plot_error_comparison(rows: list[dict]) -> None:
-    sample_ids = [row["sample_id"].replace("clean_", "") for row in rows]
-    strict = np.asarray([row["strict_misorientation_deg"] for row in rows])
-    friedel = np.asarray(
-        [row["friedel_equivalent_misorientation_deg"] for row in rows]
-    )
-    mirrors = np.asarray([row["mirror_match"] for row in rows], dtype=bool)
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        groups.setdefault(row.get("sample_role", "unspecified"), []).append(row)
 
-    x = np.arange(len(rows))
-    width = 0.38
-    fig, ax = plt.subplots(figsize=(15, 6))
-    ax.bar(x - width / 2, strict, width, label="Strict crystal orientation")
-    ax.bar(x + width / 2, friedel, width, label="Friedel-equivalent Clean-Peak")
+    fig, axes = plt.subplots(1, 2, figsize=(13, 5.5))
+    for role, group in sorted(groups.items()):
+        errors = np.sort(
+            [row["friedel_equivalent_misorientation_deg"] for row in group]
+        )
+        cumulative = np.arange(1, len(errors) + 1) / len(errors)
+        axes[0].step(errors, cumulative, where="post", label=f"{role} (n={len(group)})")
     for threshold, style in ((1.0, ":"), (2.0, "--"), (5.0, "-.")):
-        ax.axhline(threshold, linestyle=style, linewidth=1, label=f"{threshold:g}°")
-    mirror_y = np.maximum(strict, friedel) + 0.3
-    ax.scatter(x[mirrors], mirror_y[mirrors], marker="*", s=80, label="ACOM mirror branch")
-    ax.set_xticks(x)
-    ax.set_xticklabels(sample_ids, rotation=55, ha="right")
-    ax.set_ylabel("Misorientation (degrees)")
-    ax.set_title("ACOM Clean-Peak orientation errors")
-    ax.legend(ncol=3)
-    ax.grid(axis="y", alpha=0.25)
+        axes[0].axvline(threshold, linestyle=style, linewidth=1)
+    axes[0].set_xlabel("Friedel-equivalent misorientation (degrees)")
+    axes[0].set_ylabel("Empirical cumulative fraction")
+    axes[0].set_title("Error ECDF by sample role")
+    axes[0].legend()
+    axes[0].grid(alpha=0.25)
+
+    headline = groups.get("headline_core", rows)
+    friedel = np.sort(
+        [row["friedel_equivalent_misorientation_deg"] for row in headline]
+    )
+    strict = np.sort([row["strict_misorientation_deg"] for row in headline])
+    rank = np.arange(1, len(headline) + 1)
+    axes[1].plot(rank, friedel, label="Friedel-equivalent")
+    axes[1].plot(rank, strict, label="Strict", alpha=0.8)
+    for threshold, style in ((1.0, ":"), (2.0, "--"), (5.0, "-.")):
+        axes[1].axhline(threshold, linestyle=style, linewidth=1)
+    axes[1].set_xlabel("Sorted headline sample rank")
+    axes[1].set_ylabel("Misorientation (degrees)")
+    axes[1].set_title("Headline strict versus Friedel error")
+    axes[1].legend()
+    axes[1].grid(alpha=0.25)
     fig.tight_layout()
     path = ROOT / "reports" / "acom_error_comparison.png"
     fig.savefig(path, dpi=220)
@@ -107,31 +119,23 @@ def plot_error_comparison(rows: list[dict]) -> None:
 
 
 def plot_offgrid_relation(rows: list[dict]) -> None:
-    groups = {}
+    groups: dict[str, list[dict]] = {}
     for row in rows:
-        groups.setdefault(row.get("sampling_type", "unknown"), []).append(row)
+        groups.setdefault(row.get("sample_role", "unspecified"), []).append(row)
 
     fig, ax = plt.subplots(figsize=(8, 6))
-    markers = ["o", "s", "^"]
+    markers = ["o", "s", "^", "D"]
     for marker, (name, group) in zip(markers, sorted(groups.items())):
         x = [
-            row["nearest_search_node_friedel_equivalent_misorientation_deg"]
+            row["nearest_zone_axis_node_misorientation_deg"]
             for row in group
         ]
         y = [row["friedel_equivalent_misorientation_deg"] for row in group]
-        ax.scatter(x, y, marker=marker, s=70, label=name)
-        for row, x_value, y_value in zip(group, x, y):
-            ax.annotate(
-                row["sample_id"].replace("clean_", ""),
-                (x_value, y_value),
-                xytext=(4, 4),
-                textcoords="offset points",
-                fontsize=8,
-            )
+        ax.scatter(x, y, marker=marker, s=28, alpha=0.65, label=name)
     limit = max(
         3.2,
         max(
-            row["nearest_search_node_friedel_equivalent_misorientation_deg"]
+            row["nearest_zone_axis_node_misorientation_deg"]
             for row in rows
         )
         + 0.3,
@@ -139,9 +143,9 @@ def plot_offgrid_relation(rows: list[dict]) -> None:
     ax.plot([0, limit], [0, limit], linestyle="--", label="y = x")
     ax.set_xlim(left=0)
     ax.set_ylim(bottom=0)
-    ax.set_xlabel("Distance to nearest searched ACOM node (degrees)")
+    ax.set_xlabel("Distance to nearest searched zone-axis node (degrees)")
     ax.set_ylabel("Friedel-equivalent prediction error (degrees)")
-    ax.set_title("Off-grid distance versus ACOM prediction error")
+    ax.set_title("Zone-axis discretization versus ACOM error")
     ax.grid(alpha=0.25)
     ax.legend()
     fig.tight_layout()
@@ -151,9 +155,34 @@ def plot_offgrid_relation(rows: list[dict]) -> None:
     print(f"Saved: {path}")
 
 
+def select_overlay_rows(rows: list[dict], max_rows: int) -> list[dict]:
+    groups: dict[str, list[dict]] = {}
+    for row in rows:
+        groups.setdefault(row.get("sample_role", "unspecified"), []).append(row)
+    roles = sorted(groups)
+    selected: list[dict] = []
+    remaining = max_rows
+    for role_index, role in enumerate(roles):
+        group = sorted(
+            groups[role],
+            key=lambda row: row["friedel_equivalent_misorientation_deg"],
+        )
+        roles_left = len(roles) - role_index
+        quota = max(1, remaining // roles_left)
+        quota = min(quota, len(group))
+        indices = np.linspace(0, len(group) - 1, quota, dtype=int)
+        selected.extend(group[index] for index in indices)
+        remaining -= quota
+    return selected[:max_rows]
+
+
 def plot_peak_overlays(rows: list[dict], samples: list[dict], config: dict) -> None:
     crystal = setup_crystal(config)
     samples_by_id = {sample["sample_id"]: sample for sample in samples}
+    rows = select_overlay_rows(
+        rows,
+        max_rows=int(config["evaluation"]["max_peak_overlay_samples"]),
+    )
     ncols = 4
     nrows = math.ceil(len(rows) / ncols)
     fig, axes = plt.subplots(nrows, ncols, figsize=(16, 4.1 * nrows))

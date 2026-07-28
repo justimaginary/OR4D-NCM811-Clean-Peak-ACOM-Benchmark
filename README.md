@@ -1,9 +1,9 @@
-# OR4D NCM811 Peak Benchmark — five-orientation smoke test
+# OR4D NCM811 Clean-Peak Benchmark v2
 
 > **Note**
 >
-> Currently, only the Clean-Peak track has been evaluated. For more details,
-> see `OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v2.pdf`.
+> Currently, only the Clean-Peak track has been evaluated. The generated v2
+> report is `reports/ACOM_CLEAN_REPORT.md`; the root PDF is the legacy v1 report.
 
 
 This project creates two tracks with one shared input/output contract.
@@ -14,6 +14,10 @@ This project creates two tracks with one shared input/output contract.
 - Dynamical: explicit random occupancy, abTEM multislice CBED/PACBED generation, then fixed peak extraction.
 
 Two conda environments are used because py4DSTEM 0.14.18 requires NumPy `<2`, while abTEM 1.0.10 requires NumPy `>=2`.
+
+Clean v2 contains 17 legacy smoke samples, 512 ACOM-independent Sobol-SO(3)
+headline samples, and 40 ACOM grid probes. See
+`docs/CLEAN_BENCHMARK_V2.md` for the sampling and reporting contract.
 
 ## Run
 
@@ -28,4 +32,3 @@ conda run -n or4d-clean python scripts/04_validate_dataset.py
 conda run -n or4d-clean python scripts/05_make_submission_template.py
 conda run -n or4d-clean python scripts/06_evaluate_submission.py submissions/submission_example.jsonl
 ```
-

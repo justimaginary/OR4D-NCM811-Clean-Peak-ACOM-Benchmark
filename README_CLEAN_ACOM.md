@@ -1,12 +1,16 @@
-# Clean-Peak + ACOM 扩展测试
+# Clean-Peak v2 + ACOM
 
-本扩展把 Clean 测试从 5 个低指数、零面内旋转取向扩展到 17 个取向：
+Clean v2 将样本分为三个互不混算的角色：
 
-- 5 个原始低指数控制取向；
-- 4 个非零面内旋转取向，角度分别为 6.1°、14.2°、22.3°、30.4°；
-- 8 个确定性低差异 SO(3) 取向，经过 NCM811 点群对称性去近邻筛选。
+- `legacy_smoke`：保留原 17 个样本，仅用于回归；
+- `headline_core`：512 个固定 seed 的 scrambled Sobol-SO(3) 样本，作为主指标；
+- `acom_grid_probe`：40 个面内子网格样本，仅用于诊断 ACOM 4°网格。
 
-ACOM Orientation Plan（取向模板库）使用 4° 区轴步长和 4° 面内角步长。新增测试取向独立于模板库生成。`07_run_acom_baseline.py` 会枚举实际 Orientation Plan 的完整取向节点，并计算测试真值到最近模板节点的对称性感知取向差。新增样本与模板节点距离小于 0.25° 时，脚本会停止并报告具体样本。
+主样本生成完全不读取 ACOM plan、相关分数或误差。ACOM Orientation
+Plan 固定使用 4°区轴步长和 4°面内角步长。报告区分最近离散 seed
+距离与最近区轴节点距离；离散 seed 距离不是误差下界，因为 ACOM 会做面内亚网格拟合。
+
+详细设计见 `docs/CLEAN_BENCHMARK_V2.md`。
 
 ## 运行
 
@@ -37,8 +41,10 @@ python scripts/06_evaluate_submission.py \
 - `private/clean_ground_truth.jsonl`：Clean 隐藏答案；
 - `reports/acom_plan_audit.json`：测试取向与 Orientation Plan 节点的最近距离；
 - `submissions/acom_clean_predictions.jsonl`：ACOM 预测矩阵；
-- `reports/acom_clean_details.json`：相关分数、模板索引、单样本耗时、逐样本取向差和汇总指标；
+- `reports/acom_clean_details.json`：相关分数、模板索引、单样本耗时和逐样本诊断；
 - `reports/acom_clean_evaluation.json`：对称性感知取向误差。
+- `reports/ACOM_CLEAN_REPORT.md`：由 JSON 自动生成的 canonical ACOM 报告；
+- 三张 PNG：可扩展的误差 ECDF、区轴距离—误差图和代表样本峰叠加。
 
 ## ACOM 固定参数
 

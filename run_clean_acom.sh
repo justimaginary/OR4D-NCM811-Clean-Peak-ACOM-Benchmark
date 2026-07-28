@@ -12,3 +12,4 @@ conda run --no-capture-output -n or4d-clean python scripts/06_evaluate_submissio
   --track clean \
   --output reports/acom_clean_evaluation.json
 conda run --no-capture-output -n or4d-clean python scripts/08_visualize_acom_results.py
+conda run --no-capture-output -n or4d-clean python scripts/09_write_acom_report.py
