@@ -358,9 +358,17 @@ def build_sample_trace(
 
 def representative_ids(rows: list[dict]) -> list[str]:
     headline = [row for row in rows if row["sample_role"] == "headline_core"]
+
+    def error(row: dict) -> float:
+        if "friedel_equivalent_misorientation_deg" in row:
+            return float(row["friedel_equivalent_misorientation_deg"])
+        return float(
+            row["acom_result"]["friedel_equivalent_misorientation_deg"]
+        )
+
     ordered = sorted(
         headline,
-        key=lambda row: row["friedel_equivalent_misorientation_deg"],
+        key=error,
     )
     if not ordered:
         return [row["sample_id"] for row in rows[:4]]
@@ -404,6 +412,36 @@ def aggregate_rows(traces: list[dict], role: str | None = None) -> dict[str, flo
                     row["q_distance_rmse_Ainv"]
                     for row in summaries
                     if row["q_distance_rmse_Ainv"] is not None
+                ]
+            )
+        ),
+        "median_intensity_mae": float(
+            np.median(
+                [
+                    row["intensity_mae_on_q_matches"]
+                    for row in summaries
+                    if row["intensity_mae_on_q_matches"] is not None
+                ]
+            )
+        ),
+        "median_raw_hkl_equal_fraction": float(
+            np.median(
+                [
+                    row["raw_hkl_equal_fraction_on_q_matches"]
+                    for row in summaries
+                    if row["raw_hkl_equal_fraction_on_q_matches"] is not None
+                ]
+            )
+        ),
+        "median_raw_hkl_equal_or_friedel_fraction": float(
+            np.median(
+                [
+                    row["raw_hkl_equal_or_friedel_fraction_on_q_matches"]
+                    for row in summaries
+                    if row[
+                        "raw_hkl_equal_or_friedel_fraction_on_q_matches"
+                    ]
+                    is not None
                 ]
             )
         ),
@@ -452,6 +490,41 @@ def write_summary(
         ],
         reverse=True,
     )[:20]
+    example = representative[len(representative) // 2]
+    example_reflections = example["standard_observed_reflections"][:3]
+    example_input = {
+        "sample_id": example["sample_id"],
+        "peaks": [
+            {
+                "qx": row["reported_qx_Ainv"],
+                "qy": row["reported_qy_Ainv"],
+                "intensity": row["reported_intensity_normalized"],
+            }
+            for row in example_reflections
+        ],
+    }
+    example_output = {
+        "standard_orientation_matrix_sample_to_crystal": example[
+            "standard_orientation_matrix_sample_to_crystal"
+        ],
+        "acom_orientation_matrix_sample_to_crystal": example[
+            "acom_orientation_matrix_sample_to_crystal"
+        ],
+        "friedel_equivalent_misorientation_deg": example["acom_result"][
+            "friedel_equivalent_misorientation_deg"
+        ],
+    }
+    example_hkl_flow = {
+        key: example_reflections[0][key]
+        for key in (
+            "hkl",
+            "g_crystal_cartesian_Ainv",
+            "standard_g_sample_Ainv",
+            "reported_qx_Ainv",
+            "reported_qy_Ainv",
+            "acom_same_hkl_g_sample_Ainv",
+        )
+    }
 
     lines = [
         "# Clean v3 坐标链路与 ACOM 对比",
@@ -487,6 +560,12 @@ def write_summary(
         f"- Headline ACOM 峰的中位观测匹配率："
         f"{100 * headline_metrics['median_observed_match_fraction']:.2f}%；"
         f"中位 q-RMSE {headline_metrics['median_q_rmse_Ainv']:.4f} Å⁻¹。",
+        f"- Headline 已匹配峰的中位强度 MAE："
+        f"{headline_metrics['median_intensity_mae']:.4f}；逐样本原始 HKL "
+        f"相同率的中位数为 "
+        f"{100 * headline_metrics['median_raw_hkl_equal_fraction']:.1f}%，"
+        f"计入 `(h,k,l)↔(-h,-k,-l)` 后为 "
+        f"{100 * headline_metrics['median_raw_hkl_equal_or_friedel_fraction']:.1f}%。",
     ]
     if errors.size:
         lines.extend(
@@ -504,6 +583,30 @@ def write_summary(
             f"{config['evaluation']['coordinate_match_tolerance_Ainv']:.3f} Å⁻¹ 截断。"
             "原始 HKL 标签可能因晶体对称操作或 Friedel 等价而改变，所以 HKL "
             "相同率只是诊断；主判断依据仍是 q 匹配与 symmetry/Friedel-aware 取向误差。",
+            "",
+            "## 数据和结果长什么样",
+            "",
+            "公共输入不含 HKL，下面只截取一个样本的前三个峰：",
+            "",
+            "```json",
+            *json.dumps(example_input, ensure_ascii=False, indent=2).splitlines(),
+            "```",
+            "",
+            "标准答案与 ACOM 都是 sample→crystal 的 3×3 旋转矩阵：",
+            "",
+            "```json",
+            *json.dumps(example_output, ensure_ascii=False, indent=2).splitlines(),
+            "```",
+            "",
+            "诊断文件才把 HKL 和完整坐标链路连起来；同一条反射的实际记录例如：",
+            "",
+            "```json",
+            *json.dumps(example_hkl_flow, ensure_ascii=False, indent=2).splitlines(),
+            "```",
+            "",
+            "差异主要有三类：取向矩阵/样品坐标轴不同，使同一 HKL 的 "
+            "`qx,qy,qz` 改变；激发误差筛选使两套峰表出现缺峰或多峰；晶体对称和 "
+            "Friedel 等价会让几乎相同的 detector `q` 使用不同原始 HKL 标签。",
             "",
             "## 代表样本",
             "",
@@ -597,13 +700,18 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz",
-        help="Full JSONL or JSONL.GZ trace path.",
+        help=(
+            "Trace path. Defaults to the canonical full path with --all and "
+            "to a separate selected-sample path otherwise."
+        ),
     )
     parser.add_argument(
         "--summary-output",
         type=Path,
-        default=ROOT / "reports" / "ACOM_COORDINATE_ANALYSIS.md",
+        help=(
+            "Markdown path. Defaults to the canonical report with --all and "
+            "to a separate selected-sample report otherwise."
+        ),
     )
     return parser.parse_args()
 
@@ -647,9 +755,27 @@ def main() -> None:
     else:
         selected_ids = representative_ids(list(details.values()))
 
+    output_path = args.output or (
+        ROOT
+        / "diagnostics"
+        / (
+            "clean_coordinate_trace.jsonl.gz"
+            if args.all
+            else "clean_coordinate_trace_selected.jsonl.gz"
+        )
+    )
+    summary_output_path = args.summary_output or (
+        ROOT
+        / "reports"
+        / (
+            "ACOM_COORDINATE_ANALYSIS.md"
+            if args.all
+            else "ACOM_COORDINATE_ANALYSIS_SELECTED.md"
+        )
+    )
     tolerance = float(config["evaluation"]["coordinate_match_tolerance_Ainv"])
     traces: list[dict] = []
-    with open_text_output(args.output) as output:
+    with open_text_output(output_path) as output:
         for index, sample_id in enumerate(selected_ids):
             predicted_peaks = filtered_simulated_peaks(
                 crystal,
@@ -681,9 +807,9 @@ def main() -> None:
                     file=sys.stderr,
                 )
 
-    write_summary(args.summary_output, traces, config, args.output)
-    print(f"Full coordinate trace: {args.output}", file=sys.stderr)
-    print(f"Coordinate analysis: {args.summary_output}", file=sys.stderr)
+    write_summary(summary_output_path, traces, config, output_path)
+    print(f"Full coordinate trace: {output_path}", file=sys.stderr)
+    print(f"Coordinate analysis: {summary_output_path}", file=sys.stderr)
 
 
 if __name__ == "__main__":

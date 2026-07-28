@@ -47,9 +47,6 @@ def main() -> None:
         if args.steps
         else [float(value) for value in config["acom"]["sweep_angle_steps_deg"]]
     )
-    if canonical not in steps:
-        raise ValueError(f"Sweep steps must include canonical {canonical:g} degrees")
-
     for step in steps:
         is_canonical = step == canonical
         tag = "" if is_canonical else step_tag(step)
