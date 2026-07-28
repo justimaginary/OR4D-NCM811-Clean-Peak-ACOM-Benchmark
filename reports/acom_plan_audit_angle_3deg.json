@@ -11,7 +11,7 @@
     "num_in_plane_steps": 120,
     "num_normal_discrete_seeds": 59520,
     "num_discrete_seeds_including_mirror": 119040,
-    "build_seconds": 0.04858275002334267
+    "build_seconds": 0.05012337502557784
   },
   "distance_interpretation": {
     "nearest_discrete_search_seed_misorientation_deg": "Diagnostic distance to a discrete correlation seed; not an error lower bound because ACOM refines the in-plane angle.",

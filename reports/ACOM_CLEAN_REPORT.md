@@ -21,9 +21,9 @@ Controlled comparison: all sweep rows have identical config, CIF, orientation-ma
 
 | Step | n | Mean | Median | P95 | Max | Acc@1° | Acc@2° | Acc@5° | Seeds incl. mirror | Match time | Throughput |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| 4° | 1024 | 2.991 | 1.625 | 5.311 | 89.899 | 20.8% | 68.3% | 94.6% | 49680 | 12.0 s | 90.3/s |
-| 3° | 1024 | 2.581 | 1.283 | 5.069 | 90.071 | 32.3% | 84.7% | 94.8% | 119040 | 30.4 s | 35.5/s |
-| 2° (canonical) | 1024 | 1.625 | 0.977 | 3.525 | 89.850 | 52.1% | 90.5% | 96.7% | 389160 | 102.6 s | 10.5/s |
+| 4° | 1024 | 2.991 | 1.625 | 5.311 | 89.899 | 20.8% | 68.3% | 94.6% | 49680 | 15.3 s | 70.4/s |
+| 3° | 1024 | 2.581 | 1.283 | 5.069 | 90.071 | 32.3% | 84.7% | 94.8% | 119040 | 32.8 s | 32.9/s |
+| 2° (canonical) | 1024 | 1.625 | 0.977 | 3.525 | 89.850 | 52.1% | 90.5% | 96.7% | 389160 | 110.2 s | 9.8/s |
 
 ## Result by sample role
 
@@ -47,12 +47,12 @@ Controlled comparison: all sweep rows have identical config, CIF, orientation-ma
 - Discrete seed distance/error Pearson correlation: 0.084
 - Discrete seed distance is diagnostic only. ACOM performs a parabolic sub-grid fit of the in-plane correlation peak, so it is not an error lower bound.
 - Plan nodes: 1081 zone axes × 180 in-plane steps; 389160 seeds including mirror.
-- Plan build: 0.135 s.
-- Matching: 102.564 s total, 0.0944 s p50, 0.0966 s p90, 0.1104 s p99, 10.5 samples/s.
+- Plan build: 0.097 s.
+- Matching: 110.206 s total, 0.0975 s p50, 0.1228 s p90, 0.1580 s p99, 9.8 samples/s.
 
 ## Reproducibility
 
-- Source git revision: `257e1f5b92670098c4a1e590618a3dd50f6ca2e3`
+- Source git revision: `efb0672e3766e1ca48883028bc0b6f7b666b85bc`
 - Versions: Python 3.11.15, NumPy 1.26.4, py4DSTEM 0.14.18, pymatgen 2024.7.18, h5py 3.16.0
 - SHA256 `cif`: `60f28f9d4ace01baeab707d22c8de267ce0c7759c3574598fb1abe84e4fef94f`
 - SHA256 `config`: `0b4dec56efef03c800195244d29e8b8e3c9154499c5739618f341c6c86cb18ed`
