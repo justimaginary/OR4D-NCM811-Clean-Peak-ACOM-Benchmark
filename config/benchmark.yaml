@@ -1,5 +1,5 @@
 dataset:
-  id: OR4D-NCM811-CleanPeak-acom-v2
+  id: OR4D-NCM811-CleanPeak-acom-v3
   description: Stratified Clean-Peak benchmark with legacy smoke controls, a Sobol-SO(3) headline core, and ACOM grid probes.
   structure_id: NCM811_113035
   cif_path: data/structure/NCM811_113035.cif
@@ -8,9 +8,9 @@ dataset:
   headline_sample_role: headline_core
   expected_sample_counts:
     legacy_smoke: 17
-    headline_core: 512
+    headline_core: 1024
     acom_grid_probe: 40
-  expected_num_orientations: 569
+  expected_num_orientations: 1081
 
 # Hand-designed anchor orientations. ori_005--ori_008 use non-zero
 # in-plane angles deliberately placed between the 4-degree ACOM plan bins.
@@ -75,7 +75,7 @@ clean_sampling:
   # mapped to uniform SO(3) rotations with the Shoemake transform.
   headline_core:
     enabled: true
-    count: 512
+    count: 1024
     orientation_id_prefix: core_
     method: sobol_shoemake
     scramble: true
@@ -107,7 +107,7 @@ clean_sampling:
 
 common:
   accelerating_voltage_V: 300000.0
-  k_max_Ainv: 2.0
+  k_max_Ainv: 1.5
   central_beam_exclusion_Ainv: 0.03
   normalize_peak_intensity: max
 
@@ -141,6 +141,7 @@ evaluation:
   headline_sample_role: headline_core
   plan_distance_bin_edges_deg: [0.0, 0.5, 1.0, 2.0]
   strict_friedel_disagreement_tolerance_deg: 0.001
+  coordinate_match_tolerance_Ainv: 0.08
   max_peak_overlay_samples: 12
 
 # These values remain available for the later Dynamical track.

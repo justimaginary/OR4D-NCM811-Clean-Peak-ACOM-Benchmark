@@ -76,6 +76,20 @@ class CleanSamplingTest(unittest.TestCase):
         ids = [record["orientation_id"] for record in records]
         self.assertEqual(len(ids), len(set(ids)))
 
+    def test_canonical_manifest_uses_1024_headline_samples(self) -> None:
+        self.assertEqual(
+            self.config["clean_sampling"]["headline_core"]["count"],
+            1024,
+        )
+        self.assertEqual(
+            self.config["dataset"]["expected_sample_counts"]["headline_core"],
+            1024,
+        )
+        self.assertEqual(
+            self.config["dataset"]["expected_num_orientations"],
+            1081,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
