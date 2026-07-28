@@ -168,6 +168,17 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
 .metric { border: 1px solid var(--border); border-radius: 9px; padding: 11px 13px; display: flex; justify-content: space-between; gap: 10px; }
 .metric span { color: var(--muted-foreground); }
+.notation { margin: 4px 0 22px; }
+.notation h2 { margin: 0 0 8px; font-size: 17px; }
+.notation-note { margin: 9px 0 0; color: var(--muted-foreground); font-size: 13px; }
+.notation code { color: var(--foreground); }
+.process-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 2px 0 20px; }
+.process-grid article { padding-top: 12px; border-top: 3px solid var(--series-1); }
+.process-grid article:last-child { border-top-color: var(--series-2); }
+.process-grid h2 { margin: 0 0 7px; font-size: 17px; }
+.process-grid p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
+.view-control { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin: 0 0 12px; }
+.view-control .tabs { margin-left: auto; }
 .plots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
 .plot-head { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; min-height: 30px; font-weight: 600; }
 .legend { color: var(--muted-foreground); font-weight: 400; }
@@ -188,6 +199,7 @@ svg { display: block; width: 100%; height: auto; color: var(--foreground); }
 }
 .equation-grid article, .matrix-wrap section { min-width: 0; }
 .equation-grid h3, .matrix-wrap h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted-foreground); font-weight: 600; }
+.equation-note { margin: 6px 0 0; color: var(--muted-foreground); font-size: 12px; }
 .operator { align-self: center; color: var(--muted-foreground); font-size: 22px; }
 .matrix-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
 .matrix-equation { display: grid; grid-template-columns: minmax(260px, 1fr) auto minmax(220px, .8fr); gap: 10px; align-items: center; }
@@ -203,7 +215,7 @@ th { color: var(--muted-foreground); font-weight: 600; background: var(--muted);
 tbody tr.is-selected { background: #eef4ff; }
 @media (max-width: 720px) {
   main { padding: 16px; }
-  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation, .process-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -211,7 +223,7 @@ tbody tr.is-selected { background: #eef4ff; }
   body { color: #000000; background: #ffffff; }
   main { max-width: none; padding: 0; }
   button, select, pre, th { color: #000000; background: #ffffff; }
-  .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
+  .process-grid, .notation, .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
   .all-reflections { break-before: page; }
 }
 </style>
@@ -224,57 +236,92 @@ tbody tr.is-selected { background: #eef4ff; }
     <div id="tabs" class="tabs"></div>
   </div>
   <div class="metrics">
-    <div class="metric"><span>取向误差</span><strong id="error"></strong></div>
-    <div class="metric"><span>观测峰匹配率</span><strong id="match"></strong></div>
-    <div class="metric"><span>q-RMSE</span><strong id="rmse"></strong></div>
+    <div class="metric"><span>取向误差：R<sup>ACOM</sup> 对 R<sup>GT</sup></span><strong id="error"></strong></div>
+    <div class="metric"><span>探测器观测峰匹配率</span><strong id="match"></strong></div>
+    <div class="metric"><span>探测器峰匹配 q-RMSE（二维）</span><strong id="rmse"></strong></div>
+  </div>
+  <section class="process-grid" aria-label="Benchmark 构建与 ACOM 预测流程">
+    <article>
+      <h2>过程 A｜构建原始 Benchmark（GT）</h2>
+      <p>晶体结构 → 倒易基矩阵 B 与结构因子 → 采样标准取向 R<sup>GT</sup> → 按激发误差、强度阈值和 Kmax 生成衍射峰 → 对外只提供观测峰 <code>{qₓ, qᵧ, I}</code>。HKL 和 R<sup>GT</sup> 属于诊断/标准答案，不提供给 ACOM。</p>
+    </article>
+    <article>
+      <h2>过程 B｜运行 ACOM 预测</h2>
+      <p>读取公开观测峰 <code>{qₓ, qᵧ, I}</code> → ACOM 搜索取向 → 输出 R<sup>ACOM</sup> → 用该取向模拟预测峰 → 在探测器二维 q 空间与 GT 观测峰使用同一种一对一匹配方法计算指标。</p>
+    </article>
+  </section>
+  <section class="notation">
+    <h2>变量定义与坐标约定</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>符号</th><th>完整含义</th><th>坐标系 / 维度</th><th>单位</th><th>本页用途</th></tr></thead>
+        <tbody>
+          <tr><td><code>h = [h,k,l]</code></td><td>一个衍射反射的 Miller 指数；不是整个晶体取向</td><td>晶格基底，整数三元组</td><td>无量纲</td><td>指定一条晶面反射</td></tr>
+          <tr><td><code>B</code></td><td>晶体倒易基矩阵；三行依次是 a*、b*、c*</td><td>晶体笛卡尔坐标，3×3</td><td>Å⁻¹</td><td><code>g_c = h B</code>；不含 2π</td></tr>
+          <tr><td><code>g_c</code></td><td>g<sub>crystal</sub>，该 HKL 在晶体笛卡尔坐标中的倒易向量</td><td>晶体笛卡尔坐标，三维</td><td>Å⁻¹</td><td>由 HKL 和 B 唯一确定</td></tr>
+          <tr><td><code>R<sup>GT</sup></code></td><td>标准答案的 sample→crystal 取向矩阵</td><td>旋转矩阵，3×3</td><td>无量纲</td><td>其列是样品 x、y、z 轴在晶体坐标中的方向</td></tr>
+          <tr><td><code>R<sup>ACOM</sup></code></td><td>ACOM 估计的 sample→crystal 取向矩阵</td><td>旋转矩阵，3×3</td><td>无量纲</td><td>与 R<sup>GT</sup> 比较取向误差</td></tr>
+          <tr><td><code>g_s</code></td><td>同一倒易向量在样品坐标中的表示</td><td>样品笛卡尔坐标，[q<sub>x</sub>,q<sub>y</sub>,q<sub>z</sub>]</td><td>Å⁻¹</td><td><code>g_s = g_c R</code>（本页行向量写法）</td></tr>
+          <tr><td><code>q = [q_x,q_y]</code></td><td>探测器平面中的二维衍射峰坐标</td><td>样品 x-y / 探测器平面，二维</td><td>Å⁻¹</td><td>取 g<sub>s</sub> 的前两项；q<sub>z</sub> 沿电子束且不在公开峰表中</td></tr>
+          <tr><td><code>I</code></td><td>该衍射峰的归一化强度</td><td>标量</td><td>无量纲</td><td>决定点大小及强度排序</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="notation-note">本页数值数组统一按行显示，因此使用 <code>g_c = h B</code>、<code>g_s = g_c R</code>；与代码中的列向量写法 <code>g_s = Rᵀ g_c</code> 完全等价。GT = 生成数据时的标准答案，ACOM = 算法估计结果。</p>
+  </section>
+  <div class="view-control">
+    <strong>图层显示</strong>
+    <div id="view-tabs" class="tabs" aria-label="选择 GT、ACOM 或叠加显示"></div>
   </div>
   <div class="plots">
     <section>
       <div class="plot-head">
-        <span>探测器倒空间</span>
-        <span class="legend"><i class="dot"></i>标准 <i class="cross">×</i>ACOM</span>
+        <span>探测器倒空间 q = [qₓ, qᵧ]</span>
+        <span id="detector-legend" class="legend"></span>
       </div>
       <svg id="detector" viewBox="0 0 560 400" role="img" aria-label="标准与 ACOM 衍射峰"></svg>
       <div id="detector-note" class="plot-note"></div>
     </section>
     <section>
       <div class="plot-head">
-        <span>样品坐标轴在晶体 XY 平面的投影</span>
-        <span class="legend"><i class="line"></i>标准 <i class="line acom"></i>ACOM</span>
+        <span>R 的三列：样品坐标轴在晶体 XY 平面的投影</span>
+        <span id="axes-legend" class="legend"></span>
       </div>
       <svg id="axes" viewBox="0 0 560 400" role="img" aria-label="标准与 ACOM 样品坐标轴"></svg>
-      <div class="plot-note">紫色为所选 g<sub>crystal</sub> 方向；实线为标准，虚线为 ACOM</div>
+      <div id="axes-note" class="plot-note"></div>
     </section>
   </div>
   <div class="reflection-control">
-    <label for="reflection"><strong>高亮标准反射</strong></label>
+    <label for="reflection"><strong>选择一个 GT 反射做坐标诊断</strong></label>
     <select id="reflection"></select>
   </div>
   <section class="transform">
-    <h2>所选反射：HKL → g<sub>crystal</sub> → q</h2>
+    <h2>所选 GT 反射的坐标链：h → g<sub>c</sub> → g<sub>s</sub> → q</h2>
     <div class="equation-grid">
-      <article><h3>① HKL（行向量）</h3><pre id="hkl-vector"></pre></article>
+      <article><h3>① h = [h,k,l]（Miller 指数）</h3><pre id="hkl-vector"></pre></article>
       <div class="operator">×</div>
-      <article><h3>② 倒易基矩阵 B（Å⁻¹）</h3><pre id="reciprocal-matrix"></pre></article>
+      <article><h3>② B（倒易基矩阵；行是 a*、b*、c*；Å⁻¹）</h3><pre id="reciprocal-matrix"></pre></article>
       <div class="operator">=</div>
-      <article><h3>③ g<sub>crystal</sub>（Å⁻¹）</h3><pre id="g-vector"></pre></article>
+      <article><h3>③ g<sub>c</sub> = g<sub>crystal</sub>（晶体坐标；Å⁻¹）</h3><pre id="g-vector"></pre></article>
     </div>
   </section>
   <div class="matrix-wrap">
     <section>
-      <h3>④ 标准：g<sub>crystal</sub> × R<sub>standard</sub> = q<sub>standard</sub></h3>
+      <h3>④ GT：g<sub>s</sub><sup>GT</sup> = g<sub>c</sub> R<sup>GT</sup>（样品坐标）</h3>
       <div class="matrix-equation"><pre id="standard-matrix"></pre><div class="operator">→</div><pre id="standard-q"></pre></div>
+      <p class="equation-note">右侧三项依次为 [qₓ, qᵧ, q<sub>z</sub>]；探测器只使用前两项。</p>
     </section>
     <section>
-      <h3>④ ACOM：g<sub>crystal</sub> × R<sub>ACOM</sub> = q<sub>ACOM, same HKL</sub></h3>
+      <h3>④ 诊断：g<sub>s</sub><sup>ACOM|same h</sup> = g<sub>c</sub> R<sup>ACOM</sup></h3>
       <div class="matrix-equation"><pre id="acom-matrix"></pre><div class="operator">→</div><pre id="acom-q"></pre></div>
+      <p class="equation-note">固定同一个 GT HKL 后的坐标差；仅用于解释误差，不是 ACOM 的输入，也不等同于 ACOM 最近邻匹配峰。</p>
     </section>
   </div>
   <section class="all-reflections">
     <h2 id="all-reflections-title"></h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>HKL</th><th>强度</th><th>g<sub>crystal</sub> (Å⁻¹)</th><th>q<sub>standard</sub> (Å⁻¹)</th><th>q<sub>ACOM, same HKL</sub> (Å⁻¹)</th><th>Δq (Å⁻¹)</th></tr></thead>
+        <thead><tr><th>#</th><th>GT HKL</th><th>I<sup>GT</sup></th><th>g<sub>c</sub> (Å⁻¹)</th><th>g<sub>s</sub><sup>GT</sup> = [qₓ,qᵧ,qz] (Å⁻¹)</th><th>g<sub>s</sub><sup>ACOM|same h</sup> (Å⁻¹)</th><th>‖Δg<sub>s</sub>‖₂ (Å⁻¹)</th></tr></thead>
         <tbody id="reflection-rows"></tbody>
       </table>
     </div>
@@ -283,11 +330,13 @@ tbody tr.is-selected { background: #eef4ff; }
 <script>
 const samples = __DATA__;
 const tabs = document.getElementById("tabs");
+const viewTabs = document.getElementById("view-tabs");
 const detector = document.getElementById("detector");
 const axes = document.getElementById("axes");
 const reflection = document.getElementById("reflection");
 let sampleIndex = 1;
 let reflectionIndex = 0;
+let displayMode = "overlay";
 const esc = value => String(value).replace(/[&<>"']/g, character => {
   if (character === "&") return "&amp;";
   if (character === "<") return "&lt;";
@@ -317,6 +366,34 @@ function renderTabs() {
   });
 }
 
+function renderViewTabs() {
+  const modes = [
+    ["gt", "仅 Benchmark / GT"],
+    ["acom", "仅 ACOM 预测"],
+    ["overlay", "GT + ACOM 叠加"],
+  ];
+  viewTabs.innerHTML = "";
+  modes.forEach(([mode, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-pressed", mode === displayMode ? "true" : "false");
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      displayMode = mode;
+      render();
+    });
+    viewTabs.appendChild(button);
+  });
+  const showGT = displayMode !== "acom";
+  const showACOM = displayMode !== "gt";
+  document.getElementById("detector-legend").innerHTML =
+    `${showGT ? '<i class="dot"></i>GT 观测峰' : ''}` +
+    `${showACOM ? '<i class="cross">×</i>ACOM 预测峰' : ''}`;
+  document.getElementById("axes-legend").innerHTML =
+    `${showGT ? '<i class="line"></i>R<sup>GT</sup>' : ''}` +
+    `${showACOM ? '<i class="line acom"></i>R<sup>ACOM</sup>' : ''}`;
+}
+
 function renderDetector(sample) {
   const plottedObserved = sample.observed.slice(0, 12).map((peak, index) => ({peak, index}));
   if (reflectionIndex >= 12) {
@@ -328,25 +405,32 @@ function renderDetector(sample) {
     <circle cx="280" cy="200" r="165" fill="none" stroke="var(--border)"/>
     <text x="495" y="222" text-anchor="end" fill="var(--muted-foreground)">qₓ (Å⁻¹)</text>
     <text x="290" y="36" fill="var(--muted-foreground)">qᵧ (Å⁻¹)</text>`;
-  sample.matches.filter(match => match.observed < 12).forEach(match => {
-    const observed = sample.observed[match.observed];
-    const predicted = sample.predicted[match.predicted];
-    markup += `<line x1="${qX(observed.q[0])}" y1="${qY(observed.q[1])}" x2="${qX(predicted.q[0])}" y2="${qY(predicted.q[1])}" stroke="var(--border)"/>`;
-  });
-  plottedObserved.forEach(({peak, index}) => {
-    const radius = 4 + 7 * Math.sqrt(peak.intensity);
-    const selected = index === reflectionIndex;
-    markup += `<circle cx="${qX(peak.q[0])}" cy="${qY(peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${selected ? "var(--series-3)" : "var(--series-1)"}" stroke-width="${selected ? 3 : 1.8}"><title>标准 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
-  });
-  sample.predicted.forEach(peak => {
-    const x = qX(peak.q[0]);
-    const y = qY(peak.q[1]);
-    const size = 4 + 6 * Math.sqrt(peak.intensity);
-    markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
-  });
+  if (displayMode === "overlay") {
+    sample.matches.filter(match => match.observed < 12).forEach(match => {
+      const observed = sample.observed[match.observed];
+      const predicted = sample.predicted[match.predicted];
+      markup += `<line x1="${qX(observed.q[0])}" y1="${qY(observed.q[1])}" x2="${qX(predicted.q[0])}" y2="${qY(predicted.q[1])}" stroke="var(--border)"/>`;
+    });
+  }
+  if (displayMode !== "acom") {
+    plottedObserved.forEach(({peak, index}) => {
+      const radius = 4 + 7 * Math.sqrt(peak.intensity);
+      const selected = index === reflectionIndex;
+      markup += `<circle cx="${qX(peak.q[0])}" cy="${qY(peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${selected ? "var(--series-3)" : "var(--series-1)"}" stroke-width="${selected ? 3 : 1.8}"><title>GT 观测反射 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
+    });
+  }
+  if (displayMode !== "gt") {
+    sample.predicted.forEach(peak => {
+      const x = qX(peak.q[0]);
+      const y = qY(peak.q[1]);
+      const size = 4 + 6 * Math.sqrt(peak.intensity);
+      markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM 模拟预测反射 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
+    });
+  }
   detector.innerHTML = markup;
+  const modeText = displayMode === "gt" ? "GT 观测峰" : displayMode === "acom" ? "ACOM 预测峰" : "GT 与 ACOM 叠加";
   document.getElementById("detector-note").textContent =
-    `图中显示强度前 12 个峰；当前选择 HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
+    `当前显示：${modeText}（强度前 12）；诊断选择为 GT HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
 }
 
 function renderAxes(sample) {
@@ -359,7 +443,12 @@ function renderAxes(sample) {
     <line x1="${centerX}" y1="22" x2="${centerX}" y2="378" stroke="var(--border)"/>
     <text x="475" y="${centerY + 22}" text-anchor="end" fill="var(--muted-foreground)">crystal X</text>
     <text x="${centerX + 10}" y="34" fill="var(--muted-foreground)">crystal Y</text>`;
-  [sample.standard_matrix, sample.acom_matrix].forEach((matrix, matrixIndex) => {
+  [
+    {matrix: sample.standard_matrix, key: "gt"},
+    {matrix: sample.acom_matrix, key: "acom"},
+  ].filter(item => displayMode === "overlay" || displayMode === item.key).forEach(item => {
+    const matrix = item.matrix;
+    const matrixIndex = item.key === "gt" ? 0 : 1;
     names.forEach((name, column) => {
       const x = centerX + axisScale(matrix[0][column]);
       const y = centerY - axisScale(matrix[1][column]);
@@ -381,12 +470,20 @@ function renderAxes(sample) {
         `<text x="${labelX}" y="${labelY}" dy="0.35em" text-anchor="middle" fill="var(--foreground)" font-size="12">${matrixIndex === 0 ? "Std" : "ACOM"} ${name}</text>`;
     });
   });
-  const selected = sample.observed[reflectionIndex];
-  const norm = Math.hypot(selected.g_crystal[0], selected.g_crystal[1]) || 1;
-  const gx = centerX + 105 * selected.g_crystal[0] / norm;
-  const gy = centerY - 105 * selected.g_crystal[1] / norm;
-  markup += `<line x1="${centerX}" y1="${centerY}" x2="${gx}" y2="${gy}" stroke="var(--series-3)" stroke-width="4"/><circle cx="${gx}" cy="${gy}" r="4" fill="var(--series-3)"/>`;
+  if (displayMode !== "acom") {
+    const selected = sample.observed[reflectionIndex];
+    const norm = Math.hypot(selected.g_crystal[0], selected.g_crystal[1]) || 1;
+    const gx = centerX + 105 * selected.g_crystal[0] / norm;
+    const gy = centerY - 105 * selected.g_crystal[1] / norm;
+    markup += `<line x1="${centerX}" y1="${centerY}" x2="${gx}" y2="${gy}" stroke="var(--series-3)" stroke-width="4"/><circle cx="${gx}" cy="${gy}" r="4" fill="var(--series-3)"/>`;
+  }
   axes.innerHTML = markup;
+  document.getElementById("axes-note").innerHTML =
+    displayMode === "gt"
+      ? "仅显示 R<sup>GT</sup>；紫色为所选 GT 反射的 g<sub>c</sub> 方向"
+      : displayMode === "acom"
+        ? "仅显示 R<sup>ACOM</sup>；虚线表示算法估计的样品坐标轴"
+        : "叠加 R<sup>GT</sup>（实线）与 R<sup>ACOM</sup>（虚线）；紫色为所选 GT 反射的 g<sub>c</sub> 方向";
 }
 
 function renderTransform(sample) {
@@ -402,7 +499,7 @@ function renderTransform(sample) {
 
 function renderReflectionTable(sample) {
   document.getElementById("all-reflections-title").innerHTML =
-    `当前样本全部 ${sample.observed.length} 个 HKL 与 g<sub>crystal</sub>（Kmax = 1.5 Å⁻¹）`;
+    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = 1.5 Å⁻¹）`;
   document.getElementById("reflection-rows").innerHTML = sample.observed.map((peak, index) => {
     const delta = Math.hypot(
       peak.q_standard[0] - peak.q_acom_same_hkl[0],
@@ -423,11 +520,12 @@ function renderReflectionTable(sample) {
 function render() {
   const sample = samples[sampleIndex];
   renderTabs();
+  renderViewTabs();
   document.getElementById("error").textContent = `${sample.orientation_error_deg.toFixed(3)}°`;
   document.getElementById("match").textContent = `${(sample.observed_match_fraction * 100).toFixed(1)}%`;
   document.getElementById("rmse").textContent = `${sample.q_rmse_Ainv.toFixed(4)} Å⁻¹`;
   reflection.innerHTML = sample.observed.map((peak, index) =>
-    `<option value="${index}" ${index === reflectionIndex ? "selected" : ""}>HKL [${esc(peak.hkl.join(", "))}] · I=${peak.intensity.toFixed(3)}</option>`
+    `<option value="${index}" ${index === reflectionIndex ? "selected" : ""}>GT HKL [${esc(peak.hkl.join(", "))}] · I=${peak.intensity.toFixed(3)}</option>`
   ).join("");
   renderDetector(sample);
   renderAxes(sample);
