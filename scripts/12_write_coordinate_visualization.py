@@ -12,6 +12,11 @@ TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
 DETAILS_PATH = ROOT / "reports" / "acom_clean_details.json"
 PLAN_AUDIT_PATH = ROOT / "reports" / "acom_plan_audit.json"
 OUTPUT_PATH = ROOT / "reports" / "ACOM_COORDINATE_VISUALIZATION.html"
+EVALUATION_PATHS = {
+    4.0: ROOT / "reports" / "acom_clean_evaluation_angle_4deg.json",
+    3.0: ROOT / "reports" / "acom_clean_evaluation_angle_3deg.json",
+    2.0: ROOT / "reports" / "acom_clean_evaluation.json",
+}
 
 
 def representative_ids() -> list[str]:
@@ -78,9 +83,9 @@ def runtime_parameters() -> dict[str, list[list[str]]]:
     plan = audit["orientation_plan"]
 
     benchmark = [
-        ["数据集", str(dataset["id"]), "本次结果对应的数据版本"],
+        ["数据集 / Dataset", str(dataset["id"]), "本次结果对应的数据版本"],
         [
-            "样本组成",
+            "样本组成 / Sample composition",
             (
                 f"{sum(role_counts.values())} = "
                 f"{role_counts['legacy_smoke']} legacy + "
@@ -90,53 +95,53 @@ def runtime_parameters() -> dict[str, list[list[str]]]:
             "headline 指标只统计 headline_core",
         ],
         [
-            "headline 取向采样",
+            "headline 取向采样 / Orientation sampling",
             f"{sampling['method']}; seed={sampling['seed']}; scramble={sampling['scramble']}",
             "独立于 ACOM 搜索网格的 SO(3) 采样",
         ],
         [
-            "加速电压",
+            "加速电压 / Accelerating voltage",
             f"{float(common['accelerating_voltage_V']) / 1000:g} kV",
             "电子波长与衍射几何",
         ],
-        ["Kmax", f"{common['k_max_Ainv']} Å⁻¹", "保留的最大探测器倒空间半径"],
+        ["最大倒空间半径 / Kmax", f"{common['k_max_Ainv']} Å⁻¹", "保留的最大探测器倒空间半径"],
         [
-            "中心束排除半径",
+            "中心束排除半径 / Central-beam exclusion",
             f"{common['central_beam_exclusion_Ainv']} Å⁻¹",
             "去掉透射中心束附近峰",
         ],
         [
-            "激发误差 σ",
+            "激发误差 σ / Excitation-error sigma",
             f"{clean['sigma_excitation_error_Ainv']} Å⁻¹",
             "衍射峰沿 Ewald 球偏离的权重尺度",
         ],
         [
-            "激发误差截断",
+            "激发误差截断 / Excitation-error cutoff",
             (
                 f"{clean['tol_excitation_error_mult']}σ = "
                 f"{float(clean['tol_excitation_error_mult']) * float(clean['sigma_excitation_error_Ainv']):g} Å⁻¹"
             ),
             "超出该范围的反射不进入图样",
         ],
-        ["结构因子阈值", str(clean["tol_structure_factor"]), "生成候选反射时过滤弱结构因子"],
-        ["峰强度阈值", str(clean["tol_intensity"]), "生成图样时过滤弱峰"],
-        ["强度归一化", str(common["normalize_peak_intensity"]), "每个样本以最强峰归一化为 1"],
+        ["结构因子阈值 / Structure-factor tolerance", str(clean["tol_structure_factor"]), "生成候选反射时过滤弱结构因子"],
+        ["峰强度阈值 / Peak-intensity tolerance", str(clean["tol_intensity"]), "生成图样时过滤弱峰"],
+        ["强度归一化 / Intensity normalization", str(common["normalize_peak_intensity"]), "每个样本以最强峰归一化为 1"],
     ]
     acom_rows = [
-        ["py4DSTEM", str(audit["py4DSTEM_version"]), "ACOM 实现版本"],
-        ["zone-axis 范围", str(acom["zone_axis_range"]), "取向搜索覆盖范围"],
+        ["py4DSTEM 版本 / Version", str(audit["py4DSTEM_version"]), "ACOM 实现版本"],
+        ["晶带轴范围 / Zone-axis range", str(acom["zone_axis_range"]), "取向搜索覆盖范围"],
         [
-            "标准运行角步长",
+            "标准运行角步长 / Canonical angular step",
             f"zone={acom['angle_step_zone_axis_deg']}°; in-plane={acom['angle_step_in_plane_deg']}°",
             "当前报告的 canonical ACOM 网格",
         ],
         [
-            "对照扫描角步长",
+            "对照扫描角步长 / Sweep angular steps",
             ", ".join(f"{value}°" for value in acom["sweep_angle_steps_deg"]),
             "同一方法分别运行，不混用检测规则",
         ],
         [
-            "实际搜索网格",
+            "实际搜索网格 / Actual search grid",
             (
                 f"{plan['num_zone_axes']} zone axes × "
                 f"{plan['num_in_plane_steps']} in-plane; "
@@ -144,26 +149,57 @@ def runtime_parameters() -> dict[str, list[list[str]]]:
             ),
             "由 canonical 2° 参数生成",
         ],
-        ["相关核半径", f"{acom['corr_kernel_size_Ainv']} Å⁻¹", "峰位置相关的空间尺度"],
-        ["ACOM 激发误差 σ", f"{acom['sigma_excitation_error_Ainv']} Å⁻¹", "模拟模板中的激发误差尺度"],
-        ["径向权重指数", str(acom["power_radial"]), "相关评分中的径向权重"],
+        ["相关核半径 / Correlation-kernel size", f"{acom['corr_kernel_size_Ainv']} Å⁻¹", "峰位置相关的空间尺度"],
+        ["ACOM 激发误差 σ / Excitation-error sigma", f"{acom['sigma_excitation_error_Ainv']} Å⁻¹", "模拟模板中的激发误差尺度"],
+        ["径向权重指数 / Radial power", str(acom["power_radial"]), "相关评分中的径向权重"],
         [
-            "强度权重指数",
+            "强度权重指数 / Intensity powers",
             f"sim={acom['power_intensity_simulated']}; exp={acom['power_intensity_experiment']}",
             "模拟峰与观测峰的强度加权",
         ],
-        ["ACOM 峰距离容差", f"{acom['tol_distance_Ainv']} Å⁻¹", "orientation_plan 内部峰相关容差"],
-        ["最少峰数", str(acom["min_number_peaks"]), "少于该数量不做可靠取向匹配"],
-        ["反演对称", str(acom["inversion_symmetry"]), "搜索时包含 Friedel / mirror 等价"],
-        ["返回候选数", str(acom["num_matches_return"]), "每个样本保留的 ACOM 取向候选"],
-        ["CUDA", str(acom["cuda"]), "本次运行是否使用 GPU"],
+        ["ACOM 峰距离容差 / Peak-distance tolerance", f"{acom['tol_distance_Ainv']} Å⁻¹", "orientation_plan 内部峰相关容差"],
+        ["最少峰数 / Minimum peaks", str(acom["min_number_peaks"]), "少于该数量不做可靠取向匹配"],
+        ["反演对称 / Inversion symmetry", str(acom["inversion_symmetry"]), "搜索时包含 Friedel / mirror 等价"],
+        ["返回候选数 / Returned matches", str(acom["num_matches_return"]), "每个样本保留的 ACOM 取向候选"],
+        ["CUDA / GPU acceleration", str(acom["cuda"]), "本次运行是否使用 GPU"],
         [
-            "评估峰匹配容差",
+            "评估峰匹配容差 / Evaluation match tolerance",
             f"{evaluation['coordinate_match_tolerance_Ainv']} Å⁻¹",
             "GT 与 ACOM 峰在探测器二维 q 空间的一对一匹配阈值",
         ],
     ]
     return {"benchmark": benchmark, "acom": acom_rows}
+
+
+def overview_results() -> dict:
+    runs = []
+    for angle_step, path in EVALUATION_PATHS.items():
+        evaluation = json.loads(path.read_text(encoding="utf-8"))
+        metrics = evaluation["metrics"]
+        runs.append(
+            {
+                "angle_step_deg": angle_step,
+                "num_samples": metrics["num_samples"],
+                "mean_deg": metrics["mean_misorientation_deg"],
+                "median_deg": metrics["median_misorientation_deg"],
+                "p90_deg": metrics["p90_misorientation_deg"],
+                "p95_deg": metrics["p95_misorientation_deg"],
+                "max_deg": metrics["max_misorientation_deg"],
+                "within_1deg": metrics["accuracy_within_1deg"],
+                "within_2deg": metrics["accuracy_within_2deg"],
+                "within_5deg": metrics["accuracy_within_5deg"],
+                "strict_friedel_disagreement_rate": evaluation[
+                    "strict_friedel_disagreement_rate"
+                ],
+            }
+        )
+    details = json.loads(DETAILS_PATH.read_text(encoding="utf-8"))
+    return {
+        "runs": runs,
+        "canonical_angle_step_deg": details["acom_angle_step_zone_axis_deg"],
+        "runtime": details["runtime"],
+        "model_limitation": details["matched_model_limitation"],
+    }
 
 
 def compact_trace(row: dict, label: str) -> dict:
@@ -287,6 +323,20 @@ body {
 }
 main { max-width: 1320px; margin: 0 auto; padding: 24px; }
 h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
+.overview { margin: 18px 0 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
+.overview-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
+.overview h2 { margin: 0; font-size: 19px; }
+.overview-subtitle { color: var(--muted-foreground); font-size: 13px; }
+.overview-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.overview-metric { padding: 10px 0; border-top: 2px solid var(--series-1); }
+.overview-metric span { display: block; color: var(--muted-foreground); font-size: 12px; }
+.overview-metric strong { display: block; margin-top: 3px; font-size: 21px; }
+.overview-text { margin: 8px 0 14px; line-height: 1.6; }
+.overview-charts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+.overview-charts h3 { margin: 0 0 5px; font-size: 15px; }
+.overview-chart { display: block; width: 100%; height: auto; }
+.overview-table { margin-top: 14px; }
+.overview-caveat { margin: 10px 0 0; color: var(--muted-foreground); font-size: 12px; }
 .controls, .tabs, .legend, .reflection-control {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
@@ -311,7 +361,11 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .process-grid h2 { margin: 0 0 7px; font-size: 17px; }
 .process-grid p { margin: 0; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; }
 .parameters { margin: 0 0 22px; }
-.parameters > h2 { margin: 0 0 9px; font-size: 17px; }
+.parameters > summary {
+  cursor: pointer; padding: 10px 0; border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border); font-weight: 600; font-size: 17px;
+}
+.parameters[open] > summary { margin-bottom: 10px; }
 .parameter-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
 .parameter-grid h3 { margin: 0 0 7px; font-size: 15px; }
 .parameter-grid table { font-size: 12px; }
@@ -356,7 +410,7 @@ th { color: var(--muted-foreground); font-weight: 600; background: var(--muted);
 tbody tr.is-selected { background: #eef4ff; }
 @media (max-width: 720px) {
   main { padding: 16px; }
-  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation, .process-grid, .parameter-grid { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -364,6 +418,7 @@ tbody tr.is-selected { background: #eef4ff; }
   body { color: #000000; background: #ffffff; }
   main { max-width: none; padding: 0; }
   button, select, pre, th { color: #000000; background: #ffffff; }
+  details.parameters > :not(summary) { display: block !important; }
   .process-grid, .parameters, .notation, .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
   .all-reflections { break-before: page; }
 }
@@ -372,8 +427,38 @@ tbody tr.is-selected { background: #eef4ff; }
 <body>
 <main>
   <h1>Clean v3 坐标与倒空间中间变量</h1>
+  <section class="overview">
+    <div class="overview-head">
+      <h2>Overview｜总体结果</h2>
+      <span class="overview-subtitle">Headline core · n=1024 · 主指标：Friedel-equivalent misorientation</span>
+    </div>
+    <div class="overview-metrics">
+      <div class="overview-metric"><span>标准角步长 / Canonical step</span><strong id="overview-step"></strong></div>
+      <div class="overview-metric"><span>中位取向误差 / Median error</span><strong id="overview-median"></strong></div>
+      <div class="overview-metric"><span>P95 取向误差 / P95 error</span><strong id="overview-p95"></strong></div>
+      <div class="overview-metric"><span>误差 ≤2° / Accuracy within 2°</span><strong id="overview-within2"></strong></div>
+    </div>
+    <p id="overview-text" class="overview-text"></p>
+    <div class="overview-charts">
+      <section>
+        <h3>角步长与取向误差 / Angular step vs. error</h3>
+        <svg id="error-chart" class="overview-chart" viewBox="0 0 600 270" role="img" aria-label="4度、3度、2度角步长的中位和P95取向误差对比"></svg>
+      </section>
+      <section>
+        <h3>阈值准确率 / Accuracy within thresholds</h3>
+        <svg id="accuracy-chart" class="overview-chart" viewBox="0 0 600 270" role="img" aria-label="4度、3度、2度角步长在1度、2度、5度阈值内的准确率"></svg>
+      </section>
+    </div>
+    <div class="table-wrap overview-table">
+      <table>
+        <thead><tr><th>角步长 / Step</th><th>Mean</th><th>Median</th><th>P90</th><th>P95</th><th>≤1°</th><th>≤2°</th><th>≤5°</th><th>Max</th></tr></thead>
+        <tbody id="overview-rows"></tbody>
+      </table>
+    </div>
+    <p id="overview-caveat" class="overview-caveat"></p>
+  </section>
   <div class="controls">
-    <strong>代表样本</strong>
+    <strong>代表样本 / Representative samples</strong>
     <div id="tabs" class="tabs"></div>
   </div>
   <div class="metrics">
@@ -391,23 +476,23 @@ tbody tr.is-selected { background: #eef4ff; }
       <p>读取公开观测峰 <code>{qₓ, qᵧ, I}</code> → ACOM 搜索取向 → 输出 R<sup>ACOM</sup> → 用该取向模拟预测峰 → 在探测器二维 q 空间与 GT 观测峰使用同一种一对一匹配方法计算指标。</p>
     </article>
   </section>
-  <section class="parameters">
-    <h2>本次运行参数（从 config/benchmark.yaml 与实际 ACOM plan 读取）</h2>
+  <details class="parameters">
+    <summary>运行参数 / Runtime parameters（点击展开 / Click to expand）</summary>
     <div class="parameter-grid">
       <article>
-        <h3>过程 A｜Benchmark 生成参数</h3>
+        <h3>过程 A｜Benchmark 生成参数 / Generation parameters</h3>
         <div class="table-wrap">
-          <table><thead><tr><th>参数</th><th>本次取值</th><th>作用</th></tr></thead><tbody id="benchmark-parameters"></tbody></table>
+          <table><thead><tr><th>参数 / Parameter</th><th>本次取值 / Value</th><th>作用 / Purpose</th></tr></thead><tbody id="benchmark-parameters"></tbody></table>
         </div>
       </article>
       <article>
-        <h3>过程 B｜ACOM 预测与评估参数</h3>
+        <h3>过程 B｜ACOM 预测与评估参数 / Prediction and evaluation</h3>
         <div class="table-wrap">
-          <table><thead><tr><th>参数</th><th>本次取值</th><th>作用</th></tr></thead><tbody id="acom-parameters"></tbody></table>
+          <table><thead><tr><th>参数 / Parameter</th><th>本次取值 / Value</th><th>作用 / Purpose</th></tr></thead><tbody id="acom-parameters"></tbody></table>
         </div>
       </article>
     </div>
-  </section>
+  </details>
   <section class="notation">
     <h2>变量定义与坐标约定</h2>
     <div class="table-wrap">
@@ -489,6 +574,7 @@ tbody tr.is-selected { background: #eef4ff; }
 const reportData = __DATA__;
 const samples = reportData.samples;
 const runtimeParameters = reportData.runtime_parameters;
+const overviewResults = reportData.overview_results;
 const kMaxAinv = Number(reportData.k_max_Ainv);
 const tabs = document.getElementById("tabs");
 const viewTabs = document.getElementById("view-tabs");
@@ -511,6 +597,98 @@ const qPixelsPerAinv = 165 / kMaxAinv;
 const qX = value => 280 + value * qPixelsPerAinv;
 const qY = value => 200 - value * qPixelsPerAinv;
 const axisScale = value => value * 125;
+
+function renderOverview() {
+  const runs = overviewResults.runs;
+  const canonical = runs.find(run => run.angle_step_deg === overviewResults.canonical_angle_step_deg);
+  const coarse = runs.find(run => run.angle_step_deg === 4);
+  const medianReduction = 100 * (coarse.median_deg - canonical.median_deg) / coarse.median_deg;
+  const p95Reduction = 100 * (coarse.p95_deg - canonical.p95_deg) / coarse.p95_deg;
+  const within2Gain = 100 * (canonical.within_2deg - coarse.within_2deg);
+  const above5 = 100 * (1 - canonical.within_5deg);
+  document.getElementById("overview-step").textContent = `${canonical.angle_step_deg.toFixed(0)}°`;
+  document.getElementById("overview-median").textContent = `${canonical.median_deg.toFixed(3)}°`;
+  document.getElementById("overview-p95").textContent = `${canonical.p95_deg.toFixed(3)}°`;
+  document.getElementById("overview-within2").textContent = `${(canonical.within_2deg * 100).toFixed(1)}%`;
+  document.getElementById("overview-text").innerHTML =
+    `<strong>总体结论 / Overall:</strong> 2° 是本次 4°、3°、2° 三组同方法测试中最优的网格。` +
+    `相对 4°，中位误差下降 ${medianReduction.toFixed(1)}%，P95 下降 ${p95Reduction.toFixed(1)}%，` +
+    `≤2° 准确率提高 ${within2Gain.toFixed(1)} 个百分点。` +
+    ` <span class="overview-subtitle">The 2° grid performs best across the tested angular steps.</span>`;
+  document.getElementById("overview-caveat").textContent =
+    `尾部仍有失败样本：2° 运行中 ${above5.toFixed(1)}% 的 headline 样本误差大于 5°，最大误差 ${canonical.max_deg.toFixed(2)}°；` +
+    `strict/Friedel 判定不一致率 ${(canonical.strict_friedel_disagreement_rate * 100).toFixed(1)}%。` +
+    `模型边界 / Limitation: clean inputs and ACOM templates use the same CIF and py4DSTEM kinematical model; this measures self-consistency, not real-data generalization.`;
+  document.getElementById("overview-rows").innerHTML = runs.map(run =>
+    `<tr><td>${run.angle_step_deg.toFixed(0)}°</td>` +
+    `<td>${run.mean_deg.toFixed(3)}°</td><td>${run.median_deg.toFixed(3)}°</td>` +
+    `<td>${run.p90_deg.toFixed(3)}°</td><td>${run.p95_deg.toFixed(3)}°</td>` +
+    `<td>${(run.within_1deg * 100).toFixed(1)}%</td>` +
+    `<td>${(run.within_2deg * 100).toFixed(1)}%</td>` +
+    `<td>${(run.within_5deg * 100).toFixed(1)}%</td>` +
+    `<td>${run.max_deg.toFixed(2)}°</td></tr>`
+  ).join("");
+
+  const chartWidth = 600;
+  const chartHeight = 270;
+  const left = 48;
+  const right = 18;
+  const top = 24;
+  const bottom = 42;
+  const plotWidth = chartWidth - left - right;
+  const plotHeight = chartHeight - top - bottom;
+  const centers = runs.map((_, index) => left + plotWidth * (index + 0.5) / runs.length);
+
+  const errorMax = 6;
+  const errorY = value => top + plotHeight * (1 - value / errorMax);
+  let errorMarkup = "";
+  [0, 2, 4, 6].forEach(tick => {
+    const y = errorY(tick);
+    errorMarkup += `<line x1="${left}" y1="${y}" x2="${chartWidth-right}" y2="${y}" stroke="var(--border)"/>` +
+      `<text x="${left-8}" y="${y}" dy="0.35em" text-anchor="end" fill="var(--muted-foreground)" font-size="12">${tick}°</text>`;
+  });
+  runs.forEach((run, index) => {
+    const values = [
+      {value: run.median_deg, offset: -22, color: "var(--series-1)"},
+      {value: run.p95_deg, offset: 22, color: "var(--series-2)"},
+    ];
+    values.forEach(item => {
+      const y = errorY(item.value);
+      errorMarkup += `<rect x="${centers[index]+item.offset-16}" y="${y}" width="32" height="${top+plotHeight-y}" fill="${item.color}"/>` +
+        `<text x="${centers[index]+item.offset}" y="${y-5}" text-anchor="middle" fill="var(--foreground)" font-size="11">${item.value.toFixed(2)}°</text>`;
+    });
+    errorMarkup += `<text x="${centers[index]}" y="${chartHeight-14}" text-anchor="middle" fill="var(--foreground)">${run.angle_step_deg.toFixed(0)}° step</text>`;
+  });
+  errorMarkup += `<rect x="405" y="8" width="10" height="10" fill="var(--series-1)"/><text x="421" y="17" fill="var(--foreground)" font-size="12">Median</text>` +
+    `<rect x="488" y="8" width="10" height="10" fill="var(--series-2)"/><text x="504" y="17" fill="var(--foreground)" font-size="12">P95</text>`;
+  document.getElementById("error-chart").innerHTML = errorMarkup;
+
+  const accuracyY = value => top + plotHeight * (1 - value);
+  let accuracyMarkup = "";
+  [0, 0.25, 0.5, 0.75, 1].forEach(tick => {
+    const y = accuracyY(tick);
+    accuracyMarkup += `<line x1="${left}" y1="${y}" x2="${chartWidth-right}" y2="${y}" stroke="var(--border)"/>` +
+      `<text x="${left-8}" y="${y}" dy="0.35em" text-anchor="end" fill="var(--muted-foreground)" font-size="12">${(tick*100).toFixed(0)}%</text>`;
+  });
+  const accuracySeries = [
+    {key: "within_1deg", label: "≤1°", offset: -32, color: "var(--series-1)"},
+    {key: "within_2deg", label: "≤2°", offset: 0, color: "var(--series-2)"},
+    {key: "within_5deg", label: "≤5°", offset: 32, color: "var(--series-3)"},
+  ];
+  runs.forEach((run, index) => {
+    accuracySeries.forEach(series => {
+      const value = run[series.key];
+      const y = accuracyY(value);
+      accuracyMarkup += `<rect x="${centers[index]+series.offset-11}" y="${y}" width="22" height="${top+plotHeight-y}" fill="${series.color}"/>`;
+    });
+    accuracyMarkup += `<text x="${centers[index]}" y="${chartHeight-14}" text-anchor="middle" fill="var(--foreground)">${run.angle_step_deg.toFixed(0)}° step</text>`;
+  });
+  accuracySeries.forEach((series, index) => {
+    const x = 348 + index * 78;
+    accuracyMarkup += `<rect x="${x}" y="8" width="10" height="10" fill="${series.color}"/><text x="${x+16}" y="17" fill="var(--foreground)" font-size="12">${series.label}</text>`;
+  });
+  document.getElementById("accuracy-chart").innerHTML = accuracyMarkup;
+}
 
 function renderParameters() {
   [
@@ -711,6 +889,7 @@ reflection.addEventListener("change", event => {
   render();
 });
 renderParameters();
+renderOverview();
 render();
 </script>
 </body>
@@ -725,6 +904,7 @@ def main() -> None:
         {
             "samples": samples,
             "runtime_parameters": runtime_parameters(),
+            "overview_results": overview_results(),
             "k_max_Ainv": config["common"]["k_max_Ainv"],
         },
         ensure_ascii=False,
