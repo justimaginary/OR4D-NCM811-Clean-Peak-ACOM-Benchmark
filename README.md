@@ -1,13 +1,9 @@
 # OR4D NCM811 Clean-Peak ACOM Benchmark
 
-> **Full benchmark report**
+> **Note**
 >
-> Start with the comprehensive 44-page
-> [OR4D NCM811 Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
-> It covers the benchmark design, coordinate conventions, simulation and ACOM
-> parameters, evaluation protocol, complete results, failure analysis,
-> per-reflection HKL/reciprocal-space tracing, reproducibility information, and
-> the full run procedure.
+> Currently, only the Clean-Peak track has been evaluated. For more details,
+> see [OR4D NCM811 Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
 
 > **Status**
 >
@@ -79,6 +75,17 @@ conda run -n or4d-clean \
   python -m unittest discover -s tests -p 'test_*.py'
 ```
 
+Print one complete coordinate trace:
+
+```bash
+conda run -n or4d-clean \
+  python scripts/10_trace_clean_coordinates.py \
+  --sample-id clean_core_0000 --stdout
+```
+
+Use `--all --stdout` to print every sample. The compressed full trace is stored
+in `diagnostics/clean_coordinate_trace.jsonl.gz`.
+
 ## Interactive HTML
 
 Open
@@ -132,45 +139,6 @@ Machine-readable results and the generated Markdown report are under
 - `acom_clean_details*.json`: per-sample ACOM diagnostics;
 - `acom_plan_audit*.json`: orientation-plan metadata.
 
-## Coordinate convention
-
-The orientation matrix maps sample-frame vectors into crystal coordinates:
-
-```text
-v_crystal = R_sample_to_crystal @ v_sample
-```
-
-Let the rows of the crystallographic reciprocal matrix `B` be `a*`, `b*`, and
-`c*` in Å⁻¹, without the `2π` factor:
-
-```text
-    [ a*x  a*y  a*z ]
-B = [ b*x  b*y  b*z ]
-    [ c*x  c*y  c*z ]
-```
-
-For the Miller-index column vector `h = [h, k, l]ᵀ`:
-
-```text
-g_crystal = B.T @ h
-g_sample  = R_sample_to_crystal.T @ g_crystal
-g_sample  = [qx, qy, qz]ᵀ
-```
-
-Only `(qx, qy)` is public; `qz` is parallel to the beam. NumPy's one-dimensional
-row-vector expression `hkl @ B` is the transpose-equivalent form of
-`B.T @ h`.
-
-Print one complete coordinate trace:
-
-```bash
-conda run -n or4d-clean \
-  python scripts/10_trace_clean_coordinates.py \
-  --sample-id clean_core_0000 --stdout
-```
-
-Use `--all --stdout` to print every sample. The compressed full trace is stored
-in `diagnostics/clean_coordinate_trace.jsonl.gz`.
 
 ## Repository layout
 
