@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import gzip
+import io
 import json
 import sys
 from collections import defaultdict
@@ -379,7 +380,14 @@ def representative_ids(rows: list[dict]) -> list[str]:
 def open_text_output(path: Path) -> TextIO:
     path.parent.mkdir(parents=True, exist_ok=True)
     if path.suffix == ".gz":
-        return gzip.open(path, "wt", encoding="utf-8")
+        raw = path.open("wb")
+        compressed = gzip.GzipFile(
+            filename="",
+            mode="wb",
+            fileobj=raw,
+            mtime=0,
+        )
+        return io.TextIOWrapper(compressed, encoding="utf-8")
     return path.open("w", encoding="utf-8")
 
 
