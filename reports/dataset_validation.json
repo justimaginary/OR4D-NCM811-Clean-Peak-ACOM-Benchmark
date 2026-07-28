@@ -1,10 +1,32 @@
 [
   {
     "track": "clean",
-    "num_samples": 17,
-    "peak_count_min": 23,
+    "num_samples": 569,
+    "peak_count_min": 17,
     "peak_count_max": 106,
-    "peak_count_mean": 46.705882352941174,
+    "peak_count_mean": 31.101933216168717,
+    "sample_counts_by_role": {
+      "legacy_smoke": 17,
+      "headline_core": 512,
+      "acom_grid_probe": 40
+    },
+    "peak_counts_by_role": {
+      "legacy_smoke": {
+        "min": 23,
+        "max": 106,
+        "mean": 46.705882352941174
+      },
+      "headline_core": {
+        "min": 17,
+        "max": 51,
+        "mean": 28.451171875
+      },
+      "acom_grid_probe": {
+        "min": 23,
+        "max": 106,
+        "mean": 58.4
+      }
+    },
     "baseline_input_dtype": [
       "qx",
       "qy",
