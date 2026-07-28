@@ -10,7 +10,7 @@ Clean v3 将样本分为三个互不混算的角色：
 Plan 的 canonical 步长为 2°，并扫描 4°、3°、2°。报告区分最近离散 seed
 距离与最近区轴节点距离；离散 seed 距离不是误差下界，因为 ACOM 会做面内亚网格拟合。
 
-详细设计见 `docs/CLEAN_BENCHMARK_V2.md`。
+详细设计见 `docs/CLEAN_BENCHMARK_V3.md`。
 
 ## 运行
 
