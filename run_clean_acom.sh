@@ -18,3 +18,4 @@ fi
 "$clean_python" scripts/08_visualize_acom_results.py
 "$clean_python" scripts/09_write_acom_report.py
 "$clean_python" scripts/10_trace_clean_coordinates.py --all
+"$clean_python" scripts/12_write_coordinate_visualization.py

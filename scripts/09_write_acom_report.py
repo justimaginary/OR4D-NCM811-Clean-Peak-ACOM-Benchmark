@@ -303,6 +303,9 @@ def main() -> None:
             "逐坐标、逐反射、HKL 和 ACOM 峰差异见 "
             "[ACOM coordinate analysis](ACOM_COORDINATE_ANALYSIS.md)。",
             "",
+            "可离线打开的交互图见 "
+            "[ACOM coordinate visualization](ACOM_COORDINATE_VISUALIZATION.html)。",
+            "",
         ]
     )
 
