@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 from pymatgen.core import Structure
-from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -17,41 +16,74 @@ from or4d_common import (  # noqa: E402
     cif_path,
     friedel_aware_misorientation_deg,
     load_config,
-    nearest_rotation,
+    proper_point_group_rotations,
     read_jsonl,
     symmetry_aware_misorientation_deg,
 )
 
 
-def proper_point_group_rotations() -> list[np.ndarray]:
-    config = load_config()
-    structure = Structure.from_file(cif_path(config))
-    operations = SpacegroupAnalyzer(structure).get_point_group_operations(
-        cartesian=True
-    )
-    rotations: list[np.ndarray] = []
-    for operation in operations:
-        raw = np.asarray(operation.rotation_matrix, dtype=float)
-        if np.linalg.det(raw) < 0.0:
-            continue
-        matrix = nearest_rotation(raw)
-        if not any(np.allclose(matrix, existing, atol=1e-8) for existing in rotations):
-            rotations.append(matrix)
-    if not rotations:
-        raise RuntimeError("No proper crystal point-group rotations were found.")
-    return rotations
-
-
 def summarize(values: np.ndarray, track: str) -> dict:
+    if values.size == 0:
+        raise ValueError(f"Cannot summarize an empty {track} result set")
     return {
         "track": track,
         "num_samples": int(values.size),
         "mean_misorientation_deg": float(values.mean()),
         "median_misorientation_deg": float(np.median(values)),
         "p90_misorientation_deg": float(np.percentile(values, 90)),
+        "p95_misorientation_deg": float(np.percentile(values, 95)),
+        "max_misorientation_deg": float(values.max()),
         "accuracy_within_1deg": float(np.mean(values <= 1.0)),
         "accuracy_within_2deg": float(np.mean(values <= 2.0)),
         "accuracy_within_5deg": float(np.mean(values <= 5.0)),
+    }
+
+
+def unique_records_by_id(records: list[dict], *, source: str) -> dict[str, dict]:
+    result: dict[str, dict] = {}
+    for record in records:
+        sample_id = str(record["sample_id"])
+        if sample_id in result:
+            raise ValueError(f"Duplicate sample_id in {source}: {sample_id}")
+        result[sample_id] = record
+    return result
+
+
+def validate_prediction_matrix(sample_id: str, value: object) -> np.ndarray:
+    matrix = np.asarray(value, dtype=float)
+    if matrix.shape != (3, 3):
+        raise ValueError(
+            f"{sample_id} orientation matrix has shape {matrix.shape}, expected (3, 3)"
+        )
+    if not np.all(np.isfinite(matrix)):
+        raise ValueError(f"{sample_id} orientation matrix contains non-finite values")
+    if not np.allclose(matrix.T @ matrix, np.eye(3), atol=1e-5):
+        raise ValueError(f"{sample_id} orientation matrix is not orthonormal")
+    if not np.isclose(np.linalg.det(matrix), 1.0, atol=1e-5):
+        raise ValueError(f"{sample_id} orientation matrix determinant is not +1")
+    return matrix
+
+
+def summarize_by_role(
+    rows: list[dict],
+    *,
+    error_field: str,
+    track: str,
+) -> dict[str, dict]:
+    roles = sorted({str(row.get("sample_role", "unspecified")) for row in rows})
+    return {
+        role: summarize(
+            np.asarray(
+                [
+                    row[error_field]
+                    for row in rows
+                    if str(row.get("sample_role", "unspecified")) == role
+                ],
+                dtype=float,
+            ),
+            track,
+        )
+        for role in roles
     }
 
 
@@ -71,27 +103,39 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    predictions = {x["sample_id"]: x for x in read_jsonl(args.submission)}
+    config = load_config()
+    predictions = unique_records_by_id(
+        read_jsonl(args.submission),
+        source=str(args.submission),
+    )
     tracks = ("clean", "dynamical") if args.track == "all" else (args.track,)
-    ground_truth = {}
+    ground_truth_records: list[dict] = []
     for track in tracks:
         path = ROOT / "private" / f"{track}_ground_truth.jsonl"
         if not path.exists():
             raise FileNotFoundError(f"Missing ground truth for requested track: {path}")
-        ground_truth.update({x["sample_id"]: x for x in read_jsonl(path)})
+        ground_truth_records.extend(read_jsonl(path))
+    ground_truth = unique_records_by_id(
+        ground_truth_records,
+        source="requested ground-truth tracks",
+    )
+    if set(predictions) != set(ground_truth):
+        missing = sorted(set(ground_truth) - set(predictions))
+        extra = sorted(set(predictions) - set(ground_truth))
+        raise ValueError(
+            f"Submission IDs do not exactly match the requested ground truth: "
+            f"missing={missing}, extra={extra}"
+        )
 
-    symmetries = proper_point_group_rotations()
+    structure = Structure.from_file(cif_path(config))
+    symmetries = proper_point_group_rotations(structure)
     strict_errors = []
     primary_errors = []
     per_sample = []
     for sample_id, gt in ground_truth.items():
-        if sample_id not in predictions:
-            raise ValueError(f"Submission is missing {sample_id}")
-        R_pred = nearest_rotation(
-            np.asarray(
-                predictions[sample_id]["orientation_matrix_sample_to_crystal"],
-                dtype=float,
-            )
+        R_pred = validate_prediction_matrix(
+            sample_id,
+            predictions[sample_id]["orientation_matrix_sample_to_crystal"],
         )
         R_gt = np.asarray(gt["orientation_matrix_sample_to_crystal"], dtype=float)
         strict_error = symmetry_aware_misorientation_deg(
@@ -112,6 +156,7 @@ def main() -> None:
                 "sample_id": sample_id,
                 "track": gt.get("track"),
                 "sampling_type": gt.get("sampling_type"),
+                "sample_role": gt.get("sample_role"),
                 "strict_misorientation_deg": strict_error,
                 primary_name: primary_error,
                 "misorientation_deg": primary_error,
@@ -120,19 +165,56 @@ def main() -> None:
 
     strict_values = np.asarray(strict_errors, dtype=float)
     primary_values = np.asarray(primary_errors, dtype=float)
+    headline_role = str(config["evaluation"]["headline_sample_role"])
+    if args.track == "clean":
+        headline_rows = [
+            row for row in per_sample if row.get("sample_role") == headline_role
+        ]
+    else:
+        headline_rows = per_sample
+    headline_primary = np.asarray(
+        [row["misorientation_deg"] for row in headline_rows],
+        dtype=float,
+    )
+    headline_strict = np.asarray(
+        [row["strict_misorientation_deg"] for row in headline_rows],
+        dtype=float,
+    )
+    disagreement_tolerance = float(
+        config["evaluation"]["strict_friedel_disagreement_tolerance_deg"]
+    )
     output = {
         "primary_metric": (
             "friedel_equivalent_misorientation_deg"
             if args.track == "clean"
             else "track_dependent_misorientation_deg"
         ),
-        "metrics": summarize(primary_values, args.track),
-        "metrics_strict": summarize(strict_values, args.track),
+        "headline_sample_role": headline_role if args.track == "clean" else None,
+        "metrics": summarize(headline_primary, args.track),
+        "metrics_strict": summarize(headline_strict, args.track),
+        "metrics_all_samples": summarize(primary_values, args.track),
+        "metrics_strict_all_samples": summarize(strict_values, args.track),
+        "metrics_by_sample_role": summarize_by_role(
+            per_sample,
+            error_field="misorientation_deg",
+            track=args.track,
+        ),
+        "metrics_strict_by_sample_role": summarize_by_role(
+            per_sample,
+            error_field="strict_misorientation_deg",
+            track=args.track,
+        ),
         "samples": per_sample,
     }
     if args.track == "clean":
         output["metrics_friedel_equivalent"] = summarize(
-            primary_values, args.track
+            headline_primary, args.track
+        )
+        output["strict_friedel_disagreement_rate"] = float(
+            np.mean(
+                np.abs(headline_strict - headline_primary)
+                > disagreement_tolerance
+            )
         )
 
     args.output.parent.mkdir(parents=True, exist_ok=True)

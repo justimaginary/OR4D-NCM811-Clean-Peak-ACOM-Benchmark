@@ -78,7 +78,8 @@ def main() -> None:
         qy = qy[keep]
         intensity = normalize_intensities(intensity[keep])
 
-        order = np.argsort(np.hypot(qx, qy))
+        radius = np.hypot(qx, qy)
+        order = np.lexsort((qy, qx, radius))
         qx, qy, intensity = qx[order], qy[order], intensity[order]
         public_samples.append(
             {"sample_id": sample_id, "qx": qx, "qy": qy, "intensity": intensity}
