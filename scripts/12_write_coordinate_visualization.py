@@ -38,7 +38,7 @@ def compact_trace(row: dict, label: str) -> dict:
         enumerate(row["standard_observed_reflections"]),
         key=lambda item: item[1]["reported_intensity_normalized"],
         reverse=True,
-    )[:12]
+    )
     predicted_ranked = sorted(
         enumerate(row["acom_simulated_reflections"]),
         key=lambda item: item[1]["reported_by_py4DSTEM_intensity_normalized"],
@@ -103,6 +103,7 @@ def compact_trace(row: dict, label: str) -> dict:
                 "standard_orientation_matrix_sample_to_crystal"
             ],
             "acom_matrix": row["acom_orientation_matrix_sample_to_crystal"],
+            "reciprocal_matrix": row["reciprocal_lattice_matrix_B_Ainv"],
             "observed": observed,
             "predicted": predicted,
             "matches": matches,
@@ -134,38 +135,25 @@ HTML_TEMPLATE = """<!doctype html>
 <title>Clean v3 coordinate trace visualization</title>
 <style>
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --background: #ffffff;
   --foreground: #172033;
-  --muted: #eef1f6;
+  --muted: #f5f7fa;
   --muted-foreground: #627087;
   --border: #c9d0dc;
   --series-1: #2774d8;
   --series-2: #d45c37;
   --series-3: #7b52ab;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #111722;
-    --foreground: #edf2fa;
-    --muted: #202938;
-    --muted-foreground: #aab5c6;
-    --border: #3b4658;
-    --series-1: #62a8ff;
-    --series-2: #ff8a65;
-    --series-3: #c398ff;
-  }
-}
 * { box-sizing: border-box; }
 body {
   margin: 0;
-  background: var(--background);
+  background: #ffffff;
   color: var(--foreground);
   font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
-main { max-width: 1280px; margin: 0 auto; padding: 24px; }
+main { max-width: 1320px; margin: 0 auto; padding: 24px; }
 h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
-.subtitle { margin: 0 0 20px; color: var(--muted-foreground); }
 .controls, .tabs, .legend, .reflection-control {
   display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
 }
@@ -188,25 +176,49 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .line { width: 20px; border-top: 2px solid var(--series-1); }
 .line.acom { border-top-color: var(--series-2); border-top-style: dashed; }
 svg { display: block; width: 100%; height: auto; color: var(--foreground); }
-.reflection-control { margin-top: 14px; }
-.flow {
-  margin-top: 10px; padding: 12px 0; overflow-wrap: anywhere;
-  border-top: 1px solid var(--border); color: var(--foreground);
+.plot-note { min-height: 20px; margin-top: -4px; color: var(--muted-foreground); font-size: 13px; text-align: center; }
+.reflection-control { margin-top: 18px; }
+.transform { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+.transform h2, .all-reflections h2 { margin: 0 0 10px; font-size: 17px; }
+.equation-grid {
+  display: grid;
+  grid-template-columns: minmax(130px, .7fr) auto minmax(300px, 1.4fr) auto minmax(220px, 1fr);
+  gap: 10px;
+  align-items: stretch;
 }
-.flow .arrow, .flow .dim { color: var(--muted-foreground); }
-.matrix-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 18px; }
-.matrix-wrap h2 { font-size: 15px; margin: 0 0 6px; }
-pre { margin: 0; padding: 11px; border: 1px solid var(--border); border-radius: 8px; background: var(--muted); overflow-x: auto; }
+.equation-grid article, .matrix-wrap section { min-width: 0; }
+.equation-grid h3, .matrix-wrap h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted-foreground); font-weight: 600; }
+.operator { align-self: center; color: var(--muted-foreground); font-size: 22px; }
+.matrix-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
+.matrix-equation { display: grid; grid-template-columns: minmax(260px, 1fr) auto minmax(220px, .8fr); gap: 10px; align-items: center; }
+pre {
+  margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 7px;
+  background: var(--muted); overflow-x: auto; font-size: 13px; line-height: 1.45;
+}
+.all-reflections { margin-top: 22px; }
+.table-wrap { overflow-x: auto; border-top: 1px solid var(--border); }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 13px; }
+th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
+th { color: var(--muted-foreground); font-weight: 600; background: var(--muted); }
+tbody tr.is-selected { background: #eef4ff; }
 @media (max-width: 720px) {
   main { padding: 16px; }
-  .plots, .matrix-wrap, .metrics { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .equation-grid, .matrix-equation { grid-template-columns: 1fr; }
+  .operator { display: none; }
+}
+@media print {
+  @page { size: landscape; margin: 10mm; }
+  body { color: #000000; background: #ffffff; }
+  main { max-width: none; padding: 0; }
+  button, select, pre, th { color: #000000; background: #ffffff; }
+  .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
+  .all-reflections { break-before: page; }
 }
 </style>
 </head>
 <body>
 <main>
   <h1>Clean v3 坐标与倒空间中间变量</h1>
-  <p class="subtitle">直接打开本文件即可使用；数据内嵌，不依赖网络或 Codex。</p>
   <div class="controls">
     <strong>代表样本</strong>
     <div id="tabs" class="tabs"></div>
@@ -222,25 +234,51 @@ pre { margin: 0; padding: 11px; border: 1px solid var(--border); border-radius: 
         <span>探测器倒空间</span>
         <span class="legend"><i class="dot"></i>标准 <i class="cross">×</i>ACOM</span>
       </div>
-      <svg id="detector" viewBox="0 0 560 440" role="img" aria-label="标准与 ACOM 衍射峰"></svg>
+      <svg id="detector" viewBox="0 0 560 400" role="img" aria-label="标准与 ACOM 衍射峰"></svg>
+      <div id="detector-note" class="plot-note"></div>
     </section>
     <section>
       <div class="plot-head">
         <span>样品坐标轴在晶体 XY 平面的投影</span>
         <span class="legend"><i class="line"></i>标准 <i class="line acom"></i>ACOM</span>
       </div>
-      <svg id="axes" viewBox="0 0 560 440" role="img" aria-label="标准与 ACOM 样品坐标轴"></svg>
+      <svg id="axes" viewBox="0 0 560 400" role="img" aria-label="标准与 ACOM 样品坐标轴"></svg>
+      <div class="plot-note">紫色为所选 g<sub>crystal</sub> 方向；实线为标准，虚线为 ACOM</div>
     </section>
   </div>
   <div class="reflection-control">
     <label for="reflection"><strong>高亮标准反射</strong></label>
     <select id="reflection"></select>
   </div>
-  <div id="flow" class="flow"></div>
+  <section class="transform">
+    <h2>所选反射：HKL → g<sub>crystal</sub> → q</h2>
+    <div class="equation-grid">
+      <article><h3>① HKL（行向量）</h3><pre id="hkl-vector"></pre></article>
+      <div class="operator">×</div>
+      <article><h3>② 倒易基矩阵 B（Å⁻¹）</h3><pre id="reciprocal-matrix"></pre></article>
+      <div class="operator">=</div>
+      <article><h3>③ g<sub>crystal</sub>（Å⁻¹）</h3><pre id="g-vector"></pre></article>
+    </div>
+  </section>
   <div class="matrix-wrap">
-    <section><h2>标准 R_sample_to_crystal</h2><pre id="standard-matrix"></pre></section>
-    <section><h2>ACOM R_sample_to_crystal</h2><pre id="acom-matrix"></pre></section>
+    <section>
+      <h3>④ 标准：g<sub>crystal</sub> × R<sub>standard</sub> = q<sub>standard</sub></h3>
+      <div class="matrix-equation"><pre id="standard-matrix"></pre><div class="operator">→</div><pre id="standard-q"></pre></div>
+    </section>
+    <section>
+      <h3>④ ACOM：g<sub>crystal</sub> × R<sub>ACOM</sub> = q<sub>ACOM, same HKL</sub></h3>
+      <div class="matrix-equation"><pre id="acom-matrix"></pre><div class="operator">→</div><pre id="acom-q"></pre></div>
+    </section>
   </div>
+  <section class="all-reflections">
+    <h2 id="all-reflections-title"></h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>#</th><th>HKL</th><th>强度</th><th>g<sub>crystal</sub> (Å⁻¹)</th><th>q<sub>standard</sub> (Å⁻¹)</th><th>q<sub>ACOM, same HKL</sub> (Å⁻¹)</th><th>Δq (Å⁻¹)</th></tr></thead>
+        <tbody id="reflection-rows"></tbody>
+      </table>
+    </div>
+  </section>
 </main>
 <script>
 const samples = __DATA__;
@@ -258,8 +296,10 @@ const esc = value => String(value).replace(/[&<>"']/g, character => {
   return "&quot;";
 });
 const vector = values => `[${values.map(value => Number(value).toFixed(4)).join(", ")}]`;
-const qScale = value => 280 + value * 125;
-const axisScale = value => value * 135;
+const matrix = values => values.map(vector).join("\\n");
+const qX = value => 280 + value * 110;
+const qY = value => 200 - value * 110;
+const axisScale = value => value * 125;
 
 function renderTabs() {
   tabs.innerHTML = "";
@@ -278,66 +318,106 @@ function renderTabs() {
 }
 
 function renderDetector(sample) {
+  const plottedObserved = sample.observed.slice(0, 12).map((peak, index) => ({peak, index}));
+  if (reflectionIndex >= 12) {
+    plottedObserved.push({peak: sample.observed[reflectionIndex], index: reflectionIndex});
+  }
   let markup = `
-    <line x1="80" y1="220" x2="500" y2="220" stroke="var(--border)"/>
-    <line x1="280" y1="20" x2="280" y2="420" stroke="var(--border)"/>
-    <circle cx="280" cy="220" r="187.5" fill="none" stroke="var(--border)"/>
-    <text x="495" y="242" text-anchor="end" fill="var(--muted-foreground)">qₓ (Å⁻¹)</text>
-    <text x="290" y="34" fill="var(--muted-foreground)">qᵧ (Å⁻¹)</text>`;
-  sample.matches.forEach(match => {
+    <line x1="82" y1="200" x2="500" y2="200" stroke="var(--border)"/>
+    <line x1="280" y1="22" x2="280" y2="378" stroke="var(--border)"/>
+    <circle cx="280" cy="200" r="165" fill="none" stroke="var(--border)"/>
+    <text x="495" y="222" text-anchor="end" fill="var(--muted-foreground)">qₓ (Å⁻¹)</text>
+    <text x="290" y="36" fill="var(--muted-foreground)">qᵧ (Å⁻¹)</text>`;
+  sample.matches.filter(match => match.observed < 12).forEach(match => {
     const observed = sample.observed[match.observed];
     const predicted = sample.predicted[match.predicted];
-    markup += `<line x1="${qScale(observed.q[0])}" y1="${qScale(-observed.q[1])}" x2="${qScale(predicted.q[0])}" y2="${qScale(-predicted.q[1])}" stroke="var(--border)"/>`;
+    markup += `<line x1="${qX(observed.q[0])}" y1="${qY(observed.q[1])}" x2="${qX(predicted.q[0])}" y2="${qY(predicted.q[1])}" stroke="var(--border)"/>`;
   });
-  sample.observed.forEach((peak, index) => {
+  plottedObserved.forEach(({peak, index}) => {
     const radius = 4 + 7 * Math.sqrt(peak.intensity);
     const selected = index === reflectionIndex;
-    markup += `<circle cx="${qScale(peak.q[0])}" cy="${qScale(-peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${selected ? "var(--series-3)" : "var(--series-1)"}" stroke-width="${selected ? 3 : 1.8}"><title>标准 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
+    markup += `<circle cx="${qX(peak.q[0])}" cy="${qY(peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${selected ? "var(--series-3)" : "var(--series-1)"}" stroke-width="${selected ? 3 : 1.8}"><title>标准 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
   });
   sample.predicted.forEach(peak => {
-    const x = qScale(peak.q[0]);
-    const y = qScale(-peak.q[1]);
+    const x = qX(peak.q[0]);
+    const y = qY(peak.q[1]);
     const size = 4 + 6 * Math.sqrt(peak.intensity);
     markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
   });
-  markup += `<text x="88" y="410" fill="var(--muted-foreground)">按强度显示前 12 个峰 · 高亮 HKL [${esc(sample.observed[reflectionIndex].hkl.join(", "))}]</text>`;
   detector.innerHTML = markup;
+  document.getElementById("detector-note").textContent =
+    `图中显示强度前 12 个峰；当前选择 HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
 }
 
 function renderAxes(sample) {
   const centerX = 280;
-  const centerY = 210;
+  const centerY = 200;
   const names = ["x", "y", "z beam"];
   let markup = `
-    <circle cx="${centerX}" cy="${centerY}" r="140" fill="none" stroke="var(--border)"/>
+    <circle cx="${centerX}" cy="${centerY}" r="145" fill="none" stroke="var(--border)"/>
     <line x1="80" y1="${centerY}" x2="480" y2="${centerY}" stroke="var(--border)"/>
-    <line x1="${centerX}" y1="20" x2="${centerX}" y2="400" stroke="var(--border)"/>
+    <line x1="${centerX}" y1="22" x2="${centerX}" y2="378" stroke="var(--border)"/>
     <text x="475" y="${centerY + 22}" text-anchor="end" fill="var(--muted-foreground)">crystal X</text>
     <text x="${centerX + 10}" y="34" fill="var(--muted-foreground)">crystal Y</text>`;
   [sample.standard_matrix, sample.acom_matrix].forEach((matrix, matrixIndex) => {
     names.forEach((name, column) => {
       const x = centerX + axisScale(matrix[0][column]);
       const y = centerY - axisScale(matrix[1][column]);
+      const dx = x - centerX;
+      const dy = y - centerY;
+      const length = Math.hypot(dx, dy) || 1;
+      const radialX = dx / length;
+      const radialY = dy / length;
+      const perpendicularX = -radialY;
+      const perpendicularY = radialX;
+      const side = matrixIndex === 0 ? -1 : 1;
+      const labelX = Math.max(34, Math.min(526, x + radialX * 12 + perpendicularX * side * 14));
+      const labelY = Math.max(22, Math.min(378, y + radialY * 12 + perpendicularY * side * 14));
       const color = matrixIndex === 0 ? "var(--series-1)" : "var(--series-2)";
       const dash = matrixIndex === 0 ? "" : `stroke-dasharray="7 5"`;
-      markup += `<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="${color}" stroke-width="2.5" ${dash}/><circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/><text x="${x+6}" y="${y-6}" fill="var(--foreground)">${matrixIndex === 0 ? "S" : "A"}:${name}</text>`;
+      markup += `<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="${color}" stroke-width="2.5" ${dash}/>` +
+        `<circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/>` +
+        `<line x1="${x}" y1="${y}" x2="${labelX}" y2="${labelY}" stroke="${color}" stroke-width="1"/>` +
+        `<text x="${labelX}" y="${labelY}" dy="0.35em" text-anchor="middle" fill="var(--foreground)" font-size="12">${matrixIndex === 0 ? "Std" : "ACOM"} ${name}</text>`;
     });
   });
   const selected = sample.observed[reflectionIndex];
   const norm = Math.hypot(selected.g_crystal[0], selected.g_crystal[1]) || 1;
   const gx = centerX + 105 * selected.g_crystal[0] / norm;
   const gy = centerY - 105 * selected.g_crystal[1] / norm;
-  markup += `<line x1="${centerX}" y1="${centerY}" x2="${gx}" y2="${gy}" stroke="var(--series-3)" stroke-width="4"/><circle cx="${gx}" cy="${gy}" r="4" fill="var(--series-3)"/><text x="88" y="418" fill="var(--muted-foreground)">紫色为所选 g_crystal 方向 · S=标准，A=ACOM</text>`;
+  markup += `<line x1="${centerX}" y1="${centerY}" x2="${gx}" y2="${gy}" stroke="var(--series-3)" stroke-width="4"/><circle cx="${gx}" cy="${gy}" r="4" fill="var(--series-3)"/>`;
   axes.innerHTML = markup;
 }
 
-function renderFlow(sample) {
+function renderTransform(sample) {
   const selected = sample.observed[reflectionIndex];
-  document.getElementById("flow").innerHTML =
-    `<strong>HKL [${esc(selected.hkl.join(", "))}]</strong> <span class="arrow">→</span> ` +
-    `g<sub>crystal</sub> ${esc(vector(selected.g_crystal))} Å⁻¹ <span class="arrow">→ Rᵀ →</span> ` +
-    `q<sub>standard</sub> ${esc(vector(selected.q_standard))} Å⁻¹ <span class="dim">对比</span> ` +
-    `q<sub>ACOM,same HKL</sub> ${esc(vector(selected.q_acom_same_hkl))} Å⁻¹`;
+  document.getElementById("hkl-vector").textContent = `[${selected.hkl.join(", ")}]`;
+  document.getElementById("reciprocal-matrix").textContent = matrix(sample.reciprocal_matrix);
+  document.getElementById("g-vector").textContent = vector(selected.g_crystal);
+  document.getElementById("standard-matrix").textContent = matrix(sample.standard_matrix);
+  document.getElementById("acom-matrix").textContent = matrix(sample.acom_matrix);
+  document.getElementById("standard-q").textContent = vector(selected.q_standard);
+  document.getElementById("acom-q").textContent = vector(selected.q_acom_same_hkl);
+}
+
+function renderReflectionTable(sample) {
+  document.getElementById("all-reflections-title").innerHTML =
+    `当前样本全部 ${sample.observed.length} 个 HKL 与 g<sub>crystal</sub>（Kmax = 1.5 Å⁻¹）`;
+  document.getElementById("reflection-rows").innerHTML = sample.observed.map((peak, index) => {
+    const delta = Math.hypot(
+      peak.q_standard[0] - peak.q_acom_same_hkl[0],
+      peak.q_standard[1] - peak.q_acom_same_hkl[1],
+      peak.q_standard[2] - peak.q_acom_same_hkl[2]
+    );
+    return `<tr class="${index === reflectionIndex ? "is-selected" : ""}">` +
+      `<td>${index + 1}</td>` +
+      `<td>[${esc(peak.hkl.join(", "))}]</td>` +
+      `<td>${peak.intensity.toFixed(4)}</td>` +
+      `<td>${esc(vector(peak.g_crystal))}</td>` +
+      `<td>${esc(vector(peak.q_standard))}</td>` +
+      `<td>${esc(vector(peak.q_acom_same_hkl))}</td>` +
+      `<td>${delta.toFixed(5)}</td></tr>`;
+  }).join("");
 }
 
 function render() {
@@ -349,11 +429,10 @@ function render() {
   reflection.innerHTML = sample.observed.map((peak, index) =>
     `<option value="${index}" ${index === reflectionIndex ? "selected" : ""}>HKL [${esc(peak.hkl.join(", "))}] · I=${peak.intensity.toFixed(3)}</option>`
   ).join("");
-  document.getElementById("standard-matrix").textContent = sample.standard_matrix.map(vector).join("\\n");
-  document.getElementById("acom-matrix").textContent = sample.acom_matrix.map(vector).join("\\n");
   renderDetector(sample);
   renderAxes(sample);
-  renderFlow(sample);
+  renderTransform(sample);
+  renderReflectionTable(sample);
 }
 
 reflection.addEventListener("change", event => {
