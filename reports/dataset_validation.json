@@ -1,30 +1,30 @@
 [
   {
     "track": "clean",
-    "num_samples": 569,
-    "peak_count_min": 17,
-    "peak_count_max": 106,
-    "peak_count_mean": 31.101933216168717,
+    "num_samples": 1081,
+    "peak_count_min": 12,
+    "peak_count_max": 80,
+    "peak_count_mean": 21.559666975023127,
     "sample_counts_by_role": {
       "legacy_smoke": 17,
-      "headline_core": 512,
+      "headline_core": 1024,
       "acom_grid_probe": 40
     },
     "peak_counts_by_role": {
       "legacy_smoke": {
-        "min": 23,
-        "max": 106,
-        "mean": 46.705882352941174
+        "min": 18,
+        "max": 80,
+        "mean": 33.588235294117645
       },
       "headline_core": {
-        "min": 17,
-        "max": 51,
-        "mean": 28.451171875
+        "min": 12,
+        "max": 52,
+        "mean": 20.5224609375
       },
       "acom_grid_probe": {
-        "min": 23,
-        "max": 106,
-        "mean": 58.4
+        "min": 18,
+        "max": 80,
+        "mean": 43.0
       }
     },
     "baseline_input_dtype": [
