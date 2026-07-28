@@ -111,6 +111,8 @@ def main() -> None:
     )
     zone_error_correlation = float(np.corrcoef(zone_distance, errors)[0, 1])
     seed_error_correlation = float(np.corrcoef(seed_distance, errors)[0, 1])
+    above_5deg = int(np.sum(errors > 5.0))
+    above_10deg = int(np.sum(errors > 10.0))
 
     role_metrics = evaluation["metrics_by_sample_role"]
     plan = audit["orientation_plan"]
@@ -135,6 +137,8 @@ def main() -> None:
         "",
         "Strict/Friedel disagreement rate: "
         f"{100 * evaluation['strict_friedel_disagreement_rate']:.2f}%.",
+        f"Catastrophic mismatches: {above_5deg}/{len(errors)} above 5°; "
+        f"{above_10deg}/{len(errors)} above 10°.",
         "",
         "## Result by sample role",
         "",
