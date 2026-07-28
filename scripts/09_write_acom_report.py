@@ -86,6 +86,8 @@ def load_sweep_rows(config: dict) -> list[dict]:
                 "runtime": sweep_details["runtime"]["matching"],
                 "plan": sweep_audit["orientation_plan"],
                 "canonical": step == canonical,
+                "sha256": sweep_details["sha256"],
+                "versions": sweep_details["versions"],
             }
         )
     return rows
@@ -178,10 +180,25 @@ def main() -> None:
         f"{above_10deg}/{len(errors)} above 10°.",
     ]
     if sweep_rows:
+        reference_hashes = sweep_rows[0]["sha256"]
+        reference_versions = sweep_rows[0]["versions"]
+        if not all(
+            row["sha256"] == reference_hashes
+            and row["versions"] == reference_versions
+            for row in sweep_rows
+        ):
+            raise ValueError(
+                "ACOM sweep runs do not share identical inputs and versions"
+            )
         lines.extend(
             [
                 "",
                 "## ACOM angular-resolution sweep",
+                "",
+                "Controlled comparison: all sweep rows have identical config, "
+                "CIF, orientation-manifest, public-peak and ground-truth SHA256 "
+                "values and identical software versions. Only the zone-axis and "
+                "in-plane angular steps change.",
                 "",
                 "| Step | n | Mean | Median | P95 | Max | Acc@1° | Acc@2° | "
                 "Acc@5° | Seeds incl. mirror | Match time | Throughput |",

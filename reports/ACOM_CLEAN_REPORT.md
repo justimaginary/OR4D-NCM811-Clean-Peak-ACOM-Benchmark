@@ -17,6 +17,8 @@ Catastrophic mismatches: 34/1024 above 5°; 12/1024 above 10°.
 
 ## ACOM angular-resolution sweep
 
+Controlled comparison: all sweep rows have identical config, CIF, orientation-manifest, public-peak and ground-truth SHA256 values and identical software versions. Only the zone-axis and in-plane angular steps change.
+
 | Step | n | Mean | Median | P95 | Max | Acc@1° | Acc@2° | Acc@5° | Seeds incl. mirror | Match time | Throughput |
 | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
 | 4° | 1024 | 2.991 | 1.625 | 5.311 | 89.899 | 20.8% | 68.3% | 94.6% | 49680 | 12.0 s | 90.3/s |
