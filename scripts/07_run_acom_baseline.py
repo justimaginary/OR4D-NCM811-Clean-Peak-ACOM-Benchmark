@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import argparse
 import hashlib
 import importlib.metadata
 import json
@@ -158,11 +159,44 @@ def runtime_summary(seconds: list[float]) -> dict:
     }
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--angle-step-deg",
+        type=float,
+        help="Override both zone-axis and in-plane ACOM angle steps.",
+    )
+    parser.add_argument(
+        "--output-tag",
+        default="",
+        help="Suffix output filenames so sweep runs do not overwrite each other.",
+    )
+    return parser.parse_args()
+
+
 def main() -> None:
+    args = parse_args()
     config = load_config()
     acom = config["acom"]
     clean = config["clean"]
     common = config["common"]
+    angle_step_zone_axis = float(
+        args.angle_step_deg
+        if args.angle_step_deg is not None
+        else acom["angle_step_zone_axis_deg"]
+    )
+    angle_step_in_plane = float(
+        args.angle_step_deg
+        if args.angle_step_deg is not None
+        else acom["angle_step_in_plane_deg"]
+    )
+    if angle_step_zone_axis <= 0.0 or angle_step_in_plane <= 0.0:
+        raise ValueError("ACOM angle steps must be positive")
+    if args.output_tag and not args.output_tag.replace("_", "").isalnum():
+        raise ValueError(
+            "output tag may contain only letters, numbers, and underscores"
+        )
+    output_suffix = f"_{args.output_tag}" if args.output_tag else ""
 
     peak_path = ROOT / "public" / "clean_peaks.h5"
     gt_path = ROOT / "private" / "clean_ground_truth.jsonl"
@@ -195,8 +229,8 @@ def main() -> None:
     plan_start = time.perf_counter()
     crystal.orientation_plan(
         zone_axis_range=acom["zone_axis_range"],
-        angle_step_zone_axis=float(acom["angle_step_zone_axis_deg"]),
-        angle_step_in_plane=float(acom["angle_step_in_plane_deg"]),
+        angle_step_zone_axis=angle_step_zone_axis,
+        angle_step_in_plane=angle_step_in_plane,
         accel_voltage=voltage,
         corr_kernel_size=float(acom["corr_kernel_size_Ainv"]),
         sigma_excitation_error=float(acom["sigma_excitation_error_Ainv"]),
@@ -267,8 +301,8 @@ def main() -> None:
         "py4DSTEM_version": py4DSTEM.__version__,
         "orientation_plan": {
             "zone_axis_range": acom["zone_axis_range"],
-            "angle_step_zone_axis_deg": float(acom["angle_step_zone_axis_deg"]),
-            "angle_step_in_plane_deg": float(acom["angle_step_in_plane_deg"]),
+            "angle_step_zone_axis_deg": angle_step_zone_axis,
+            "angle_step_in_plane_deg": angle_step_in_plane,
             "inversion_symmetry": inversion_symmetry,
             "in_plane_subgrid_interpolation": "parabolic correlation-peak fit",
             "num_zone_axes": int(crystal.orientation_num_zones),
@@ -297,7 +331,7 @@ def main() -> None:
         ),
         "samples": audit_rows,
     }
-    audit_path = ROOT / "reports" / "acom_plan_audit.json"
+    audit_path = ROOT / "reports" / f"acom_plan_audit{output_suffix}.json"
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(
         json.dumps(audit_output, ensure_ascii=False, indent=2),
@@ -388,12 +422,17 @@ def main() -> None:
                 f"latest Friedel error={friedel_error:.3f}°"
             )
 
-    submission_path = ROOT / "submissions" / "acom_clean_predictions.jsonl"
+    submission_path = (
+        ROOT / "submissions" / f"acom_clean_predictions{output_suffix}.jsonl"
+    )
     write_jsonl(submission_path, predictions)
 
     config_path = ROOT / "config" / "benchmark.yaml"
     details_output = {
         "dataset_id": config["dataset"]["id"],
+        "output_tag": args.output_tag or "canonical",
+        "acom_angle_step_zone_axis_deg": angle_step_zone_axis,
+        "acom_angle_step_in_plane_deg": angle_step_in_plane,
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
         "headline_sample_role": config["evaluation"]["headline_sample_role"],
@@ -429,7 +468,7 @@ def main() -> None:
         ),
         "samples": details,
     }
-    details_path = ROOT / "reports" / "acom_clean_details.json"
+    details_path = ROOT / "reports" / f"acom_clean_details{output_suffix}.json"
     details_path.write_text(
         json.dumps(details_output, ensure_ascii=False, indent=2),
         encoding="utf-8",

@@ -14,7 +14,7 @@ v3 的公开峰集和 ACOM 模板统一使用 `k_max = 1.5 Å⁻¹`；中心束�
 | --- | ---: | --- | --- |
 | `legacy_smoke` | 17 | 保留 v1 的 9 个手工取向与 8 个确定性 SO(3) 取向 | 回归、坐标约定和 mirror/Friedel 检查 |
 | `headline_core` | 1024 | 固定 seed 的 scrambled Sobol(3) 经 Shoemake 映射到 SO(3) | Clean headline 指标 |
-| `acom_grid_probe` | 40 | 5 个低指数区轴 × 8 个 4°面内网格子偏移 | 单独诊断 ACOM 面内亚网格行为 |
+| `acom_grid_probe` | 40 | 5 个低指数区轴 × 8 个 2°面内网格子偏移 | 单独诊断 ACOM 面内亚网格行为 |
 
 总样本数为 1081。只有 `headline_core` 进入 headline 指标；其余样本始终单独报告。
 
@@ -27,15 +27,16 @@ v3 的公开峰集和 ACOM 模板统一使用 `k_max = 1.5 Å⁻¹`；中心束�
 
 ### ACOM grid probes
 
-Probe 允许显式依赖 canonical 4° ACOM 网格，因为它们不参与公平排名。每个选定低指数区轴使用
-`0.25°、0.5°、0.75°、1.0°、1.25°、1.5°、1.75°、2.0°`
+Probe 允许显式依赖 canonical 2° ACOM 网格，因为它们不参与公平排名。每个选定低指数区轴使用
+`0.125°、0.25°、0.375°、0.5°、0.625°、0.75°、0.875°、1.0°`
 面内偏移，覆盖一个网格单元到半步边界。
 
 ACOM 会对面内相关峰做抛物线亚网格拟合，所以“最近离散 plan 节点距离”只能称为 discrete seed distance，不能解释成理论误差下界。报告同时给出最近区轴节点距离，用于分离区轴离散误差。
 
 ## ACOM 报告
 
-Canonical baseline 固定为 4°区轴步长和 4°面内步长。报告必须包含：
+Canonical baseline 固定为 2°区轴步长和 2°面内步长，并额外运行
+4°、3°、2°扫描，以量化加密 orientation plan 的收益与代价。报告必须包含：
 
 - headline core 的 Friedel-aware mean、median、p90、p95、max 和 Acc@1/2/5°；
 - strict 指标及 strict/Friedel 分歧率；

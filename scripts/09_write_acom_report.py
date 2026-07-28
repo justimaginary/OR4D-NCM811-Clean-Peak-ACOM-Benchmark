@@ -57,6 +57,40 @@ def compact_metric_row(label: str, metrics: dict) -> str:
     )
 
 
+def step_tag(step: float) -> str:
+    return f"angle_{f'{step:g}'.replace('.', 'p')}deg"
+
+
+def load_sweep_rows(config: dict) -> list[dict]:
+    canonical = float(config["acom"]["angle_step_zone_axis_deg"])
+    rows: list[dict] = []
+    for step_value in config["acom"]["sweep_angle_steps_deg"]:
+        step = float(step_value)
+        suffix = "" if step == canonical else f"_{step_tag(step)}"
+        evaluation_path = ROOT / "reports" / f"acom_clean_evaluation{suffix}.json"
+        details_path = ROOT / "reports" / f"acom_clean_details{suffix}.json"
+        audit_path = ROOT / "reports" / f"acom_plan_audit{suffix}.json"
+        if not (
+            evaluation_path.exists()
+            and details_path.exists()
+            and audit_path.exists()
+        ):
+            continue
+        sweep_evaluation = load_json(evaluation_path)
+        sweep_details = load_json(details_path)
+        sweep_audit = load_json(audit_path)
+        rows.append(
+            {
+                "step": step,
+                "metrics": sweep_evaluation["metrics"],
+                "runtime": sweep_details["runtime"]["matching"],
+                "plan": sweep_audit["orientation_plan"],
+                "canonical": step == canonical,
+            }
+        )
+    return rows
+
+
 def distance_bin_rows(
     rows: list[dict],
     edges: list[float],
@@ -118,6 +152,8 @@ def main() -> None:
     plan = audit["orientation_plan"]
     runtime = details["runtime"]
     matching = runtime["matching"]
+    sweep_rows = load_sweep_rows(config)
+    canonical_angle = float(config["acom"]["angle_step_zone_axis_deg"])
     lines = [
         "# NCM811 Clean-Peak ACOM Report",
         "",
@@ -126,7 +162,8 @@ def main() -> None:
         f"({evaluation['metrics']['num_samples']} samples)",
         "- Primary metric: Friedel-equivalent misorientation under proper "
         "crystal point-group rotations",
-        "- Baseline: py4DSTEM ACOM, 4° zone-axis step and 4° in-plane step",
+        f"- Canonical baseline: py4DSTEM ACOM, {canonical_angle:g}° zone-axis "
+        f"step and {canonical_angle:g}° in-plane step",
         "",
         "## Headline result",
         "",
@@ -139,12 +176,46 @@ def main() -> None:
         f"{100 * evaluation['strict_friedel_disagreement_rate']:.2f}%.",
         f"Catastrophic mismatches: {above_5deg}/{len(errors)} above 5°; "
         f"{above_10deg}/{len(errors)} above 10°.",
+    ]
+    if sweep_rows:
+        lines.extend(
+            [
+                "",
+                "## ACOM angular-resolution sweep",
+                "",
+                "| Step | n | Mean | Median | P95 | Max | Acc@1° | Acc@2° | "
+                "Acc@5° | Seeds incl. mirror | Match time | Throughput |",
+                "| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | "
+                "---: | ---: | ---: | ---: |",
+            ]
+        )
+        for row in sorted(sweep_rows, key=lambda value: value["step"], reverse=True):
+            metrics = row["metrics"]
+            runtime_row = row["runtime"]
+            plan_row = row["plan"]
+            marker = " (canonical)" if row["canonical"] else ""
+            lines.append(
+                f"| {row['step']:g}°{marker} | {metrics['num_samples']} | "
+                f"{metrics['mean_misorientation_deg']:.3f} | "
+                f"{metrics['median_misorientation_deg']:.3f} | "
+                f"{metrics['p95_misorientation_deg']:.3f} | "
+                f"{metrics['max_misorientation_deg']:.3f} | "
+                f"{100 * metrics['accuracy_within_1deg']:.1f}% | "
+                f"{100 * metrics['accuracy_within_2deg']:.1f}% | "
+                f"{100 * metrics['accuracy_within_5deg']:.1f}% | "
+                f"{plan_row['num_discrete_seeds_including_mirror']} | "
+                f"{runtime_row['total_seconds']:.1f} s | "
+                f"{runtime_row['throughput_samples_per_second']:.1f}/s |"
+            )
+    lines.extend(
+        [
         "",
         "## Result by sample role",
         "",
         "| Role | n | Mean | Median | P90 | P95 | Max | Acc@1° | Acc@2° | Acc@5° |",
         "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |",
-    ]
+        ]
+    )
     for role, metrics in sorted(role_metrics.items()):
         lines.append(metric_row(role, metrics))
 
@@ -211,6 +282,9 @@ def main() -> None:
             "![Zone-axis distance versus error](acom_offgrid_vs_error.png)",
             "",
             "![Representative peak overlays](acom_peak_overlay.png)",
+            "",
+            "逐坐标、逐反射、HKL 和 ACOM 峰差异见 "
+            "[ACOM coordinate analysis](ACOM_COORDINATE_ANALYSIS.md)。",
             "",
         ]
     )

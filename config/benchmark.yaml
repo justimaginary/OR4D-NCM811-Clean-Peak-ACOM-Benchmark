@@ -82,12 +82,13 @@ clean_sampling:
     seed: 20260728
     duplicate_tolerance_deg: 0.000001
 
-  # Diagnostic-only probes for the 4-degree in-plane ACOM grid. These samples
+  # Diagnostic-only probes for the canonical 2-degree in-plane ACOM grid. These
+  # cover one grid cell from a small sub-grid offset to the half-step boundary.
   # never enter the headline metric.
   acom_grid_probes:
     enabled: true
     orientation_id_prefix: probe_
-    in_plane_offsets_deg: [0.25, 0.5, 0.75, 1.0, 1.25, 1.5, 1.75, 2.0]
+    in_plane_offsets_deg: [0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875, 1.0]
     bases:
       - probe_axis_id: za_001
         zone_axis_uvw: [0, 0, 1]
@@ -118,12 +119,13 @@ clean:
   tol_intensity: 0.0001
 
 # py4DSTEM ACOM baseline. The test orientations are generated independently
-# from this orientation plan. The audit script checks that no test orientation
-# is an exact plan node, including crystal-symmetry equivalents.
+# from this orientation plan. The canonical report uses 2 degrees; the sweep
+# keeps 4 degrees for backward comparison and adds an intermediate 3 degrees.
 acom:
   zone_axis_range: auto
-  angle_step_zone_axis_deg: 4.0
-  angle_step_in_plane_deg: 4.0
+  angle_step_zone_axis_deg: 2.0
+  angle_step_in_plane_deg: 2.0
+  sweep_angle_steps_deg: [4.0, 3.0, 2.0]
   corr_kernel_size_Ainv: 0.08
   sigma_excitation_error_Ainv: 0.02
   power_radial: 1.0
