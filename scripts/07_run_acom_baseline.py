@@ -15,6 +15,7 @@ from pathlib import Path
 import numpy as np
 import py4DSTEM
 from pymatgen.core import Structure
+from scipy.spatial import cKDTree
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
@@ -62,7 +63,7 @@ def enumerate_discrete_search_seed_matrices(
 
 def min_discrete_seed_distance_deg(
     matrix_gt: np.ndarray,
-    search_seed_matrices: np.ndarray,
+    search_seed_tree: cKDTree,
     symmetries: list[np.ndarray],
 ) -> float:
     """Distance to the nearest discrete seed in Clean observable space.
@@ -70,19 +71,23 @@ def min_discrete_seed_distance_deg(
     This is not an error lower bound: ``match_single_pattern`` performs a
     parabolic sub-grid fit of the in-plane correlation peak.
     """
-    best = np.inf
+    best_chord = np.inf
     for symmetry in symmetries:
         crystal_equivalent = symmetry @ matrix_gt
         for sample_branch in (np.eye(3), FRIEDEL_SAMPLE_ROTATION):
             equivalent = crystal_equivalent @ sample_branch
-            relative = search_seed_matrices @ equivalent.T
-            traces = np.trace(relative, axis1=1, axis2=2)
-            cosines = np.clip((traces - 1.0) / 2.0, -1.0, 1.0)
-            best = min(
-                best,
-                float(np.degrees(np.arccos(cosines)).min()),
+            chord, _ = search_seed_tree.query(
+                equivalent.reshape(-1),
+                k=1,
             )
-    return float(best)
+            best_chord = min(best_chord, float(chord))
+    # For proper rotations, ||R1-R2||_F = 2*sqrt(2)*sin(theta/2).
+    sine_half_angle = np.clip(
+        best_chord / (2.0 * np.sqrt(2.0)),
+        0.0,
+        1.0,
+    )
+    return float(np.degrees(2.0 * np.arcsin(sine_half_angle)))
 
 
 def min_zone_axis_node_distance_deg(
@@ -249,6 +254,7 @@ def main() -> None:
         crystal,
         inversion_symmetry=inversion_symmetry,
     )
+    search_seed_tree = cKDTree(search_seed_matrices.reshape(-1, 9))
 
     audit_rows: list[dict] = []
     probe_threshold = float(
@@ -265,7 +271,7 @@ def main() -> None:
         )
         discrete_distance = min_discrete_seed_distance_deg(
             matrix_gt,
-            search_seed_matrices,
+            search_seed_tree,
             symmetries,
         )
         zone_distance = min_zone_axis_node_distance_deg(
