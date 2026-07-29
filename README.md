@@ -88,11 +88,18 @@ regression set first:
 conda run -n or4d-clean ./run_clean_image_acom.sh smoke
 ```
 
-The corrected 17-case smoke now passes, so the next formal step is the
-1,081-case command:
+The corrected 17-case smoke passes. The 1,081-pattern peak stage has also been
+run. Run or reproduce only that stage with:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh full
+conda run -n or4d-clean ./run_clean_image_acom.sh full peaks
+```
+
+After reviewing the peak report, continue from the existing detector outputs
+without regenerating the images:
+
+```bash
+conda run -n or4d-clean ./run_clean_image_acom.sh full acom
 ```
 
 The image run freezes the old analytic input locally as
@@ -102,11 +109,11 @@ real py4DSTEM 0.14.18 public function, not an alias for the local AutoDisk
 implementation. Both outputs are converted to the same physical
 `(qx, qy, integrated intensity)` contract before ACOM.
 
-Current 17-case matched smoke status: both detectors recover Clean-E with
-100% precision and recall. At \(10^5\) electrons, AutoDisk reaches
-89.2%/89.1% precision/recall and `find_Bragg_disks` reaches 96.9%/96.8%;
-both retain the oracle ACOM Acc@2° of 88.2%. At \(10^6\), both detectors are
-approximately or exactly 100% at peak level. The separate finite-thickness
+Current 1,081-pattern peak status: both detectors recover Clean-E with 100%
+precision and recall. At \(10^5\) electrons, AutoDisk reaches 95.66%/95.66%
+precision/recall and `find_Bragg_disks` reaches 99.38%/99.38%. At \(10^6\),
+AutoDisk reaches 99.95% and `find_Bragg_disks` reaches 100%. Full ACOM is
+intentionally paused after the peak stage. The separate finite-thickness
 First-Born mode remains diagnostic because its sinc excitation envelope is not
 matched by the current ACOM orientation plan.
 

@@ -1,0 +1,32 @@
+{
+  "num_samples": 1081,
+  "forward_model": "acom_matched",
+  "roles": [
+    "acom_grid_probe",
+    "headline_core",
+    "legacy_smoke"
+  ],
+  "image_path": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_images.h5",
+  "physical_oracle_path": "/Users/xie/code/OR4D-NCM811-smoke-v0/private/clean_physical_oracle_peaks.h5",
+  "raw_reflections_path": "/Users/xie/code/OR4D-NCM811-smoke-v0/private/clean_physical_oracle_reflections.h5",
+  "image_shape": [
+    512,
+    512
+  ],
+  "mean_render_seconds": 0.03348737776006557,
+  "total_render_seconds": 36.199855358630884,
+  "oracle_diagnostics": {
+    "candidate_reflections": 23306,
+    "merged_disks_before_threshold": 23306,
+    "retained_disks": 23306,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 0
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  }
+}

@@ -37,6 +37,43 @@
   {
     "track": "clean_expectation",
     "forward_model": "acom_matched",
+    "path": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_images.h5",
+    "num_samples": 1081,
+    "image_shape": [
+      512,
+      512
+    ],
+    "dtype": "float32",
+    "probability_sum_min": 1.0000000073691093,
+    "probability_sum_max": 1.0000000127562252,
+    "q_pixel_size_Ainv": 0.00625002384185791,
+    "disk_radius_px": 4.063494872963643,
+    "direct_beam_fraction": 0.9
+  },
+  {
+    "track": "clean_counted",
+    "forward_model": "acom_matched",
+    "path": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_counted_images.h5",
+    "shape": [
+      1081,
+      3,
+      5,
+      512,
+      512
+    ],
+    "dtype": "uint32",
+    "doses_electrons": [
+      10000,
+      100000,
+      1000000
+    ],
+    "repeats": 5,
+    "fixed_total_verified": true,
+    "num_count_images": 16215
+  },
+  {
+    "track": "clean_expectation",
+    "forward_model": "acom_matched",
     "path": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_images_smoke.h5",
     "num_samples": 17,
     "image_shape": [

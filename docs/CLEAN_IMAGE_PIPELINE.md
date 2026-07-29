@@ -4,8 +4,10 @@
 
 This is an experimental Clean-only extension of Clean-Peak v3. It has been
 implemented and run on all 17 `legacy_smoke` orientations. The canonical
-ACOM-matched image interface now passes the peak and orientation smoke tests.
-No 1,081-pattern headline result is claimed yet.
+ACOM-matched image interface passes the peak and orientation smoke tests. The
+Clean-E and Clean-C peak stages have also been completed on all 1,081 patterns.
+The full ACOM stage is intentionally paused and no 1,081-pattern orientation
+headline is claimed yet.
 
 Dynamical scattering is out of scope. The existing Clean-Peak v3 data and
 results remain unchanged.
@@ -190,6 +192,17 @@ Complete smoke run:
 conda run -n or4d-clean ./run_clean_image_acom.sh smoke
 ```
 
+Full run with an explicit review boundary:
+
+```bash
+conda run -n or4d-clean ./run_clean_image_acom.sh full peaks
+# inspect reports/clean_*_pipeline_evaluation.json
+conda run -n or4d-clean ./run_clean_image_acom.sh full acom
+```
+
+The second command consumes the existing detector peak files and does not
+regenerate the 32,430 counted patterns.
+
 Individual stages:
 
 ```bash
@@ -239,6 +252,28 @@ Peak recovery against the current physical oracle:
 
 The five-repeat standard deviations above are real independent multinomial
 realizations.
+
+## Measured 1,081-pattern peak results
+
+These are full-data results from 1,024 `headline_core`, 17 `legacy_smoke`, and
+40 `acom_grid_probe` patterns. ACOM has not yet been completed on this set.
+
+| Input | Detector | Precision | Recall | RMSE (px) | P95 (px) | High-angle recall |
+| --- | --- | ---: | ---: | ---: | ---: | ---: |
+| Clean-E | AutoDisk | 1.0000 | 1.0000 | 0.4098 | 0.6017 | 1.0000 |
+| Clean-E | find_Bragg_disks | 1.0000 | 1.0000 | 0.0115 | 0.0174 | 1.0000 |
+| \(10^4\) e⁻ | AutoDisk | 0.6603±0.0034 | 0.6436±0.0030 | 0.5513±0.0027 | 0.9114±0.0036 | 0.5306±0.0029 |
+| \(10^4\) e⁻ | find_Bragg_disks | 0.8136±0.0029 | 0.8005±0.0021 | 0.4430±0.0021 | 0.8576±0.0041 | 0.7145±0.0050 |
+| \(10^5\) e⁻ | AutoDisk | 0.9566±0.0008 | 0.9566±0.0007 | 0.4666±0.0007 | 0.7668±0.0040 | 0.9342±0.0025 |
+| \(10^5\) e⁻ | find_Bragg_disks | 0.9938±0.0005 | 0.9938±0.0005 | 0.2260±0.0010 | 0.4746±0.0026 | 0.9904±0.0011 |
+| \(10^6\) e⁻ | AutoDisk | 0.9995±0.0002 | 0.9995±0.0002 | 0.4181±0.0004 | 0.6248±0.0015 | 0.9988±0.0004 |
+| \(10^6\) e⁻ | find_Bragg_disks | 1.0000±0.0000 | 1.0000±0.0000 | 0.0751±0.0004 | 0.1521±0.0007 | 1.0000±0.0000 |
+
+The full set confirms a strong dose effect. \(10^5\) electrons is sufficient
+for near-complete `find_Bragg_disks` recovery, but not for the 99% AutoDisk
+target. \(10^6\) electrons is the first tested dose at which both detectors
+are effectively complete. `find_Bragg_disks` is consistently more accurate
+and faster at every tested dose.
 
 ### Why the forward models are separated
 
