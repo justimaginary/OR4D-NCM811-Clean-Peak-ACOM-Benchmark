@@ -651,9 +651,9 @@ python scripts/03_extract_clean_disks.py \
 <section class="panel" style="margin-top:14px"><h3>v3 角步长基线 / Frozen v3 angular sweep</h3><div id="v3-sweep-table"></div><p class="mini">该表是之前 v3 真实运行的 4°、3°、2° 结果；新图像链路使用同一个 canonical 2° 检测与评价方法，不把不同角步长的方法混在一起。</p></section>
 
 <h2>单张衍射图检查 / Per-pattern inspection</h2>
-<p class="lead" style="margin-bottom:10px">在一张实际二维输入图上查看参考盘、检峰结果和 ACOM 取向。左侧“快速载入案例”只是把下方查看参数切到一个有代表性的组合；你仍可单独改变图像层、剂量、重复次数、检峰器和叠加标记。</p>
+<p class="lead" style="margin-bottom:10px">所有控件都可以修改，修改后下方主诊断立即显示所选组合的实际运行结果。“案例预设”只是一次性填入一组有代表性的参数，不会限制后续选择。</p>
 <div class="toolbar">
- <div class="control"><label>快速载入案例 / Load example</label><select id="sample"></select></div>
+ <div class="control"><label>案例预设（可选）/ Example preset</label><select id="sample"></select></div>
  <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e">Clean-E 期望图</button><button id="track-c" class="active">Clean-C 计数图</button></div></div>
  <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000" selected>10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000">10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
@@ -860,13 +860,15 @@ function applyCase(id){
 }
 function markViewAdjusted(){
  activeCase=null;$("sample").value="";
- showCaseDescription("你已单独调整下方查看参数。页面正在展示这个样本、图像层、剂量、重复次数和检峰器对应的已保存运行结果；这不是新建样本，也不会重新运行 benchmark。","当前查看 / Current view");
+ const imageLabel=state.track==="expectation"?"Clean-E 期望图":`Clean-C 计数图 · ${state.dose.toLocaleString()} e⁻ · repeat ${state.repeat}`;
+ const detectorLabel=state.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk";
+ showCaseDescription(`<b>${imageLabel} · ${detectorLabel}</b>。下方主衍射图、橙色 Detected 标记、样本指标和“当前 ACOM”矩阵已经切换到这一组合。双检峰器对比区仍固定并列显示 AutoDisk 与 find_Bragg_disks 在同一张图上的结果。`,"已应用 / Applied");
 }
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  const example=DATA.samples[DATA.sample_order[0]];
  $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
- $("sample").innerHTML=`<option value="" disabled>选择案例以快速载入 / Select a case</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
+ $("sample").innerHTML=`<option value="" disabled>选择一个案例预设 / Select a preset</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
  $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markViewAdjusted();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markViewAdjusted();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markViewAdjusted();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
