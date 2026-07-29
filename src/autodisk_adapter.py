@@ -222,6 +222,20 @@ def detect_autodisk_peaks(
         raise RuntimeError("AutoDisk filtering removed every diffraction disk")
     intensities_array = np.asarray(intensities, dtype=float)
     intensities_array /= intensities_array.max()
+    keep_intensity = intensities_array >= float(
+        config["min_integrated_intensity_relative"]
+    )
+    intensities_array = intensities_array[keep_intensity]
+    initial_rows = np.asarray(initial_rows, dtype=float)[keep_intensity]
+    initial_cols = np.asarray(initial_cols, dtype=float)[keep_intensity]
+    refined_rows = np.asarray(refined_rows, dtype=float)[keep_intensity]
+    refined_cols = np.asarray(refined_cols, dtype=float)[keep_intensity]
+    corr_scores = np.asarray(corr_scores, dtype=float)[keep_intensity]
+    rgm_scores = np.asarray(rgm_scores, dtype=float)[keep_intensity]
+    qx_values = np.asarray(qx_values, dtype=float)[keep_intensity]
+    qy_values = np.asarray(qy_values, dtype=float)[keep_intensity]
+    if not len(intensities_array):
+        raise RuntimeError("AutoDisk intensity threshold removed every disk")
     qx_array = np.asarray(qx_values, dtype=float)
     qy_array = np.asarray(qy_values, dtype=float)
     order = np.lexsort((qy_array, qx_array, np.hypot(qx_array, qy_array)))

@@ -1,0 +1,34 @@
+{
+  "source_image_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_images_smoke.h5",
+  "track": "expectation",
+  "detectors": [
+    "autodisk",
+    "py4dstem"
+  ],
+  "runs": [
+    {
+      "variant": "expectation",
+      "detector": "autodisk",
+      "output": "/Users/xie/code/OR4D-NCM811-smoke-v0/diagnostics/clean_expectation_autodisk_peaks_smoke.h5",
+      "num_samples": 17,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 1.8762667500413954,
+      "mean_seconds": 0.1103686323553762,
+      "p95_seconds": 0.12484859219985082,
+      "throughput_patterns_per_second": 9.06054536202005
+    },
+    {
+      "variant": "expectation",
+      "detector": "py4dstem",
+      "output": "/Users/xie/code/OR4D-NCM811-smoke-v0/diagnostics/clean_expectation_py4dstem_peaks_smoke.h5",
+      "num_samples": 17,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 6.190102246939205,
+      "mean_seconds": 0.3641236615846591,
+      "p95_seconds": 0.5036985251936129,
+      "throughput_patterns_per_second": 2.746319741068239
+    }
+  ]
+}

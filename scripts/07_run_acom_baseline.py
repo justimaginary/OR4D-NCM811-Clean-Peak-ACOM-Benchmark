@@ -173,8 +173,25 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output-tag",
+        "--report-tag",
         default="",
         help="Suffix output filenames so sweep runs do not overwrite each other.",
+    )
+    parser.add_argument(
+        "--peak-file",
+        type=Path,
+        default=ROOT / "public" / "clean_peaks.h5",
+        help="Peak HDF5 input; all paths use the same frozen ACOM configuration.",
+    )
+    parser.add_argument(
+        "--prediction-file",
+        type=Path,
+        help="Exact prediction JSONL output path.",
+    )
+    parser.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help="Allow a strict sample-ID subset for legacy smoke runs.",
     )
     return parser.parse_args()
 
@@ -203,7 +220,7 @@ def main() -> None:
         )
     output_suffix = f"_{args.output_tag}" if args.output_tag else ""
 
-    peak_path = ROOT / "public" / "clean_peaks.h5"
+    peak_path = args.peak_file.resolve()
     gt_path = ROOT / "private" / "clean_ground_truth.jsonl"
     manifest_path = ROOT / "private" / "orientations.jsonl"
     samples = read_peak_h5(peak_path)
@@ -214,8 +231,19 @@ def main() -> None:
     sample_ids = [str(sample["sample_id"]) for sample in samples]
     if len(sample_ids) != len(set(sample_ids)):
         raise ValueError("public/clean_peaks.h5 contains duplicate sample IDs")
-    if set(sample_ids) != set(ground_truth):
-        raise ValueError("Clean public and ground-truth sample IDs differ")
+    sample_id_set = set(sample_ids)
+    ground_truth_id_set = set(ground_truth)
+    if args.allow_subset:
+        if not sample_id_set <= ground_truth_id_set:
+            raise ValueError("Peak input includes IDs absent from ground truth")
+    elif sample_id_set != ground_truth_id_set:
+        raise ValueError("Clean peak input and ground-truth sample IDs differ")
+    for sample in samples:
+        if len(sample["qx"]) < int(acom["min_number_peaks"]):
+            raise ValueError(
+                f"{sample['sample_id']} has only {len(sample['qx'])} peaks; "
+                f"ACOM requires {acom['min_number_peaks']}"
+            )
 
     structure = Structure.from_file(cif_path(config))
     symmetries = proper_point_group_rotations(structure)
@@ -429,7 +457,9 @@ def main() -> None:
             )
 
     submission_path = (
-        ROOT / "submissions" / f"acom_clean_predictions{output_suffix}.jsonl"
+        args.prediction_file.resolve()
+        if args.prediction_file
+        else ROOT / "submissions" / f"acom_clean_predictions{output_suffix}.jsonl"
     )
     write_jsonl(submission_path, predictions)
 
@@ -464,7 +494,7 @@ def main() -> None:
             "config": sha256_file(config_path),
             "cif": sha256_file(cif_path(config)),
             "orientation_manifest": sha256_file(manifest_path),
-            "public_peaks": sha256_file(peak_path),
+            "source_peaks": sha256_file(peak_path),
             "ground_truth": sha256_file(gt_path),
         },
         "matched_model_limitation": (

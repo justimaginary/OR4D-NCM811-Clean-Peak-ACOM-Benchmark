@@ -90,6 +90,20 @@ logs/
 submissions/local/
 reports/local/
 
+# Generated Clean image/count data and per-realization detector intermediates.
+# These are reproducible and become large for the 1,081-pattern full run.
+public/clean_images*.h5
+public/clean_counted_images*.h5
+diagnostics/clean_expectation_*_peaks*.h5
+diagnostics/clean_counted_dose*_peaks*.h5
+diagnostics/clean_image_overlays*/
+diagnostics/clean_counted_overlays*/
+submissions/acom_clean_counted_*.jsonl
+submissions/acom_clean_expectation_*.jsonl
+submissions/acom_clean_physical_oracle_*.jsonl
+reports/acom_clean_details_counted_*.json
+reports/acom_plan_audit_counted_*.json
+
 # Timing / profiling / debug dumps
 *.prof
 *.profile

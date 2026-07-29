@@ -1,0 +1,3498 @@
+{
+  "scope": "Clean only",
+  "physical_oracle_details": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_physical_oracle_smoke.json",
+  "physical_oracle_versus_ground_truth": {
+    "mean_deg": 12.137967559076952,
+    "median_deg": 4.060301242616721,
+    "p95_deg": 72.00718430477598,
+    "max_deg": 72.00725019630289,
+    "acc_at_1deg": 0.058823529411764705,
+    "acc_at_2deg": 0.35294117647058826,
+    "acc_at_5deg": 0.7058823529411765,
+    "catastrophic_gt_5deg": 5
+  },
+  "candidates": [
+    {
+      "label": "counted_dose10000_repeat0_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat0_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 10.902263467305131,
+        "median_deg": 1.9917996339737023,
+        "p95_deg": 60.87424242362696,
+        "max_deg": 64.15599882859948,
+        "acc_at_1deg": 0.35294117647058826,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 15.756889635750978,
+        "median_deg": 3.334012639193731,
+        "p95_deg": 72.00803861256888,
+        "max_deg": 72.00862838950634,
+        "acc_at_1deg": 0.23529411764705882,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.11764705882352938,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.053803322383835,
+          "ground_truth_error_deg": 72.00789116833452
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 4.793761931939302,
+          "ground_truth_error_deg": 3.334012639193731
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.789502704820977,
+          "ground_truth_error_deg": 3.334331323342457
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 35.72216442794018,
+          "ground_truth_error_deg": 33.401508763741134
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 0.10188211677589072,
+          "ground_truth_error_deg": 13.810324035637043
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.0998981937312187,
+          "ground_truth_error_deg": 72.00862838950634
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.14375009861936114,
+          "ground_truth_error_deg": 4.063904694884566
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 4.789200636123634,
+          "ground_truth_error_deg": 3.334646519172125
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 64.15599882859948,
+          "ground_truth_error_deg": 54.97624972913232
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4884762036852184,
+          "ground_truth_error_deg": 0.48097438606092785
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.004839941821054708,
+          "ground_truth_error_deg": 1.3515567067136227
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9917996339737023,
+          "ground_truth_error_deg": 0.7054614828413985
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 3.01106939825992,
+          "ground_truth_error_deg": 1.3286625871644318
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.09456146879514635,
+          "ground_truth_error_deg": 1.5157763754235212
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.024345185594416487,
+          "ground_truth_error_deg": 1.1548781246717328
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 1.5146244966475264,
+          "ground_truth_error_deg": 0.7374657680147602
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 1.5588003544763807,
+          "ground_truth_error_deg": 0.3208511139319951
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat0_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat0_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 5.578573050587776,
+        "median_deg": 1.50567465697068,
+        "p95_deg": 22.33402309732361,
+        "max_deg": 59.99230704962164,
+        "acc_at_1deg": 0.47058823529411764,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.735363176013749,
+        "median_deg": 1.8311556346501443,
+        "p95_deg": 72.00705762957755,
+        "max_deg": 72.00706724750351,
+        "acc_at_1deg": 0.29411764705882354,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.99230704962164,
+          "ground_truth_error_deg": 72.00706724750351
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.12240593848860902,
+          "ground_truth_error_deg": 4.061390433301536
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.05802906988125402,
+          "ground_truth_error_deg": 4.061198571023244
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0640586183797645,
+          "ground_truth_error_deg": 11.122074040640443
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.919452109249145,
+          "ground_truth_error_deg": 1.051074078213652
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.014875445361228794,
+          "ground_truth_error_deg": 72.00705522509605
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.05818745198624476,
+          "ground_truth_error_deg": 4.061197125137518
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.009290638119090642,
+          "ground_truth_error_deg": 4.060290451264867
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.760831525586926,
+          "ground_truth_error_deg": 0.5927836932224066
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4882875053141835,
+          "ground_truth_error_deg": 0.4799231938921125
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6400166806699503,
+          "ground_truth_error_deg": 0.5840240862740669
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.23324523302632577,
+          "ground_truth_error_deg": 2.299405451407907
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.02789688820632414,
+          "ground_truth_error_deg": 1.6863908815448911
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.25626078478135966,
+          "ground_truth_error_deg": 1.5374182233598948
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 2.1248052745083785,
+          "ground_truth_error_deg": 1.8311556346501443
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 1.50567465697068,
+          "ground_truth_error_deg": 0.7247905581266963
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 1.5601169898410856,
+          "ground_truth_error_deg": 0.3339350975747953
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat1_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat1_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.55910688498541,
+        "median_deg": 1.3964644706445262,
+        "p95_deg": 60.67453819786262,
+        "max_deg": 64.14927998719135,
+        "acc_at_1deg": 0.4117647058823529,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 13.416395747222092,
+        "median_deg": 1.8307599671303354,
+        "p95_deg": 72.00541160359053,
+        "max_deg": 72.00994154334455,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.80585275053044,
+          "ground_truth_error_deg": 72.00994154334455
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 4.801261493486049,
+          "ground_truth_error_deg": 3.3391735831201768
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 1.3926451990671356,
+          "ground_truth_error_deg": 4.060806546307788
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.757476426790529,
+          "ground_truth_error_deg": 0.5910699799376439
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.919747167726516,
+          "ground_truth_error_deg": 1.0514275279013696
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.2546499713456515,
+          "ground_truth_error_deg": 72.00427911865202
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.027937617205749485,
+          "ground_truth_error_deg": 4.06029046139738
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 1.3964644706445262,
+          "ground_truth_error_deg": 4.060945555118463
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 64.14927998719135,
+          "ground_truth_error_deg": 54.9709590286591
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.323043726338892,
+          "ground_truth_error_deg": 2.351746105295413
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.007342931659004409,
+          "ground_truth_error_deg": 1.3516804640296025
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9870265099059623,
+          "ground_truth_error_deg": 0.6995449499666564
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.18568852056676693,
+          "ground_truth_error_deg": 1.6894602426894443
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.13038027263043417,
+          "ground_truth_error_deg": 1.519113682494268
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 2.1244761246175794,
+          "ground_truth_error_deg": 1.8307599671303354
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.21731797054972798,
+          "ground_truth_error_deg": 0.9892661907967852
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.024225904495633714,
+          "ground_truth_error_deg": 1.4982627559345525
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat1_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat1_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 6.088954128596762,
+        "median_deg": 0.24671186571914533,
+        "p95_deg": 22.342504054519708,
+        "max_deg": 60.039456110364895,
+        "acc_at_1deg": 0.5294117647058824,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.094122350100598,
+        "median_deg": 1.5107700153494015,
+        "p95_deg": 72.00771120771053,
+        "max_deg": 72.0081888386371,
+        "acc_at_1deg": 0.29411764705882354,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.29411764705882354,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.03184791375009677,
+          "ground_truth_error_deg": 72.00759179997888
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.1544732638651145,
+          "ground_truth_error_deg": 4.062263010190358
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.790030780737205,
+          "ground_truth_error_deg": 3.3337000755154067
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.761468695663384,
+          "ground_truth_error_deg": 0.5940931517757214
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.91826604055845,
+          "ground_truth_error_deg": 1.050436369094511
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.039456110364895,
+          "ground_truth_error_deg": 72.0081888386371
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.034491756087159986,
+          "ground_truth_error_deg": 4.060765627759721
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.021264326855888013,
+          "ground_truth_error_deg": 4.0604059170625355
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.112609934250516,
+          "ground_truth_error_deg": 1.8001526080382264
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.486449294927051,
+          "ground_truth_error_deg": 0.46924634417694455
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6371916901150445,
+          "ground_truth_error_deg": 0.5824047027233675
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9873328025595474,
+          "ground_truth_error_deg": 0.7014359302855186
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.049992667393791,
+          "ground_truth_error_deg": 1.690312163208025
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.019175705170692125,
+          "ground_truth_error_deg": 1.5107700153494015
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.19038670004462147,
+          "ground_truth_error_deg": 1.1727890496643014
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.24671186571914533,
+          "ground_truth_error_deg": 0.9973079000949693
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.03107063808236777,
+          "ground_truth_error_deg": 1.4982164481551716
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat2_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat2_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 12.489820398133798,
+        "median_deg": 0.1707542561728546,
+        "p95_deg": 61.05852379437499,
+        "max_deg": 64.15311394740476,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "versus_ground_truth": {
+        "mean_deg": 13.558905897342731,
+        "median_deg": 2.2942328278290116,
+        "p95_deg": 72.0063268364204,
+        "max_deg": 72.00785483173732,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.11764705882352938,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.14262746871004,
+          "ground_truth_error_deg": 72.00785483173732
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.0632293198933508,
+          "ground_truth_error_deg": 4.060444366456756
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.04026327242440081,
+          "ground_truth_error_deg": 4.060861796154304
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 64.15311394740476,
+          "ground_truth_error_deg": 54.97375662945792
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.921735077384593,
+          "ground_truth_error_deg": 1.0553887762672123
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.28487625611755,
+          "ground_truth_error_deg": 72.00594483759117
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.03950044413511853,
+          "ground_truth_error_deg": 4.060307761274658
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.040914943042201335,
+          "ground_truth_error_deg": 4.060601605910697
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.116054286953585,
+          "ground_truth_error_deg": 1.7977161954059981
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4863894426863498,
+          "ground_truth_error_deg": 0.46886924869745034
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.07806605498140883,
+          "ground_truth_error_deg": 1.3500759404960567
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.16625943035763208,
+          "ground_truth_error_deg": 2.2942328278290116
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.08126365997528079,
+          "ground_truth_error_deg": 1.692892347919908
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 2.25181085459737,
+          "ground_truth_error_deg": 2.969461402121856
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.06641898315593862,
+          "ground_truth_error_deg": 1.1551025288219667
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.1707542561728546,
+          "ground_truth_error_deg": 0.9782010074716357
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.2236690702821572,
+          "ground_truth_error_deg": 1.5096881512125129
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat2_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat2_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.11543946164477,
+        "median_deg": 0.059482697081763604,
+        "p95_deg": 60.002243918806165,
+        "max_deg": 60.185692636605715,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.274772621982137,
+        "median_deg": 1.6863633072387914,
+        "p95_deg": 72.00738630799033,
+        "max_deg": 72.00783721502363,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.23529411764705882,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.185692636605715,
+          "ground_truth_error_deg": 72.00727358123201
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.05166496127194292,
+          "ground_truth_error_deg": 4.060360157488453
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.007671285018687451,
+          "ground_truth_error_deg": 4.060445921943355
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.760742432360212,
+          "ground_truth_error_deg": 0.5934029229909946
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.921160064397695,
+          "ground_truth_error_deg": 1.0539906623892985
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.95638173935628,
+          "ground_truth_error_deg": 72.00783721502363
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.028432304371240547,
+          "ground_truth_error_deg": 4.060290527568203
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.009095508202050124,
+          "ground_truth_error_deg": 4.060332392032419
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.126006327618478,
+          "ground_truth_error_deg": 1.7955214749058461
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.494868812033458,
+          "ground_truth_error_deg": 0.5146054832738572
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.013213694306772283,
+          "ground_truth_error_deg": 1.3508011021207413
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.1685452266354614,
+          "ground_truth_error_deg": 2.2943773040091284
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.028917845046758667,
+          "ground_truth_error_deg": 1.6863633072387914
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.12763534677366886,
+          "ground_truth_error_deg": 1.513960078038355
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.022949303251485004,
+          "ground_truth_error_deg": 1.1541047538017901
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 1.0663629423853027e-05,
+          "ground_truth_error_deg": 0.956112323679345
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.059482697081763604,
+          "ground_truth_error_deg": 1.5013553659601258
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat3_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat3_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 12.756583786162961,
+        "median_deg": 2.259327198125375,
+        "p95_deg": 59.776272802803305,
+        "max_deg": 60.04423593577436,
+        "acc_at_1deg": 0.4117647058823529,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "versus_ground_truth": {
+        "mean_deg": 13.870450865105978,
+        "median_deg": 2.9725011725651163,
+        "p95_deg": 72.00468605039583,
+        "max_deg": 72.00659915768728,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.04423593577436,
+          "ground_truth_error_deg": 72.00659915768728
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.009277865398093608,
+          "ground_truth_error_deg": 4.060332989603501
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.794543471474578,
+          "ground_truth_error_deg": 3.334399854672157
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 32.684845623528055,
+          "ground_truth_error_deg": 31.247013477896136
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.919758315234803,
+          "ground_truth_error_deg": 1.0514422354386161
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.70928201956054,
+          "ground_truth_error_deg": 72.00420777357297
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.01056630521347326,
+          "ground_truth_error_deg": 4.060470142439064
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 3.962091952351477,
+          "ground_truth_error_deg": 3.3821474534203553
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 35.72892424255738,
+          "ground_truth_error_deg": 33.40226451184022
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.488487237160986,
+          "ground_truth_error_deg": 0.48103569220369974
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.03007481357083201,
+          "ground_truth_error_deg": 1.3530158873684393
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.3629606573666243,
+          "ground_truth_error_deg": 2.314906000416381
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.1336349350788249,
+          "ground_truth_error_deg": 1.6868177318214936
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 2.259327198125375,
+          "ground_truth_error_deg": 2.9725011725651163
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.0643489219105183,
+          "ground_truth_error_deg": 1.1550179364839943
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.09683345530813943,
+          "ground_truth_error_deg": 0.9569903057731176
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 1.5627314151562997,
+          "ground_truth_error_deg": 0.3285023835990372
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat3_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat3_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.379616146971888,
+        "median_deg": 1.9983777535135205,
+        "p95_deg": 60.00259508886642,
+        "max_deg": 60.00401702042925,
+        "acc_at_1deg": 0.35294117647058826,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.876462704922234,
+        "median_deg": 1.7969137990546948,
+        "p95_deg": 72.00722706564467,
+        "max_deg": 72.00767444347547,
+        "acc_at_1deg": 0.23529411764705882,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.00401702042925,
+          "ground_truth_error_deg": 72.00711522118698
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.058128579377556486,
+          "ground_truth_error_deg": 4.060403166119901
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.794073800629365,
+          "ground_truth_error_deg": 3.3341602582120853
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.117022699593225,
+          "ground_truth_error_deg": 1.7969137990546948
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.919056415957014,
+          "ground_truth_error_deg": 1.050714340122941
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.00223960597571,
+          "ground_truth_error_deg": 72.00767444347547
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.005516513581832858,
+          "ground_truth_error_deg": 4.060350706361795
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 1.3946000662774658,
+          "ground_truth_error_deg": 4.060558802031694
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 2.631199749297877,
+          "ground_truth_error_deg": 12.443955765507422
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4923822655219383,
+          "ground_truth_error_deg": 0.5018914917530704
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6362236421171445,
+          "ground_truth_error_deg": 0.5851982759144995
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9983777535135205,
+          "ground_truth_error_deg": 0.7203272409371285
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.0013246165363961099,
+          "ground_truth_error_deg": 1.6873256643775036
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 2.2586452904497887,
+          "ground_truth_error_deg": 2.972142370263538
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.031411634776195345,
+          "ground_truth_error_deg": 1.1541707355796125
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.037050891537095926,
+          "ground_truth_error_deg": 0.9583670153707803
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.07220395295070872,
+          "ground_truth_error_deg": 1.4985966874088688
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat4_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat4_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 11.122125828072662,
+        "median_deg": 0.139001809127788,
+        "p95_deg": 59.74266698572073,
+        "max_deg": 59.871345047102594,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.6470588235294118,
+        "catastrophic_gt_5deg": 6
+      },
+      "versus_ground_truth": {
+        "mean_deg": 12.283709222611533,
+        "median_deg": 1.7979768130730667,
+        "p95_deg": 72.00523608606642,
+        "max_deg": 72.00904732820429,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.710497470375266,
+          "ground_truth_error_deg": 72.00428327553195
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.007620712312330146,
+          "ground_truth_error_deg": 4.060340911623711
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.10570903460328739,
+          "ground_truth_error_deg": 4.0610362186753655
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.11500245203582,
+          "ground_truth_error_deg": 1.7979768130730667
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 14.981110624127833,
+          "ground_truth_error_deg": 1.7636710193439236
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.871345047102594,
+          "ground_truth_error_deg": 72.00904732820429
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 5.639678001279803,
+          "ground_truth_error_deg": 4.667532949459101
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.050110039671472074,
+          "ground_truth_error_deg": 4.060494813837824
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 36.28691868278934,
+          "ground_truth_error_deg": 33.40173494377856
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4865166830976912,
+          "ground_truth_error_deg": 0.46966550159512876
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.06691574984769226,
+          "ground_truth_error_deg": 1.3499788972662083
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.0342196190263926,
+          "ground_truth_error_deg": 2.290415776475233
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.04063509378823775,
+          "ground_truth_error_deg": 1.6860910705781065
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.139001809127788,
+          "ground_truth_error_deg": 1.5200419021862799
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.0324046015265023,
+          "ground_truth_error_deg": 1.1552029638227845
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.12634261426689136,
+          "ground_truth_error_deg": 0.9696150145588242
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.3821108422563182,
+          "ground_truth_error_deg": 1.5559273843856691
+        }
+      ]
+    },
+    {
+      "label": "counted_dose10000_repeat4_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose10000_repeat4_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 12.282442768813286,
+        "median_deg": 0.19166448651176993,
+        "p95_deg": 60.94768782958721,
+        "max_deg": 64.15975457745677,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 14.167669809545366,
+        "median_deg": 2.369242222316892,
+        "p95_deg": 72.00710495557516,
+        "max_deg": 72.00782674339615,
+        "acc_at_1deg": 0.058823529411764705,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.14467114261982,
+          "ground_truth_error_deg": 72.00782674339615
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.00039220469357341084,
+          "ground_truth_error_deg": 4.060388754801355
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.21822279249422408,
+          "ground_truth_error_deg": 4.064748229216446
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 64.15975457745677,
+          "ground_truth_error_deg": 54.97907198654633
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.91869094189372,
+          "ground_truth_error_deg": 1.050508242863529
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.975036100663765,
+          "ground_truth_error_deg": 72.0069245086199
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 4.791648890462195,
+          "ground_truth_error_deg": 3.33335670718256
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.02292880620694546,
+          "ground_truth_error_deg": 4.060313101875938
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 2.6273874950352267,
+          "ground_truth_error_deg": 12.422785449575654
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.332987259961289,
+          "ground_truth_error_deg": 2.369242222316892
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.05258921953178052,
+          "ground_truth_error_deg": 1.3499893852862
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.028856891048915957,
+          "ground_truth_error_deg": 2.290289572470776
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.0027673600036104543,
+          "ground_truth_error_deg": 1.687264180568138
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.1154337661758708,
+          "ground_truth_error_deg": 1.5176192072548176
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.13143130570281578,
+          "ground_truth_error_deg": 1.1637517775126827
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.19166448651176993,
+          "ground_truth_error_deg": 0.9829125933109318
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.08706382936359505,
+          "ground_truth_error_deg": 1.503394099472936
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat0_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat0_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 8.44859862247382,
+        "median_deg": 0.16117737232042806,
+        "p95_deg": 59.82695419269783,
+        "max_deg": 59.851452336351144,
+        "acc_at_1deg": 0.5294117647058824,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 11.57441207530085,
+        "median_deg": 2.349044289161592,
+        "p95_deg": 72.00549168742288,
+        "max_deg": 72.00583488676997,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.851452336351144,
+          "ground_truth_error_deg": 72.00583488676997
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.13381545784578186,
+          "ground_truth_error_deg": 4.063506994769401
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.06605487889180796,
+          "ground_truth_error_deg": 4.060469940662508
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0271362739964123,
+          "ground_truth_error_deg": 11.138770512134856
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 2.0304318650424804,
+          "ground_truth_error_deg": 11.95710952264576
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.820829656784504,
+          "ground_truth_error_deg": 72.00540588758611
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.03271878446587801,
+          "ground_truth_error_deg": 4.060293623640927
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 3.962130852290063,
+          "ground_truth_error_deg": 3.382073552983148
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.746214308926454,
+          "ground_truth_error_deg": 0.5949261953987024
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.323823325208504,
+          "ground_truth_error_deg": 2.349044289161592
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.06919470459695952,
+          "ground_truth_error_deg": 1.3562032858945068
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.06721377766598084,
+          "ground_truth_error_deg": 2.291468217556027
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.04473057125036021,
+          "ground_truth_error_deg": 1.6860151105176395
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.16117737232042806,
+          "ground_truth_error_deg": 1.5226510526477932
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 2.1255617557816273,
+          "ground_truth_error_deg": 1.8320150051150077
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.011703709906671187,
+          "ground_truth_error_deg": 0.9566697803256496
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.15198695072986332,
+          "ground_truth_error_deg": 1.502547422304862
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat0_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat0_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 4.572478132628829,
+        "median_deg": 0.04479232287253264,
+        "p95_deg": 15.829600666067599,
+        "max_deg": 59.98964152092971,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.9411764705882353,
+        "catastrophic_gt_5deg": 1
+      },
+      "versus_ground_truth": {
+        "mean_deg": 12.322929154243353,
+        "median_deg": 4.060292595198683,
+        "p95_deg": 72.00692684403181,
+        "max_deg": 72.00703256180974,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.35294117647058826,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.0,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.98964152092971,
+          "ground_truth_error_deg": 72.00703256180974
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 4.789590452352119,
+          "ground_truth_error_deg": 3.3341813061735865
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.02159230712603084,
+          "ground_truth_error_deg": 4.060295299160432
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0222780494507404,
+          "ground_truth_error_deg": 11.14304288385788
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 0.02617372451491624,
+          "ground_truth_error_deg": 13.807525832170493
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 3.172904520124996,
+          "ground_truth_error_deg": 72.00690041458734
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.023467580291163682,
+          "ground_truth_error_deg": 4.060292595198683
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.04150693246969372,
+          "ground_truth_error_deg": 4.060608975986989
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 2.0232761862282937,
+          "ground_truth_error_deg": 11.142661064389886
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4874976214924245,
+          "ground_truth_error_deg": 0.47545776968601366
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.028847049278202676,
+          "ground_truth_error_deg": 1.3529340371056822
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.018220510420862653,
+          "ground_truth_error_deg": 2.289720460472825
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 2.938907831033041,
+          "ground_truth_error_deg": 4.6247975933006735
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.03321321172618806,
+          "ground_truth_error_deg": 1.5120156973259098
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.02216205120939356,
+          "ground_truth_error_deg": 1.1547997979417273
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.048056383169783765,
+          "ground_truth_error_deg": 0.959311544518712
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.04479232287253264,
+          "ground_truth_error_deg": 1.498217788450435
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat1_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat1_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 6.215171296821997,
+        "median_deg": 2.2606773874389603,
+        "p95_deg": 22.347712926343515,
+        "max_deg": 60.06337802917403,
+        "acc_at_1deg": 0.4117647058823529,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.902593357342205,
+        "median_deg": 2.4204857507914794,
+        "p95_deg": 72.00678658806633,
+        "max_deg": 72.00818109386593,
+        "acc_at_1deg": 0.058823529411764705,
+        "acc_at_2deg": 0.35294117647058826,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.0,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.07467269656286839,
+          "ground_truth_error_deg": 72.00818109386593
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.03232052779626891,
+          "ground_truth_error_deg": 4.060736345636008
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.03066920628184433,
+          "ground_truth_error_deg": 4.060291416201811
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 7.717941222191727,
+          "ground_truth_error_deg": 2.1104524269862917
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.918796650635928,
+          "ground_truth_error_deg": 1.050554739609069
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.06337802917403,
+          "ground_truth_error_deg": 72.00643796161644
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 2.8702025242499802,
+          "ground_truth_error_deg": 2.4204857507914794
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 3.9620224945637528,
+          "ground_truth_error_deg": 3.3823245028045865
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 7.189617819668096,
+          "ground_truth_error_deg": 9.858302902086562
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.327907309363128,
+          "ground_truth_error_deg": 2.3607371486649344
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.05557687857723831,
+          "ground_truth_error_deg": 1.3499746516027746
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9869465541252782,
+          "ground_truth_error_deg": 0.6982247338584888
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.05388809554182161,
+          "ground_truth_error_deg": 1.6906022552257916
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 2.2606773874389603,
+          "ground_truth_error_deg": 2.9813037568280545
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.052907900597891105,
+          "ground_truth_error_deg": 1.1562822064568445
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 2.8404546988689545,
+          "ground_truth_error_deg": 2.6289906553710707
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.21993205033616708,
+          "ground_truth_error_deg": 1.5202045272113167
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat1_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat1_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 8.685620130155899,
+        "median_deg": 0.07425996769301936,
+        "p95_deg": 59.97745422455167,
+        "max_deg": 59.97973091348499,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.82303084601915,
+        "median_deg": 1.6899245408891461,
+        "p95_deg": 72.00739201084077,
+        "max_deg": 72.00747433243843,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.97688505231834,
+          "ground_truth_error_deg": 72.00747433243843
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.00692626584859492,
+          "ground_truth_error_deg": 4.060344432434597
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.019992365453741806,
+          "ground_truth_error_deg": 4.060298086290992
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.747189025005351,
+          "ground_truth_error_deg": 0.5930669149374902
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.920010047992823,
+          "ground_truth_error_deg": 1.0517995754047869
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.97973091348499,
+          "ground_truth_error_deg": 72.00737143044137
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.030404258805230393,
+          "ground_truth_error_deg": 4.060291390076814
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.01791406223303121,
+          "ground_truth_error_deg": 4.060382037995932
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 2.0161329376327575,
+          "ground_truth_error_deg": 11.152978357168495
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.486044074027006,
+          "ground_truth_error_deg": 0.46631423343355527
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.07425996769301936,
+          "ground_truth_error_deg": 1.3566979260858558
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.11643398466512057,
+          "ground_truth_error_deg": 2.2916477948221954
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.044589060476173864,
+          "ground_truth_error_deg": 1.6899245408891461
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.010236227132566358,
+          "ground_truth_error_deg": 1.5112459264560347
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.10061540802545117,
+          "ground_truth_error_deg": 1.1601927470725268
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.066717560767525,
+          "ground_truth_error_deg": 0.9611990071004675
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.04146100108856953,
+          "ground_truth_error_deg": 1.500295649276856
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat2_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat2_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.616129967459111,
+        "median_deg": 0.2193662399830982,
+        "p95_deg": 59.93431950510044,
+        "max_deg": 60.23491145031853,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 11.467736466679526,
+        "median_deg": 2.2934307214623844,
+        "p95_deg": 72.00467307588161,
+        "max_deg": 72.00543908605782,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.85917151879592,
+          "ground_truth_error_deg": 72.00543908605782
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.14972092210653956,
+          "ground_truth_error_deg": 4.064170655643945
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.795275249454386,
+          "ground_truth_error_deg": 3.334809066027088
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 0.1360094407638435,
+          "ground_truth_error_deg": 9.801313355458221
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 20.51021370952881,
+          "ground_truth_error_deg": 11.953454230789658
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.23491145031853,
+          "ground_truth_error_deg": 72.00448157333756
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.029375947500770314,
+          "ground_truth_error_deg": 4.0602908208624955
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.01810270964928865,
+          "ground_truth_error_deg": 4.060299851743326
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.753290793881987,
+          "ground_truth_error_deg": 0.5901351239890856
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.698331630384261,
+          "ground_truth_error_deg": 1.6219348308137274
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 3.5670450071386695,
+          "ground_truth_error_deg": 2.2871156878075296
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.10810762873982833,
+          "ground_truth_error_deg": 2.2934307214623844
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.019019082657711614,
+          "ground_truth_error_deg": 1.688323646842109
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.2861491104958247,
+          "ground_truth_error_deg": 1.543241476404877
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.020245992712402863,
+          "ground_truth_error_deg": 1.1547344498089764
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.2193662399830982,
+          "ground_truth_error_deg": 0.9898003898125718
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.06987301269299832,
+          "ground_truth_error_deg": 1.4985449666905606
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat2_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat2_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 5.184224919581177,
+        "median_deg": 0.048037669078426846,
+        "p95_deg": 22.32784081424358,
+        "max_deg": 59.97632975687993,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.7647058823529411,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.947456756306096,
+        "median_deg": 2.290218726172007,
+        "p95_deg": 72.00710074074651,
+        "max_deg": 72.0074817744808,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.97632975687993,
+          "ground_truth_error_deg": 72.0074817744808
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.012611728166177633,
+          "ground_truth_error_deg": 4.060319100191331
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.032499153484121635,
+          "ground_truth_error_deg": 4.060293090171436
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.027016980695818,
+          "ground_truth_error_deg": 11.138861862000006
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.915718578584531,
+          "ground_truth_error_deg": 1.0553297042155403
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.018703396212289964,
+          "ground_truth_error_deg": 72.00700548231293
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.02220689347959738,
+          "ground_truth_error_deg": 4.060596308094689
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.034701065861984653,
+          "ground_truth_error_deg": 4.060369474509445
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.75192645593796,
+          "ground_truth_error_deg": 0.5904708877790518
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.048037669078426846,
+          "ground_truth_error_deg": 2.204902426430809
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6437529816580685,
+          "ground_truth_error_deg": 0.5892606544093987
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.07032256480032316,
+          "ground_truth_error_deg": 2.290218726172007
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 1.3967710288235426,
+          "ground_truth_error_deg": 2.8537510709644587
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.10059184441438904,
+          "ground_truth_error_deg": 1.5162795203638963
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.03568148508104346,
+          "ground_truth_error_deg": 1.1542275762789707
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.039605840220121445,
+          "ground_truth_error_deg": 0.9585751112601675
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.005346209501694041,
+          "ground_truth_error_deg": 1.498822087568681
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat3_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat3_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 11.363324743129086,
+        "median_deg": 0.1311340693662041,
+        "p95_deg": 61.17033353134071,
+        "max_deg": 64.16725322693372,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.7058823529411765,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 14.91467592750941,
+        "median_deg": 4.060530891999122,
+        "p95_deg": 72.00538011404076,
+        "max_deg": 72.00919545590283,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.35294117647058826,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.0,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.102796956657166,
+          "ground_truth_error_deg": 72.00919545590283
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.04826793180479065,
+          "ground_truth_error_deg": 4.061003912278267
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.09170833078529149,
+          "ground_truth_error_deg": 4.060792086822226
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.6290412387374706,
+          "ground_truth_error_deg": 12.439542107235036
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 0.1392650698832006,
+          "ground_truth_error_deg": 13.811857816951408
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.42110360744246,
+          "ground_truth_error_deg": 72.00442627857525
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.1311340693662041,
+          "ground_truth_error_deg": 4.06339238947562
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.053560722633593426,
+          "ground_truth_error_deg": 4.060530891999122
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 64.16725322693372,
+          "ground_truth_error_deg": 54.98550585008072
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.322386394738102,
+          "ground_truth_error_deg": 2.3502459112570886
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6365995035303103,
+          "ground_truth_error_deg": 0.5831380998856892
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.056066972357537534,
+          "ground_truth_error_deg": 2.2910595732478862
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.11880544627314797,
+          "ground_truth_error_deg": 1.686358234254097
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.045333500917002285,
+          "ground_truth_error_deg": 1.5125622083722932
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.005487653475047525,
+          "ground_truth_error_deg": 1.154164706641252
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.15392469738327222,
+          "ground_truth_error_deg": 0.9747182055287101
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.053785310276130635,
+          "ground_truth_error_deg": 1.5009970391525087
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat3_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat3_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 7.749817073147874,
+        "median_deg": 0.08715755359297732,
+        "p95_deg": 59.92404648091173,
+        "max_deg": 59.974517022277425,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "versus_ground_truth": {
+        "mean_deg": 12.25682372085186,
+        "median_deg": 4.060369201503784,
+        "p95_deg": 72.00663770500691,
+        "max_deg": 72.00691781595972,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.35294117647058826,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.0,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.911428845570306,
+          "ground_truth_error_deg": 72.0065676772687
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.002574043863992301,
+          "ground_truth_error_deg": 4.060369201503784
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.016790738383348856,
+          "ground_truth_error_deg": 4.060535943523372
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0255155626684336,
+          "ground_truth_error_deg": 11.140061082512176
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 2.0414812324494385,
+          "ground_truth_error_deg": 11.961313173266229
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.974517022277425,
+          "ground_truth_error_deg": 72.00691781595972
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.006943326557241074,
+          "ground_truth_error_deg": 4.060437680966991
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.009995868249486718,
+          "ground_truth_error_deg": 4.060290499843897
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 2.027489552136175,
+          "ground_truth_error_deg": 11.139084835803533
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.486105642966838,
+          "ground_truth_error_deg": 0.46694486509013217
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.08715755359297732,
+          "ground_truth_error_deg": 1.3580419028531683
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.009418224887770823,
+          "ground_truth_error_deg": 2.2897533230390605
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 2.9393561000839874,
+          "ground_truth_error_deg": 4.6244117385988845
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.03779227932265689,
+          "ground_truth_error_deg": 1.512210776482274
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.1116190556680589,
+          "ground_truth_error_deg": 1.1613709961008758
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.04744296720196774,
+          "ground_truth_error_deg": 0.9592556008929372
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.011262227633748187,
+          "ground_truth_error_deg": 1.4984361407758704
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat4_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat4_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.813106125403676,
+        "median_deg": 0.22657114053603386,
+        "p95_deg": 59.766668163651,
+        "max_deg": 59.922420816370646,
+        "acc_at_1deg": 0.5294117647058824,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "versus_ground_truth": {
+        "mean_deg": 11.790701772990305,
+        "median_deg": 3.335020997372368,
+        "p95_deg": 72.00482061816594,
+        "max_deg": 72.00626257827423,
+        "acc_at_1deg": 0.058823529411764705,
+        "acc_at_2deg": 0.35294117647058826,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.0,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.727730000471084,
+          "ground_truth_error_deg": 72.00446012813886
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.06293314057059476,
+          "ground_truth_error_deg": 4.061305198298286
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.08546699535761133,
+          "ground_truth_error_deg": 4.061871253836656
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.634675191557607,
+          "ground_truth_error_deg": 12.412880592694899
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 20.479187171566267,
+          "ground_truth_error_deg": 11.944064653468509
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.922420816370646,
+          "ground_truth_error_deg": 72.00626257827423
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.025919200388109378,
+          "ground_truth_error_deg": 4.060290815792556
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 4.794699663392964,
+          "ground_truth_error_deg": 3.335020997372368
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.738803616003127,
+          "ground_truth_error_deg": 0.6089133983775383
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 6.004755696309388,
+          "ground_truth_error_deg": 3.8065504507974817
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.0725155648591113,
+          "ground_truth_error_deg": 1.3565254644668694
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.15316088337402142,
+          "ground_truth_error_deg": 2.2964340251991646
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.22657114053603386,
+          "ground_truth_error_deg": 1.692655395957734
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.00189075995409056,
+          "ground_truth_error_deg": 1.5110527346171745
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.0297508332974902,
+          "ground_truth_error_deg": 1.155089802943291
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 2.840645464797588,
+          "ground_truth_error_deg": 2.6291717432633823
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.0216779930567576,
+          "ground_truth_error_deg": 1.499380907336155
+        }
+      ]
+    },
+    {
+      "label": "counted_dose100000_repeat4_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose100000_repeat4_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 2.9177209194586267,
+        "median_deg": 0.05569924863579006,
+        "p95_deg": 16.195472828891806,
+        "max_deg": 29.303299654605837,
+        "acc_at_1deg": 0.7647058823529411,
+        "acc_at_2deg": 0.7647058823529411,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "versus_ground_truth": {
+        "mean_deg": 12.541149417038621,
+        "median_deg": 2.289773343241718,
+        "p95_deg": 72.00667058728814,
+        "max_deg": 72.00772282675456,
+        "acc_at_1deg": 0.058823529411764705,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.04150959890723356,
+          "ground_truth_error_deg": 72.00772282675456
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.011605417832646528,
+          "ground_truth_error_deg": 4.060482241138281
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.7901453694638985,
+          "ground_truth_error_deg": 3.3336214024866977
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.039085553294001,
+          "ground_truth_error_deg": 11.131518712048646
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.918516122463313,
+          "ground_truth_error_deg": 1.0504558333427942
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.06582835131620848,
+          "ground_truth_error_deg": 72.00640752742153
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.02920221114480438,
+          "ground_truth_error_deg": 4.060688169724639
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.04403270221644533,
+          "ground_truth_error_deg": 4.060641390087927
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 29.303299654605837,
+          "ground_truth_error_deg": 28.82952758943495
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.09411408717806966,
+          "ground_truth_error_deg": 2.206375245034574
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.04253901630598615,
+          "ground_truth_error_deg": 1.3500874731148793
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.006262554533152598,
+          "ground_truth_error_deg": 2.289773343241718
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.05569924863579006,
+          "ground_truth_error_deg": 1.6858606572424946
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.07136690260326363,
+          "ground_truth_error_deg": 1.5140634341861923
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.029992848978782155,
+          "ground_truth_error_deg": 1.1550998706893882
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.0015480816242996996,
+          "ground_truth_error_deg": 0.9560487883984836
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.05650790969292567,
+          "ground_truth_error_deg": 1.5011655853087582
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat0_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat0_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 5.388802493571367,
+        "median_deg": 0.10689075769674483,
+        "p95_deg": 22.318237237299776,
+        "max_deg": 59.91638274738382,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.899729358846015,
+        "median_deg": 1.688072412164611,
+        "p95_deg": 72.00654143077506,
+        "max_deg": 72.0079521849359,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 3.1707087598759935,
+          "ground_truth_error_deg": 72.0079521849359
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.04120532042666818,
+          "ground_truth_error_deg": 4.0608776945719445
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.0031223262159616794,
+          "ground_truth_error_deg": 4.060408670009343
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.640428839568041,
+          "ground_truth_error_deg": 12.454474045545085
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.918700859778804,
+          "ground_truth_error_deg": 1.0505121382708287
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.91638274738382,
+          "ground_truth_error_deg": 72.00618874223484
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.10689075769674483,
+          "ground_truth_error_deg": 4.062517683428953
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.032199948498880485,
+          "ground_truth_error_deg": 4.0603546434802436
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.74792771002158,
+          "ground_truth_error_deg": 0.5930509689873934
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.486202550694987,
+          "ground_truth_error_deg": 0.46666715705525963
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.02767603118971729,
+          "ground_truth_error_deg": 1.350369625029707
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.16903069382358743,
+          "ground_truth_error_deg": 2.297701364660802
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.014339213650823263,
+          "ground_truth_error_deg": 1.688072412164611
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.08393476501650506,
+          "ground_truth_error_deg": 1.5117398798960342
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.11287602017979109,
+          "ground_truth_error_deg": 1.1615121472190009
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.03551890145651628,
+          "ground_truth_error_deg": 0.9582454828294267
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.10249694523481262,
+          "ground_truth_error_deg": 1.5047542600628585
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat0_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat0_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 8.528812400368974,
+        "median_deg": 0.02884660659121432,
+        "p95_deg": 59.98741844641439,
+        "max_deg": 59.987877362533816,
+        "acc_at_1deg": 0.7058823529411765,
+        "acc_at_2deg": 0.7058823529411765,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.924073378020173,
+        "median_deg": 2.2060068595963473,
+        "p95_deg": 72.00702444604536,
+        "max_deg": 72.00708362108942,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.11764705882352938,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.987877362533816,
+          "ground_truth_error_deg": 72.00700965228435
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.022940066099946258,
+          "ground_truth_error_deg": 4.06060819433916
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.003520775361563232,
+          "ground_truth_error_deg": 4.060363420038967
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0180665554907358,
+          "ground_truth_error_deg": 11.148393176217665
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.917441604268646,
+          "ground_truth_error_deg": 1.050890888324499
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.987303717384535,
+          "ground_truth_error_deg": 72.00708362108942
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.023229821742104705,
+          "ground_truth_error_deg": 4.060608989237473
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.00927869824421382,
+          "ground_truth_error_deg": 4.0603332286273455
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.749323395553567,
+          "ground_truth_error_deg": 0.591871556228741
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.08497934115696841,
+          "ground_truth_error_deg": 2.2060068595963473
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.034559361371083265,
+          "ground_truth_error_deg": 1.3533242767597895
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.10614898287149302,
+          "ground_truth_error_deg": 2.2933201396196643
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.008101425250067388,
+          "ground_truth_error_deg": 1.6877576577688163
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.0015694867784684552,
+          "ground_truth_error_deg": 1.5109861422142763
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.003575099437269337,
+          "ground_truth_error_deg": 1.154187324658777
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.02884660659121432,
+          "ground_truth_error_deg": 0.9577445688922689
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.0030485061368590266,
+          "ground_truth_error_deg": 1.4987577304453754
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat1_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat1_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 6.220604353858343,
+        "median_deg": 0.1476558479204765,
+        "p95_deg": 22.294914018401798,
+        "max_deg": 59.80414326015988,
+        "acc_at_1deg": 0.5294117647058824,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.083909245396478,
+        "median_deg": 1.6118202068727148,
+        "p95_deg": 72.00531646572767,
+        "max_deg": 72.00543259543137,
+        "acc_at_1deg": 0.23529411764705882,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.23529411764705882,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 59.80414326015988,
+          "ground_truth_error_deg": 72.00528743330175
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 2.8709376842745127,
+          "ground_truth_error_deg": 2.422763644937607
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.790157955427089,
+          "ground_truth_error_deg": 3.3336135866825023
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.748354487573952,
+          "ground_truth_error_deg": 0.5920519316008082
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.917606707962316,
+          "ground_truth_error_deg": 1.0507304809634161
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.1476558479204765,
+          "ground_truth_error_deg": 72.00543259543137
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.07768349886823547,
+          "ground_truth_error_deg": 4.060598685568283
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.11200780025521566,
+          "ground_truth_error_deg": 4.062103316987637
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.7564946840859,
+          "ground_truth_error_deg": 0.5903635257229729
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.6941832477563494,
+          "ground_truth_error_deg": 1.6118202068727148
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6404923785357741,
+          "ground_truth_error_deg": 0.5845805792568225
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.01007095659263872,
+          "ground_truth_error_deg": 2.2897497247090968
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.012071462884708641,
+          "ground_truth_error_deg": 1.6868972589986202
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.019015448295405187,
+          "ground_truth_error_deg": 1.5114988632469755
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.004811887358853847,
+          "ground_truth_error_deg": 1.1541723362996401
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.08554883460106463,
+          "ground_truth_error_deg": 0.9634663866121455
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.05903787303947043,
+          "ground_truth_error_deg": 1.5013266145478021
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat1_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat1_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 8.60787989743268,
+        "median_deg": 0.02725140596938234,
+        "p95_deg": 60.051226699592576,
+        "max_deg": 60.207367156983864,
+        "acc_at_1deg": 0.7058823529411765,
+        "acc_at_2deg": 0.7058823529411765,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 11.019938524758967,
+        "median_deg": 2.2897579767668104,
+        "p95_deg": 72.00700963383744,
+        "max_deg": 72.0070902057767,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.207367156983864,
+          "ground_truth_error_deg": 72.00698949085263
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.0034201468958389657,
+          "ground_truth_error_deg": 4.06036402108379
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.03591509724189545,
+          "ground_truth_error_deg": 4.060298420722914
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.751167247497955,
+          "ground_truth_error_deg": 0.59047470528462
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.918893961779618,
+          "ground_truth_error_deg": 1.0506071020009409
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.01219158524475,
+          "ground_truth_error_deg": 72.0070902057767
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.01446996636556979,
+          "ground_truth_error_deg": 4.060508734943324
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.027147811891666193,
+          "ground_truth_error_deg": 4.060329382521254
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 0.30669427322335013,
+          "ground_truth_error_deg": 9.852339728653861
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.02725140596938234,
+          "ground_truth_error_deg": 2.204552878468623
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.03181987510567179,
+          "ground_truth_error_deg": 1.3502745191036312
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.008619921990807989,
+          "ground_truth_error_deg": 2.2897579767668104
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 2.939174797898986,
+          "ground_truth_error_deg": 4.624480896683999
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.012418159574309041,
+          "ground_truth_error_deg": 1.511304031622899
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.001043893923141865,
+          "ground_truth_error_deg": 1.1542550157631104
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.017609855201107857,
+          "ground_truth_error_deg": 0.9570055351581097
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.018753099567635892,
+          "ground_truth_error_deg": 1.49832227549518
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat2_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat2_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 6.398560641637495,
+        "median_deg": 1.6370305204936184,
+        "p95_deg": 22.316459760046783,
+        "max_deg": 59.91117946006056,
+        "acc_at_1deg": 0.47058823529411764,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.07308619177451,
+        "median_deg": 1.5112071882774016,
+        "p95_deg": 72.00670121182104,
+        "max_deg": 72.00756134571114,
+        "acc_at_1deg": 0.29411764705882354,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.23529411764705882,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 3.171377565305459,
+          "ground_truth_error_deg": 72.00756134571114
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 4.791168030936244,
+          "ground_truth_error_deg": 3.333334902090894
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.08423734493658641,
+          "ground_truth_error_deg": 4.061837144068532
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.758799491362918,
+          "ground_truth_error_deg": 0.5918594147393403
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.917779835043378,
+          "ground_truth_error_deg": 1.050601366587687
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.91117946006056,
+          "ground_truth_error_deg": 72.00648617834851
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.021678283039578927,
+          "ground_truth_error_deg": 4.060589855894827
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 3.9620507136023884,
+          "ground_truth_error_deg": 3.3822433580868845
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.747011802383655,
+          "ground_truth_error_deg": 0.5939937485527766
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4860942015263614,
+          "ground_truth_error_deg": 0.46630377159113845
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 1.6370305204936184,
+          "ground_truth_error_deg": 0.5825091488245709
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.061644572588491216,
+          "ground_truth_error_deg": 2.290053480020388
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.04453960483279163,
+          "ground_truth_error_deg": 1.6860184314004485
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.008711381162940766,
+          "ground_truth_error_deg": 1.5112071882774016
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.08411287447455408,
+          "ground_truth_error_deg": 1.1586193407172045
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.03908395282165606,
+          "ground_truth_error_deg": 0.9585320547053763
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.04903127326622769,
+          "ground_truth_error_deg": 1.5007145305495493
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat2_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat2_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 1.6462607418674846,
+        "median_deg": 0.01977690369417311,
+        "p95_deg": 10.380747023567649,
+        "max_deg": 12.919190784888038,
+        "acc_at_1deg": 0.7647058823529411,
+        "acc_at_2deg": 0.7647058823529411,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "versus_ground_truth": {
+        "mean_deg": 11.09605989942075,
+        "median_deg": 2.2899451920169445,
+        "p95_deg": 72.00695658698079,
+        "max_deg": 72.00714019053952,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.4117647058823529,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.05882352941176466,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.01977690369417311,
+          "ground_truth_error_deg": 72.00691068609112
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.029663207727168447,
+          "ground_truth_error_deg": 4.060697844143722
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.018116399932989736,
+          "ground_truth_error_deg": 4.060550733776724
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.031473081053165,
+          "ground_truth_error_deg": 11.135763543889118
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.919190784888038,
+          "ground_truth_error_deg": 1.0508211942870518
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 0.008368012303994152,
+          "ground_truth_error_deg": 72.00714019053952
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.003572112210314843,
+          "ground_truth_error_deg": 4.060361762443557
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.01445620201193035,
+          "ground_truth_error_deg": 4.060293643152372
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.746136083237554,
+          "ground_truth_error_deg": 0.5950233276733331
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.04173880152979457,
+          "ground_truth_error_deg": 2.204797191257012
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.09016605690806029,
+          "ground_truth_error_deg": 1.3502854142389287
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.009981272102778263,
+          "ground_truth_error_deg": 2.2899451920169445
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 2.9392075555347,
+          "ground_truth_error_deg": 4.624464817522309
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.015624049190419844,
+          "ground_truth_error_deg": 1.511395114718636
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.09598494240103743,
+          "ground_truth_error_deg": 1.159727778682022
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.00040653792864943095,
+          "ground_truth_error_deg": 0.9560950686959698
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.0025706090924699975,
+          "ground_truth_error_deg": 1.498744787024416
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat3_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat3_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.414826705489794,
+        "median_deg": 1.9872588816792542,
+        "p95_deg": 60.029243801508606,
+        "max_deg": 60.03971046941689,
+        "acc_at_1deg": 0.4117647058823529,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.761923873144417,
+        "median_deg": 1.6869240465170132,
+        "p95_deg": 72.00776060166514,
+        "max_deg": 72.00800963646722,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.03971046941689,
+          "ground_truth_error_deg": 72.00769834296462
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.006715725761865982,
+          "ground_truth_error_deg": 4.060437669381133
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 4.791943533330615,
+          "ground_truth_error_deg": 3.3333996912492094
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.6262105514653125,
+          "ground_truth_error_deg": 12.43017536145781
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.917283546798549,
+          "ground_truth_error_deg": 1.0510803149907344
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 60.02662713453154,
+          "ground_truth_error_deg": 72.00800963646722
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 2.8706500922740568,
+          "ground_truth_error_deg": 2.4206560658244576
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.06845756205182663,
+          "ground_truth_error_deg": 4.060720280457645
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.759235863662335,
+          "ground_truth_error_deg": 0.5916249320649984
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 3.3224935651890166,
+          "ground_truth_error_deg": 2.3505092646094137
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.018325939495395176,
+          "ground_truth_error_deg": 1.3522781360110911
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 1.9872588816792542,
+          "ground_truth_error_deg": 0.6975924007416031
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.011345477183422796,
+          "ground_truth_error_deg": 1.6869240465170132
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.027728589725499325,
+          "ground_truth_error_deg": 1.510739058396844
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.007516140038758864,
+          "ground_truth_error_deg": 1.154380951349271
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 1.5132687281040602,
+          "ground_truth_error_deg": 0.7352652743555558
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.05728219261807661,
+          "ground_truth_error_deg": 1.501214416616439
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat3_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat3_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 5.144926031451054,
+        "median_deg": 0.03775603231756071,
+        "p95_deg": 22.329765492417266,
+        "max_deg": 59.979937991274234,
+        "acc_at_1deg": 0.7058823529411765,
+        "acc_at_2deg": 0.7058823529411765,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.821834822526371,
+        "median_deg": 1.6858320389485713,
+        "p95_deg": 72.0070272753471,
+        "max_deg": 72.00718489689962,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.5294117647058824,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.1764705882352941,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.0012998074984915892,
+          "ground_truth_error_deg": 72.00718489689962
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.004192865427341417,
+          "ground_truth_error_deg": 4.060359443935144
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.0006377123358815582,
+          "ground_truth_error_deg": 4.060390474165026
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 2.0204229782703256,
+          "ground_truth_error_deg": 11.145107162454158
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.917222367703067,
+          "ground_truth_error_deg": 1.0511634401613166
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.979937991274234,
+          "ground_truth_error_deg": 72.00698786995898
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.020299559353723788,
+          "ground_truth_error_deg": 4.060573350866812
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.006677990755738759,
+          "ground_truth_error_deg": 4.060291338314821
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.75354441732258,
+          "ground_truth_error_deg": 0.5901019033705414
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.488689140790355,
+          "ground_truth_error_deg": 0.482154602465614
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.045336231062357346,
+          "ground_truth_error_deg": 1.3500526601397111
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.060012566436137955,
+          "ground_truth_error_deg": 2.2900260753277513
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.08934643460074301,
+          "ground_truth_error_deg": 1.6858320389485713
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.026433046095831345,
+          "ground_truth_error_deg": 1.511752271588709
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.03775603231756071,
+          "ground_truth_error_deg": 1.1542608930590446
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.006483381796413793,
+          "ground_truth_error_deg": 0.9564032805135543
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.005450011627127136,
+          "ground_truth_error_deg": 1.4985502807789517
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat4_autodisk",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat4_autodisk.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 7.239353751031638,
+        "median_deg": 0.06900903564693549,
+        "p95_deg": 38.15122591958894,
+        "max_deg": 59.92536593022528,
+        "acc_at_1deg": 0.5882352941176471,
+        "acc_at_2deg": 0.5882352941176471,
+        "acc_at_5deg": 0.7647058823529411,
+        "catastrophic_gt_5deg": 4
+      },
+      "versus_ground_truth": {
+        "mean_deg": 12.142322022999759,
+        "median_deg": 2.2898708996039008,
+        "p95_deg": 72.00677458863132,
+        "max_deg": 72.00721400904064,
+        "acc_at_1deg": 0.11764705882352941,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.8235294117647058,
+        "catastrophic_gt_5deg": 3
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.11764705882352938,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 0.0035136645472489147,
+          "ground_truth_error_deg": 72.00721400904064
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.024194423296135668,
+          "ground_truth_error_deg": 4.060292111634441
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.04550711157885003,
+          "ground_truth_error_deg": 4.0603287473705985
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 32.70769091692988,
+          "ground_truth_error_deg": 31.249593159422744
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.91843666760937,
+          "ground_truth_error_deg": 1.0504424115693007
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.92536593022528,
+          "ground_truth_error_deg": 72.00666473352899
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.020439684025763988,
+          "ground_truth_error_deg": 4.060296835141765
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.012126701552592966,
+          "ground_truth_error_deg": 4.06034729753132
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.745166618137668,
+          "ground_truth_error_deg": 0.596312339841906
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 2.4864115134051685,
+          "ground_truth_error_deg": 0.4675241346369057
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.012070262863958637,
+          "ground_truth_error_deg": 1.3508418145155399
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.004206358290433749,
+          "ground_truth_error_deg": 2.2898708996039008
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 0.05346071656130201,
+          "ground_truth_error_deg": 1.6858863842944893
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.06900903564693549,
+          "ground_truth_error_deg": 1.5139090924384047
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 2.124076341896656,
+          "ground_truth_error_deg": 1.8302993487412722
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 2.838164146837576,
+          "ground_truth_error_deg": 2.626891601162099
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.07917367413304552,
+          "ground_truth_error_deg": 1.5027594705215994
+        }
+      ]
+    },
+    {
+      "label": "counted_dose1000000_repeat4_py4dstem",
+      "details_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/reports/acom_clean_details_counted_dose1000000_repeat4_py4dstem.json",
+      "versus_physical_oracle_acom": {
+        "mean_deg": 9.161314287929889,
+        "median_deg": 0.02571745346079995,
+        "p95_deg": 60.02169964299168,
+        "max_deg": 60.19002489387679,
+        "acc_at_1deg": 0.6470588235294118,
+        "acc_at_2deg": 0.6470588235294118,
+        "acc_at_5deg": 0.7058823529411765,
+        "catastrophic_gt_5deg": 5
+      },
+      "versus_ground_truth": {
+        "mean_deg": 10.47601053023683,
+        "median_deg": 2.2046088656646505,
+        "p95_deg": 72.00703025248298,
+        "max_deg": 72.00721634537808,
+        "acc_at_1deg": 0.17647058823529413,
+        "acc_at_2deg": 0.47058823529411764,
+        "acc_at_5deg": 0.8823529411764706,
+        "catastrophic_gt_5deg": 2
+      },
+      "acc_at_2deg_change_from_physical_oracle": 0.11764705882352938,
+      "new_gt_5deg_failures": [],
+      "per_sample": [
+        {
+          "sample_id": "clean_ori_000",
+          "delta_from_physical_oracle_acom_deg": 60.19002489387679,
+          "ground_truth_error_deg": 72.00721634537808
+        },
+        {
+          "sample_id": "clean_ori_001",
+          "delta_from_physical_oracle_acom_deg": 0.015339755210889332,
+          "ground_truth_error_deg": 4.060309770321307
+        },
+        {
+          "sample_id": "clean_ori_002",
+          "delta_from_physical_oracle_acom_deg": 0.01113141411686597,
+          "ground_truth_error_deg": 4.060324931985636
+        },
+        {
+          "sample_id": "clean_ori_003",
+          "delta_from_physical_oracle_acom_deg": 9.743190973093975,
+          "ground_truth_error_deg": 0.5982616273108742
+        },
+        {
+          "sample_id": "clean_ori_004",
+          "delta_from_physical_oracle_acom_deg": 12.918332481806775,
+          "ground_truth_error_deg": 1.050434966868144
+        },
+        {
+          "sample_id": "clean_ori_005",
+          "delta_from_physical_oracle_acom_deg": 59.9796183302704,
+          "ground_truth_error_deg": 72.0069837292592
+        },
+        {
+          "sample_id": "clean_ori_006",
+          "delta_from_physical_oracle_acom_deg": 0.011519135063564608,
+          "ground_truth_error_deg": 4.060322446427497
+        },
+        {
+          "sample_id": "clean_ori_007",
+          "delta_from_physical_oracle_acom_deg": 0.020466375606504966,
+          "ground_truth_error_deg": 4.060399978978499
+        },
+        {
+          "sample_id": "clean_ori_008",
+          "delta_from_physical_oracle_acom_deg": 9.74458936837636,
+          "ground_truth_error_deg": 0.5971557039913518
+        },
+        {
+          "sample_id": "clean_ori_009",
+          "delta_from_physical_oracle_acom_deg": 0.031533499804590845,
+          "ground_truth_error_deg": 2.2046088656646505
+        },
+        {
+          "sample_id": "clean_ori_010",
+          "delta_from_physical_oracle_acom_deg": 0.003928084970795244,
+          "ground_truth_error_deg": 1.351159661815528
+        },
+        {
+          "sample_id": "clean_ori_011",
+          "delta_from_physical_oracle_acom_deg": 0.06031711464889664,
+          "ground_truth_error_deg": 2.290031101077985
+        },
+        {
+          "sample_id": "clean_ori_012",
+          "delta_from_physical_oracle_acom_deg": 2.9391219053203677,
+          "ground_truth_error_deg": 4.624511608702371
+        },
+        {
+          "sample_id": "clean_ori_013",
+          "delta_from_physical_oracle_acom_deg": 0.022414455731143295,
+          "ground_truth_error_deg": 1.511610471411552
+        },
+        {
+          "sample_id": "clean_ori_014",
+          "delta_from_physical_oracle_acom_deg": 0.023058411207930233,
+          "ground_truth_error_deg": 1.1548314589169295
+        },
+        {
+          "sample_id": "clean_ori_015",
+          "delta_from_physical_oracle_acom_deg": 0.02571745346079995,
+          "ground_truth_error_deg": 0.9553885938020622
+        },
+        {
+          "sample_id": "clean_ori_016",
+          "delta_from_physical_oracle_acom_deg": 0.002039242241464286,
+          "ground_truth_error_deg": 1.4986277521144287
+        }
+      ]
+    }
+  ],
+  "dose_summary": [
+    {
+      "detector": "autodisk",
+      "dose_electrons": 10000,
+      "repeats": 5,
+      "delta_median_deg_mean": 1.1914694736088491,
+      "delta_median_deg_std": 0.9965464331997445,
+      "delta_p95_deg_mean": 60.42524884087773,
+      "delta_p95_deg_std": 0.6228694635650462,
+      "ground_truth_acc_at_2deg_mean": 0.48235294117647054,
+      "ground_truth_acc_at_2deg_std": 0.049215295678475046,
+      "ground_truth_acc_at_5deg_mean": 0.7882352941176469,
+      "ground_truth_acc_at_5deg_std": 0.05261336417646561,
+      "ground_truth_catastrophic_gt_5deg_mean": 3.6,
+      "ground_truth_catastrophic_gt_5deg_std": 0.8944271909999159
+    },
+    {
+      "detector": "autodisk",
+      "dose_electrons": 100000,
+      "repeats": 5,
+      "delta_median_deg_mean": 0.5997852419289449,
+      "delta_median_deg_std": 0.9293251430962964,
+      "delta_p95_deg_mean": 52.60919766382669,
+      "delta_p95_deg_std": 16.926556864247267,
+      "ground_truth_acc_at_2deg_mean": 0.3764705882352941,
+      "ground_truth_acc_at_2deg_std": 0.0322189739708921,
+      "ground_truth_acc_at_5deg_mean": 0.7647058823529411,
+      "ground_truth_acc_at_5deg_std": 0.04159451654038512,
+      "ground_truth_catastrophic_gt_5deg_mean": 4.0,
+      "ground_truth_catastrophic_gt_5deg_std": 0.7071067811865476
+    },
+    {
+      "detector": "autodisk",
+      "dose_electrons": 1000000,
+      "repeats": 5,
+      "delta_median_deg_mean": 0.7895690086874059,
+      "delta_median_deg_std": 0.9420669855362784,
+      "delta_p95_deg_mean": 33.02201614736918,
+      "delta_p95_deg_std": 16.582744639029382,
+      "ground_truth_acc_at_2deg_mean": 0.5411764705882354,
+      "ground_truth_acc_at_2deg_std": 0.049215295678475046,
+      "ground_truth_acc_at_5deg_mean": 0.8470588235294116,
+      "ground_truth_acc_at_5deg_std": 0.03221897397089213,
+      "ground_truth_catastrophic_gt_5deg_mean": 2.6,
+      "ground_truth_catastrophic_gt_5deg_std": 0.5477225575051661
+    },
+    {
+      "detector": "py4dstem",
+      "dose_electrons": 10000,
+      "repeats": 5,
+      "delta_median_deg_mean": 0.8003822919593759,
+      "delta_median_deg_std": 0.8886296983698222,
+      "delta_p95_deg_mean": 45.12581079782062,
+      "delta_p95_deg_std": 20.805668811634447,
+      "ground_truth_acc_at_2deg_mean": 0.5411764705882353,
+      "ground_truth_acc_at_2deg_std": 0.08724939396583134,
+      "ground_truth_acc_at_5deg_mean": 0.8352941176470587,
+      "ground_truth_acc_at_5deg_std": 0.049215295678475046,
+      "ground_truth_catastrophic_gt_5deg_mean": 2.8,
+      "ground_truth_catastrophic_gt_5deg_std": 0.8366600265340756
+    },
+    {
+      "detector": "py4dstem",
+      "dose_electrons": 100000,
+      "repeats": 5,
+      "delta_median_deg_mean": 0.06198935237454924,
+      "delta_median_deg_std": 0.018124286526633542,
+      "delta_p95_deg_mean": 34.85088300293328,
+      "delta_p95_deg_std": 23.057906476459895,
+      "ground_truth_acc_at_2deg_mean": 0.4117647058823529,
+      "ground_truth_acc_at_2deg_std": 0.07204381596421111,
+      "ground_truth_acc_at_5deg_mean": 0.7647058823529411,
+      "ground_truth_acc_at_5deg_std": 0.05882352941176466,
+      "ground_truth_catastrophic_gt_5deg_mean": 4.0,
+      "ground_truth_catastrophic_gt_5deg_std": 1.0
+    },
+    {
+      "detector": "py4dstem",
+      "dose_electrons": 1000000,
+      "repeats": 5,
+      "delta_median_deg_mean": 0.027869680406626084,
+      "delta_median_deg_std": 0.00650387803354055,
+      "delta_p95_deg_mean": 42.554171460996706,
+      "delta_p95_deg_std": 24.28649532187954,
+      "ground_truth_acc_at_2deg_mean": 0.4588235294117647,
+      "ground_truth_acc_at_2deg_std": 0.04921529567847504,
+      "ground_truth_acc_at_5deg_mean": 0.8352941176470587,
+      "ground_truth_acc_at_5deg_std": 0.026306682088232825,
+      "ground_truth_catastrophic_gt_5deg_mean": 2.8,
+      "ground_truth_catastrophic_gt_5deg_std": 0.4472135954999579
+    }
+  ]
+}

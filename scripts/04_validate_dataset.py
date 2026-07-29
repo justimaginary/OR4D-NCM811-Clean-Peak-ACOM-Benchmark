@@ -147,12 +147,100 @@ def validate_track(track: str) -> dict:
     }
 
 
+def validate_clean_expectation(path: Path) -> dict:
+    config = load_config()
+    with h5py.File(path, "r") as h5:
+        images = h5["expectation/intensity"]
+        sample_ids = h5["sample_id"][:]
+        qx = np.asarray(h5["detector/qx_Ainv"][:], dtype=float)
+        qy = np.asarray(h5["detector/qy_Ainv"][:], dtype=float)
+        probe = np.asarray(h5["detector/vacuum_probe"][:], dtype=float)
+        if images.ndim != 3 or images.shape[0] != len(sample_ids):
+            raise ValueError(f"{path} expectation/sample shape mismatch")
+        if images.shape[1:] != probe.shape:
+            raise ValueError(f"{path} expectation/probe shape mismatch")
+        if images.shape[1:] != (len(qy), len(qx)):
+            raise ValueError(f"{path} expectation/q-axis shape mismatch")
+        if not np.all(np.diff(qx) > 0.0) or not np.all(np.diff(qy) < 0.0):
+            raise ValueError(f"{path} q axes have the wrong monotonic direction")
+        sums = []
+        for index in range(images.shape[0]):
+            image = np.asarray(images[index], dtype=float)
+            if not np.all(np.isfinite(image)) or np.any(image < 0.0):
+                raise ValueError(f"{path} sample {index} is not finite/non-negative")
+            sums.append(float(image.sum()))
+        if not np.allclose(sums, 1.0, atol=2e-6):
+            raise ValueError(f"{path} expectation images are not probability-normalized")
+        if h5.attrs.get("track") != "clean_expectation":
+            raise ValueError(f"{path} has unexpected track attribute")
+        expected_q_max = float(config["clean_image"]["q_max_Ainv"])
+        actual_q_max = max(abs(float(qx[0])), abs(float(qx[-1])))
+        q_pixel = float(np.median(np.diff(qx)))
+        if abs(actual_q_max - expected_q_max) > q_pixel:
+            raise ValueError(f"{path} q_max differs from the configured value")
+        return {
+            "track": "clean_expectation",
+            "path": str(path),
+            "num_samples": int(images.shape[0]),
+            "image_shape": list(images.shape[1:]),
+            "dtype": str(images.dtype),
+            "probability_sum_min": float(min(sums)),
+            "probability_sum_max": float(max(sums)),
+            "q_pixel_size_Ainv": q_pixel,
+            "disk_radius_px": float(h5.attrs["disk_radius_px"]),
+            "direct_beam_fraction": float(h5.attrs["direct_beam_fraction"]),
+        }
+
+
+def validate_clean_counted(path: Path) -> dict:
+    with h5py.File(path, "r") as h5:
+        counts = h5["images/counts"]
+        doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
+        seeds = h5["rng_seed"]
+        if counts.ndim != 5:
+            raise ValueError(f"{path} count data must be [N,D,S,H,W]")
+        if counts.shape[:3] != seeds.shape:
+            raise ValueError(f"{path} count/seed shape mismatch")
+        if counts.shape[1] != len(doses):
+            raise ValueError(f"{path} dose axis mismatch")
+        if counts.dtype.kind != "u":
+            raise ValueError(f"{path} counts must use an unsigned integer dtype")
+        totals = []
+        for sample in range(counts.shape[0]):
+            for dose_index, dose in enumerate(doses):
+                for repeat in range(counts.shape[2]):
+                    total = int(counts[sample, dose_index, repeat].sum())
+                    if total != int(dose):
+                        raise ValueError(
+                            f"{path} fixed-total violation at "
+                            f"sample={sample}, dose={dose}, repeat={repeat}"
+                        )
+                    totals.append(total)
+        return {
+            "track": "clean_counted",
+            "path": str(path),
+            "shape": list(counts.shape),
+            "dtype": str(counts.dtype),
+            "doses_electrons": doses.tolist(),
+            "repeats": int(counts.shape[2]),
+            "fixed_total_verified": True,
+            "num_count_images": len(totals),
+        }
+
+
 def main() -> None:
     results = []
     for track in ("clean", "dynamical"):
         path = ROOT / "public" / f"{track}_peaks.h5"
         if path.exists():
             results.append(validate_track(track))
+    for suffix in ("", "_smoke"):
+        expectation_path = ROOT / "public" / f"clean_images{suffix}.h5"
+        counted_path = ROOT / "public" / f"clean_counted_images{suffix}.h5"
+        if expectation_path.exists():
+            results.append(validate_clean_expectation(expectation_path))
+        if counted_path.exists():
+            results.append(validate_clean_counted(counted_path))
     if not results:
         raise FileNotFoundError("No generated track found under public/")
 

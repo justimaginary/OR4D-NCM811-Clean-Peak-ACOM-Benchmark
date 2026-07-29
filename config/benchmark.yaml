@@ -157,6 +157,7 @@ clean_image:
     rgm_split_radius_fraction: 1.0
     rgm_outer_radius_fraction: 1.2
     integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
     max_num_peaks: 256
   py4dstem_find_bragg_disks:
     corr_power: 1.0
@@ -164,6 +165,8 @@ clean_image:
     subpixel: multicorr
     upsample_factor: 16
     min_relative_intensity: 0.000000000001
+    integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
     min_peak_spacing_px: 5
     edge_boundary_px: 6
     max_num_peaks: 256

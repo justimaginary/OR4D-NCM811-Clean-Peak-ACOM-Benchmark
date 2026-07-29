@@ -1,0 +1,724 @@
+{
+  "dataset_id": "OR4D-NCM811-CleanPeak-acom-v3",
+  "output_tag": "expectation_py4dstem_smoke",
+  "acom_angle_step_zone_axis_deg": 2.0,
+  "acom_angle_step_in_plane_deg": 2.0,
+  "source_git_revision": "31aa8ce81e01b46232004385e8203b0d91a8493c",
+  "primary_metric": "friedel_equivalent_misorientation_deg",
+  "headline_sample_role": "headline_core",
+  "sample_counts_by_role": {
+    "legacy_smoke": 17
+  },
+  "runtime": {
+    "plan_build_seconds": 0.11465900001348928,
+    "matching": {
+      "total_seconds": 1.8571337511530146,
+      "mean_seconds": 0.10924316183253027,
+      "p50_seconds": 0.10446595802204683,
+      "p90_seconds": 0.10875670899404213,
+      "p99_seconds": 0.1665354031836614,
+      "throughput_samples_per_second": 9.15389103743628
+    }
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  },
+  "system": {
+    "platform": "macOS-15.7.7-arm64-arm-64bit",
+    "processor": "arm"
+  },
+  "sha256": {
+    "config": "dfd899ddf4a78c75f92136bdda833b586b3aa84a747d885a5cccf80573ddaff5",
+    "cif": "60f28f9d4ace01baeab707d22c8de267ce0c7759c3574598fb1abe84e4fef94f",
+    "orientation_manifest": "8cd01fd71503f434137390ca05050093ae324bd7f9f0b2f196372ec6edf5f88b",
+    "source_peaks": "4f5800edbbf9770075869cb4102ed5e3d829dc97d7d82bbe0b192ba2dd9d3643",
+    "ground_truth": "e21741a3afa5af4a4e7f55b6bad04c44e1925ee07d8ac67d4692d24460ae9247"
+  },
+  "matched_model_limitation": "Clean inputs and ACOM templates use the same CIF and py4DSTEM kinematical model; this measures self-consistency, not real-data or cross-simulator generalization.",
+  "samples": [
+    {
+      "sample_id": "clean_ori_000",
+      "sampling_type": "low_index_anchor",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 42,
+      "correlation_score": 2.685899157323688,
+      "zone_axis_plan_index": 667,
+      "in_plane_plan_index": 179,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        118.33333333333334,
+        72.0,
+        420.5874739893701
+      ],
+      "prediction_seconds": 0.17719908303115517,
+      "strict_misorientation_deg": 90.43657499940757,
+      "friedel_equivalent_misorientation_deg": 72.00699411653024,
+      "misorientation_deg": 72.00699411653024,
+      "nearest_discrete_search_seed_misorientation_deg": 1.780371164882694e-31,
+      "nearest_zone_axis_node_misorientation_deg": 0.0,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.47001200238867025,
+          0.2798512087591033,
+          -0.8371212687339044
+        ],
+        [
+          -0.3045056953137155,
+          0.8387727957562159,
+          0.4513717742845826
+        ],
+        [
+          0.8284714835962087,
+          0.4670583454509409,
+          -0.30901699437494773
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_001",
+      "sampling_type": "low_index_anchor",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 84,
+      "correlation_score": 3.9002335994810386,
+      "zone_axis_plan_index": 967,
+      "in_plane_plan_index": 0,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.69767441860465,
+        86.0,
+        -90.05365433278871
+      ],
+      "prediction_seconds": 0.11055108398431912,
+      "strict_misorientation_deg": 4.0603960557606085,
+      "friedel_equivalent_misorientation_deg": 4.0603960557606085,
+      "misorientation_deg": 4.0603960557606085,
+      "nearest_discrete_search_seed_misorientation_deg": 0.9428063823435568,
+      "nearest_zone_axis_node_misorientation_deg": 0.6666666666668564,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.06976267428271465,
+          0.012111091230694409,
+          0.9974900955629212
+        ],
+        [
+          8.69918176581724e-05,
+          0.9999262216822621,
+          -0.012146753667524001
+        ],
+        [
+          -0.9975636128635343,
+          0.0009341634962089113,
+          0.0697564737441253
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_002",
+      "sampling_type": "low_index_anchor",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 84,
+      "correlation_score": 3.9002335996608397,
+      "zone_axis_plan_index": 967,
+      "in_plane_plan_index": 0,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        90.69767441860465,
+        86.0,
+        89.94634566644241
+      ],
+      "prediction_seconds": 0.10407487500924617,
+      "strict_misorientation_deg": 4.060396055766358,
+      "friedel_equivalent_misorientation_deg": 4.060396055766358,
+      "misorientation_deg": 4.060396055766358,
+      "nearest_discrete_search_seed_misorientation_deg": 0.9428063823435547,
+      "nearest_zone_axis_node_misorientation_deg": 0.6666666666674032,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.06976267428287741,
+          0.012111091229758056,
+          -0.9974900955629212
+        ],
+        [
+          -8.699183107669933e-05,
+          0.9999262216822609,
+          0.012146753667524572
+        ],
+        [
+          0.997563612863522,
+          0.000934163509595713,
+          -0.06975647374412516
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_003",
+      "sampling_type": "low_index_anchor",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 61,
+      "correlation_score": 1.988292002154899,
+      "zone_axis_plan_index": 24,
+      "in_plane_plan_index": 30,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.0,
+        11.999999999999998,
+        -29.48469129613035
+      ],
+      "prediction_seconds": 0.10305587504990399,
+      "strict_misorientation_deg": 63.98552359606239,
+      "friedel_equivalent_misorientation_deg": 0.590487274048932,
+      "misorientation_deg": 0.590487274048932,
+      "nearest_discrete_search_seed_misorientation_deg": 0.7687383374948474,
+      "nearest_zone_axis_node_misorientation_deg": 0.590055908257407,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.48143544042432795,
+          0.8514649995887874,
+          0.20791169081775937
+        ],
+        [
+          -0.8704872341863529,
+          0.4921909945525148,
+          1.1646772514687886e-16
+        ],
+        [
+          -0.10233226188268786,
+          -0.18098447269495954,
+          0.9781476007338056
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_004",
+      "sampling_type": "low_index_anchor",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 59,
+      "correlation_score": 2.966265488681402,
+      "zone_axis_plan_index": 8,
+      "in_plane_plan_index": 30,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        80.00000000000001,
+        6.0,
+        -19.910431467057922
+      ],
+      "prediction_seconds": 0.1055613339995034,
+      "strict_misorientation_deg": 61.01260874153838,
+      "friedel_equivalent_misorientation_deg": 1.050562888584708,
+      "misorientation_deg": 1.050562888584708,
+      "nearest_discrete_search_seed_misorientation_deg": 1.0529799242161415,
+      "nearest_zone_axis_node_misorientation_deg": 1.0504348599075952,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.4968083313720113,
+          0.8617335710523188,
+          0.10294044103643696
+        ],
+        [
+          -0.86712993144959,
+          0.4977511594681706,
+          0.018151177160752673
+        ],
+        [
+          -0.035597245168512655,
+          -0.09828039361698745,
+          0.9945218953682734
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_005",
+      "sampling_type": "nonzero_in_plane",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 42,
+      "correlation_score": 2.7003840144975557,
+      "zone_axis_plan_index": 667,
+      "in_plane_plan_index": 26,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        118.33333333333334,
+        72.0,
+        -65.51942845239881
+      ],
+      "prediction_seconds": 0.10703495901543647,
+      "strict_misorientation_deg": 90.4327058177575,
+      "friedel_equivalent_misorientation_deg": 72.00708386592703,
+      "misorientation_deg": 72.00708386592703,
+      "nearest_discrete_search_seed_misorientation_deg": 0.0999999999999689,
+      "nearest_zone_axis_node_misorientation_deg": 0.0,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.05087802811678643,
+          0.5446461307016566,
+          0.8371212687339039
+        ],
+        [
+          -0.49821710688354165,
+          0.7402994230632503,
+          -0.4513717742845824
+        ],
+        [
+          -0.8655582826497247,
+          -0.3941032307961105,
+          0.3090169943749479
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_006",
+      "sampling_type": "nonzero_in_plane",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 84,
+      "correlation_score": 3.8695651078664066,
+      "zone_axis_plan_index": 967,
+      "in_plane_plan_index": 173,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.69767441860465,
+        86.0,
+        255.74644909178858
+      ],
+      "prediction_seconds": 0.10616591601865366,
+      "strict_misorientation_deg": 4.060395311309989,
+      "friedel_equivalent_misorientation_deg": 4.060395311309989,
+      "misorientation_deg": 4.060395311309989,
+      "nearest_discrete_search_seed_misorientation_deg": 0.8137688647383183,
+      "nearest_zone_axis_node_misorientation_deg": 0.6666666666668564,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.07060205000691333,
+          -0.0053721307407452665,
+          0.9974900955629211
+        ],
+        [
+          0.24537187154766021,
+          0.9693529290348994,
+          -0.012146753667524334
+        ],
+        [
+          -0.9668546918684419,
+          0.24561359730838456,
+          0.06975647374412533
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_007",
+      "sampling_type": "nonzero_in_plane",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 84,
+      "correlation_score": 3.8202256718725662,
+      "zone_axis_plan_index": 967,
+      "in_plane_plan_index": 101,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        90.69767441860465,
+        86.0,
+        292.2657503865647
+      ],
+      "prediction_seconds": 0.10669741599122062,
+      "strict_misorientation_deg": 4.060302480743814,
+      "friedel_equivalent_misorientation_deg": 4.060302480743814,
+      "misorientation_deg": 4.060302480743814,
+      "nearest_discrete_search_seed_misorientation_deg": 0.7608464839014497,
+      "nearest_zone_axis_node_misorientation_deg": 0.6666666666674032,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.05993671225859676,
+          -0.037697477070813765,
+          -0.9974900955629211
+        ],
+        [
+          -0.37966099106782153,
+          -0.9250459384467021,
+          0.01214675366752452
+        ],
+        [
+          -0.9231820635091594,
+          0.3779800417823081,
+          -0.06975647374412536
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_008",
+      "sampling_type": "nonzero_in_plane",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 61,
+      "correlation_score": 2.0234833121248643,
+      "zone_axis_plan_index": 24,
+      "in_plane_plan_index": 15,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        90.0,
+        11.999999999999998,
+        -59.8705436070954
+      ],
+      "prediction_seconds": 0.10346033301902935,
+      "strict_misorientation_deg": 63.972176777253324,
+      "friedel_equivalent_misorientation_deg": 0.5911970063902525,
+      "misorientation_deg": 0.5911970063902525,
+      "nearest_discrete_search_seed_misorientation_deg": 0.597299757865342,
+      "nearest_zone_axis_node_misorientation_deg": 0.590055908257407,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.8459934765218478,
+          0.49098652374966295,
+          0.20791169081775926
+        ],
+        [
+          -0.5019554547609433,
+          0.8648934740392799,
+          -7.425377316014599e-17
+        ],
+        [
+          -0.17982146456475248,
+          -0.10436240731454507,
+          0.9781476007338056
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_009",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 186,
+      "correlation_score": 3.0505753482396973,
+      "zone_axis_plan_index": 591,
+      "in_plane_plan_index": 103,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        65.45454545454545,
+        66.0,
+        141.18623411853062
+      ],
+      "prediction_seconds": 0.10446595802204683,
+      "strict_misorientation_deg": 65.3965348936232,
+      "friedel_equivalent_misorientation_deg": 2.2046027321224044,
+      "misorientation_deg": 2.2046027321224044,
+      "nearest_discrete_search_seed_misorientation_deg": 0.5884103386191398,
+      "nearest_zone_axis_node_misorientation_deg": 0.466240901495233,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.5555867058662542,
+          -0.02790586304514693,
+          0.8309901774824956
+        ],
+        [
+          0.6028683454349134,
+          -0.7018041963151336,
+          0.37950049816441517
+        ],
+        [
+          0.572602104726532,
+          0.7118231050213071,
+          0.4067366430758002
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_010",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 131,
+      "correlation_score": 2.7547889805897796,
+      "zone_axis_plan_index": 603,
+      "in_plane_plan_index": 7,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        105.88235294117648,
+        68.0,
+        -91.52921768866348
+      ],
+      "prediction_seconds": 0.1044400839600712,
+      "strict_misorientation_deg": 54.94174610839415,
+      "friedel_equivalent_misorientation_deg": 1.351529480384171,
+      "misorientation_deg": 1.351529480384171,
+      "nearest_discrete_search_seed_misorientation_deg": 0.8467783385287512,
+      "nearest_zone_axis_node_misorientation_deg": 0.5823157401456638,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.36748106943946723,
+          0.26395013434643166,
+          0.8917892072581536
+        ],
+        [
+          -0.07681148218314111,
+          0.9642188995335184,
+          -0.25373590598730594
+        ],
+        [
+          -0.926853634512189,
+          0.024743491282980236,
+          0.3746065934159122
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_011",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 138,
+      "correlation_score": 2.6305106418772146,
+      "zone_axis_plan_index": 146,
+      "in_plane_plan_index": 57,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        82.50000000000001,
+        32.0,
+        31.657379560635263
+      ],
+      "prediction_seconds": 0.10290891700424254,
+      "strict_misorientation_deg": 84.99905983323464,
+      "friedel_equivalent_misorientation_deg": 2.2897932959254503,
+      "misorientation_deg": 2.2897932959254503,
+      "nearest_discrete_search_seed_misorientation_deg": 0.7952467253397316,
+      "nearest_zone_axis_node_misorientation_deg": 0.6975906988267109,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.3301764718591902,
+          0.7841896011816921,
+          0.5253857314670015
+        ],
+        [
+          -0.9020152985678682,
+          -0.42612690759112415,
+          0.06916834374441158
+        ],
+        [
+          0.27812209293786244,
+          -0.45106820773063167,
+          0.848048096156426
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_012",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 137,
+      "correlation_score": 2.786979854146409,
+      "zone_axis_plan_index": 971,
+      "in_plane_plan_index": 34,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        85.11627906976744,
+        86.0,
+        -17.4502400005681
+      ],
+      "prediction_seconds": 0.10375999996904284,
+      "strict_misorientation_deg": 14.299852565076979,
+      "friedel_equivalent_misorientation_deg": 1.6872477791851617,
+      "misorientation_deg": 1.6872477791851617,
+      "nearest_discrete_search_seed_misorientation_deg": 1.227366053058566,
+      "nearest_zone_axis_node_misorientation_deg": 0.9105622616719888,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.10205823052250262,
+          0.04077481607659809,
+          0.9939424188334728
+        ],
+        [
+          -0.948733491533588,
+          0.3044540353292061,
+          0.08492645297108481
+        ],
+        [
+          -0.29914691979878894,
+          -0.9516539049180022,
+          0.06975647374412541
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_013",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 111,
+      "correlation_score": 2.4466357625334774,
+      "zone_axis_plan_index": 311,
+      "in_plane_plan_index": 101,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        92.50000000000001,
+        48.00000000000001,
+        108.61887147824055
+      ],
+      "prediction_seconds": 0.10756045900052413,
+      "strict_misorientation_deg": 84.41029972917913,
+      "friedel_equivalent_misorientation_deg": 1.5109967072575967,
+      "misorientation_deg": 1.5109967072575967,
+      "nearest_discrete_search_seed_misorientation_deg": 0.5908341028685934,
+      "nearest_zone_axis_node_misorientation_deg": 0.5257136426340042,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.6195805625586963,
+          -0.254767464431531,
+          0.7424375162709508
+        ],
+        [
+          0.34662709468253483,
+          -0.9374427402058734,
+          -0.03241552201104351
+        ],
+        [
+          0.704251080035661,
+          0.23726493188508066,
+          0.6691306063588581
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_014",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 254,
+      "correlation_score": 3.9028052487436833,
+      "zone_axis_plan_index": 417,
+      "in_plane_plan_index": 166,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        96.42857142857143,
+        56.000000000000014,
+        236.48681984924622
+      ],
+      "prediction_seconds": 0.10562100005336106,
+      "strict_misorientation_deg": 69.06445832053869,
+      "friedel_equivalent_misorientation_deg": 1.154147325005517,
+      "misorientation_deg": 1.154147325005517,
+      "nearest_discrete_search_seed_misorientation_deg": 0.6758495085174437,
+      "nearest_zone_axis_node_misorientation_deg": 0.6756868720433676,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.5251192654202443,
+          -0.2134537998793617,
+          0.8238247583082
+        ],
+        [
+          0.4964557011233688,
+          0.8630849740991396,
+          -0.09282275748108319
+        ],
+        [
+          -0.6912173998870451,
+          0.45773551621143527,
+          0.5591929034707466
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_015",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 114,
+      "correlation_score": 2.200863109494558,
+      "zone_axis_plan_index": 807,
+      "in_plane_plan_index": 42,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        78.46153846153847,
+        78.00000000000001,
+        4.8352670028323645
+      ],
+      "prediction_seconds": 0.10319433303084224,
+      "strict_misorientation_deg": 32.29966557832202,
+      "friedel_equivalent_misorientation_deg": 0.9561345138253813,
+      "misorientation_deg": 0.9561345138253813,
+      "nearest_discrete_search_seed_misorientation_deg": 0.8691595518393338,
+      "nearest_zone_axis_node_misorientation_deg": 0.7246307474951191,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.1821428819379327,
+          0.21984536557366077,
+          0.9583798755165551
+        ],
+        [
+          -0.9798092136553621,
+          -0.04114804746143687,
+          0.19565465245215255
+        ],
+        [
+          0.08244922919837222,
+          -0.974666534475199,
+          0.20791169081775962
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_ori_016",
+      "sampling_type": "so3_low_discrepancy",
+      "sample_role": "legacy_smoke",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 69,
+      "correlation_score": 1.8991238596728097,
+      "zone_axis_plan_index": 709,
+      "in_plane_plan_index": 95,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        110.27027027027027,
+        74.0,
+        79.75017355384226
+      ],
+      "prediction_seconds": 0.10138212499441579,
+      "strict_misorientation_deg": 52.23566335092114,
+      "friedel_equivalent_misorientation_deg": 1.4985778253917184,
+      "misorientation_deg": 1.4985778253917184,
+      "nearest_discrete_search_seed_misorientation_deg": 0.8933809531621136,
+      "nearest_zone_axis_node_misorientation_deg": 0.3193087405721693,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.316087726554634,
+          -0.2949105303108617,
+          0.901729631449078
+        ],
+        [
+          -0.07295019439463438,
+          -0.9400907133318899,
+          -0.3330281066890955
+        ],
+        [
+          0.945921148013569,
+          -0.17104744902776253,
+          0.275637355816999
+        ]
+      ]
+    }
+  ]
+}

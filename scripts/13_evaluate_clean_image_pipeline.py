@@ -23,7 +23,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image-file", type=Path, required=True)
     parser.add_argument("--oracle-file", type=Path, required=True)
-    parser.add_argument("--detected-file", type=Path, action="append", required=True)
+    parser.add_argument("--detected-file", type=Path, action="append")
+    parser.add_argument(
+        "--detection-report",
+        type=Path,
+        help="Use every detector output listed by scripts/03_extract_clean_disks.py.",
+    )
     parser.add_argument(
         "--output",
         type=Path,
@@ -186,6 +191,18 @@ def main() -> None:
     args.overlay_dir.mkdir(parents=True, exist_ok=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     results = []
+    detected_paths = list(args.detected_file or [])
+    run_metadata: dict[str, dict] = {}
+    if args.detection_report:
+        detection_report = json.loads(
+            args.detection_report.read_text(encoding="utf-8")
+        )
+        for run in detection_report["runs"]:
+            path = str(Path(run["output"]).resolve())
+            run_metadata[path] = run
+            detected_paths.append(Path(path))
+    if not detected_paths:
+        raise ValueError("provide --detected-file or --detection-report")
 
     with h5py.File(image_path, "r") as h5:
         qx_axis = np.asarray(h5["detector/qx_Ainv"][:], dtype=float)
@@ -199,7 +216,7 @@ def main() -> None:
         tolerance = float(acceptance["match_tolerance_px"]) * q_pixel
         high_angle = 0.75 * float(config["common"]["k_max_Ainv"])
 
-        for detected_path_arg in args.detected_file:
+        for detected_path_arg in detected_paths:
             detected_path = detected_path_arg.resolve()
             detected = records_by_id(detected_path)
             if set(detected) != set(sample_ids):
@@ -229,6 +246,20 @@ def main() -> None:
                     )
             summary = aggregate(rows, q_pixel)
             summary["detected_file"] = str(detected_path)
+            metadata = run_metadata.get(str(detected_path), {})
+            summary["variant"] = metadata.get("variant", detected_path.stem)
+            summary["detector"] = metadata.get("detector", "unknown")
+            summary["runtime"] = {
+                key: metadata[key]
+                for key in (
+                    "total_seconds",
+                    "mean_seconds",
+                    "p95_seconds",
+                    "throughput_patterns_per_second",
+                    "num_failures",
+                )
+                if key in metadata
+            }
             summary["per_sample"] = [
                 {
                     key: value
@@ -244,6 +275,45 @@ def main() -> None:
             ]
             results.append(summary)
 
+    grouped: dict[tuple[str, str], list[dict]] = {}
+    for result in results:
+        variant = str(result["variant"])
+        dose = (
+            variant.split("_repeat", 1)[0].replace("counted_dose", "")
+            if variant.startswith("counted_dose")
+            else variant
+        )
+        grouped.setdefault((str(result["detector"]), dose), []).append(result)
+    dose_summary = []
+    for (detector, dose), group in sorted(grouped.items()):
+        row = {
+            "detector": detector,
+            "dose_electrons": int(dose) if dose.isdigit() else dose,
+            "repeats": len(group),
+        }
+        for metric in (
+            "precision",
+            "recall",
+            "position_rmse_px",
+            "position_p95_px",
+            "high_angle_recall",
+        ):
+            values = np.asarray(
+                [item[metric] for item in group if item[metric] is not None],
+                dtype=float,
+            )
+            row[f"{metric}_mean"] = float(values.mean()) if len(values) else None
+            row[f"{metric}_std"] = float(values.std(ddof=1)) if len(values) > 1 else 0.0
+        timings = [
+            item["runtime"].get("mean_seconds")
+            for item in group
+            if item["runtime"].get("mean_seconds") is not None
+        ]
+        row["runtime_mean_seconds_per_pattern"] = (
+            float(np.mean(timings)) if timings else None
+        )
+        dose_summary.append(row)
+
     report = {
         "scope": "Clean only",
         "image_file": str(image_path),
@@ -251,6 +321,7 @@ def main() -> None:
         "match_tolerance_px": float(acceptance["match_tolerance_px"]),
         "q_pixel_size_Ainv": q_pixel,
         "detectors": results,
+        "dose_summary": dose_summary,
     }
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))

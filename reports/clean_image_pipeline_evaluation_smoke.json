@@ -1,0 +1,381 @@
+{
+  "scope": "Clean only",
+  "image_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/public/clean_images_smoke.h5",
+  "oracle_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/private/clean_physical_oracle_peaks_smoke.h5",
+  "match_tolerance_px": 1.0,
+  "q_pixel_size_Ainv": 0.00625002384185791,
+  "detectors": [
+    {
+      "samples": 17,
+      "oracle_peaks": 1998,
+      "detected_peaks": 1005,
+      "true_positive": 926,
+      "precision": 0.9213930348258706,
+      "recall": 0.46346346346346345,
+      "position_rmse_px": 0.42698253550767007,
+      "position_p95_px": 0.6458600718708811,
+      "high_angle_recall": 0.42040185471406494,
+      "sample_precision_mean": 0.8974155904626014,
+      "sample_recall_mean": 0.4767598154038501,
+      "detected_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/diagnostics/clean_expectation_autodisk_peaks_smoke.h5",
+      "per_sample": [
+        {
+          "oracle_count": 54,
+          "detected_count": 22,
+          "true_positive": 14,
+          "precision": 0.6363636363636364,
+          "recall": 0.25925925925925924,
+          "high_angle_oracle_count": 24,
+          "high_angle_recall": 0.25,
+          "sample_id": "clean_ori_000"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 60,
+          "true_positive": 56,
+          "precision": 0.9333333333333333,
+          "recall": 0.6363636363636364,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 0.375,
+          "sample_id": "clean_ori_001"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 60,
+          "true_positive": 56,
+          "precision": 0.9333333333333333,
+          "recall": 0.6363636363636364,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 0.375,
+          "sample_id": "clean_ori_002"
+        },
+        {
+          "oracle_count": 99,
+          "detected_count": 45,
+          "true_positive": 40,
+          "precision": 0.8888888888888888,
+          "recall": 0.40404040404040403,
+          "high_angle_oracle_count": 29,
+          "high_angle_recall": 0.4827586206896552,
+          "sample_id": "clean_ori_003"
+        },
+        {
+          "oracle_count": 171,
+          "detected_count": 55,
+          "true_positive": 50,
+          "precision": 0.9090909090909091,
+          "recall": 0.29239766081871343,
+          "high_angle_oracle_count": 50,
+          "high_angle_recall": 0.38,
+          "sample_id": "clean_ori_004"
+        },
+        {
+          "oracle_count": 54,
+          "detected_count": 22,
+          "true_positive": 15,
+          "precision": 0.6818181818181818,
+          "recall": 0.2777777777777778,
+          "high_angle_oracle_count": 24,
+          "high_angle_recall": 0.25,
+          "sample_id": "clean_ori_005"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 60,
+          "true_positive": 56,
+          "precision": 0.9333333333333333,
+          "recall": 0.6363636363636364,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 0.375,
+          "sample_id": "clean_ori_006"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 60,
+          "true_positive": 56,
+          "precision": 0.9333333333333333,
+          "recall": 0.6363636363636364,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 0.375,
+          "sample_id": "clean_ori_007"
+        },
+        {
+          "oracle_count": 99,
+          "detected_count": 45,
+          "true_positive": 40,
+          "precision": 0.8888888888888888,
+          "recall": 0.40404040404040403,
+          "high_angle_oracle_count": 29,
+          "high_angle_recall": 0.4827586206896552,
+          "sample_id": "clean_ori_008"
+        },
+        {
+          "oracle_count": 186,
+          "detected_count": 83,
+          "true_positive": 79,
+          "precision": 0.9518072289156626,
+          "recall": 0.42473118279569894,
+          "high_angle_oracle_count": 57,
+          "high_angle_recall": 0.3684210526315789,
+          "sample_id": "clean_ori_009"
+        },
+        {
+          "oracle_count": 125,
+          "detected_count": 66,
+          "true_positive": 62,
+          "precision": 0.9393939393939394,
+          "recall": 0.496,
+          "high_angle_oracle_count": 36,
+          "high_angle_recall": 0.5833333333333334,
+          "sample_id": "clean_ori_010"
+        },
+        {
+          "oracle_count": 140,
+          "detected_count": 70,
+          "true_positive": 66,
+          "precision": 0.9428571428571428,
+          "recall": 0.4714285714285714,
+          "high_angle_oracle_count": 45,
+          "high_angle_recall": 0.4888888888888889,
+          "sample_id": "clean_ori_011"
+        },
+        {
+          "oracle_count": 137,
+          "detected_count": 71,
+          "true_positive": 67,
+          "precision": 0.9436619718309859,
+          "recall": 0.48905109489051096,
+          "high_angle_oracle_count": 44,
+          "high_angle_recall": 0.4318181818181818,
+          "sample_id": "clean_ori_012"
+        },
+        {
+          "oracle_count": 141,
+          "detected_count": 74,
+          "true_positive": 70,
+          "precision": 0.9459459459459459,
+          "recall": 0.49645390070921985,
+          "high_angle_oracle_count": 36,
+          "high_angle_recall": 0.4722222222222222,
+          "sample_id": "clean_ori_013"
+        },
+        {
+          "oracle_count": 255,
+          "detected_count": 91,
+          "true_positive": 87,
+          "precision": 0.9560439560439561,
+          "recall": 0.3411764705882353,
+          "high_angle_oracle_count": 90,
+          "high_angle_recall": 0.2777777777777778,
+          "sample_id": "clean_ori_014"
+        },
+        {
+          "oracle_count": 115,
+          "detected_count": 75,
+          "true_positive": 71,
+          "precision": 0.9466666666666667,
+          "recall": 0.6173913043478261,
+          "high_angle_oracle_count": 38,
+          "high_angle_recall": 0.7368421052631579,
+          "sample_id": "clean_ori_015"
+        },
+        {
+          "oracle_count": 70,
+          "detected_count": 46,
+          "true_positive": 41,
+          "precision": 0.8913043478260869,
+          "recall": 0.5857142857142857,
+          "high_angle_oracle_count": 17,
+          "high_angle_recall": 0.7058823529411765,
+          "sample_id": "clean_ori_016"
+        }
+      ]
+    },
+    {
+      "samples": 17,
+      "oracle_peaks": 1998,
+      "detected_peaks": 1741,
+      "true_positive": 1712,
+      "precision": 0.9833429063756461,
+      "recall": 0.8568568568568569,
+      "position_rmse_px": 0.18176937276894042,
+      "position_p95_px": 0.4630217220197409,
+      "high_angle_recall": 0.9289026275115919,
+      "sample_precision_mean": 0.9855192660428855,
+      "sample_recall_mean": 0.8562405526447757,
+      "detected_file": "/Users/xie/code/OR4D-NCM811-smoke-v0/diagnostics/clean_expectation_py4dstem_peaks_smoke.h5",
+      "per_sample": [
+        {
+          "oracle_count": 54,
+          "detected_count": 42,
+          "true_positive": 42,
+          "precision": 1.0,
+          "recall": 0.7777777777777778,
+          "high_angle_oracle_count": 24,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_000"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 84,
+          "true_positive": 84,
+          "precision": 1.0,
+          "recall": 0.9545454545454546,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_001"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 84,
+          "true_positive": 84,
+          "precision": 1.0,
+          "recall": 0.9545454545454546,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_002"
+        },
+        {
+          "oracle_count": 99,
+          "detected_count": 61,
+          "true_positive": 60,
+          "precision": 0.9836065573770492,
+          "recall": 0.6060606060606061,
+          "high_angle_oracle_count": 29,
+          "high_angle_recall": 0.7931034482758621,
+          "sample_id": "clean_ori_003"
+        },
+        {
+          "oracle_count": 171,
+          "detected_count": 59,
+          "true_positive": 55,
+          "precision": 0.9322033898305084,
+          "recall": 0.3216374269005848,
+          "high_angle_oracle_count": 50,
+          "high_angle_recall": 0.48,
+          "sample_id": "clean_ori_004"
+        },
+        {
+          "oracle_count": 54,
+          "detected_count": 42,
+          "true_positive": 42,
+          "precision": 1.0,
+          "recall": 0.7777777777777778,
+          "high_angle_oracle_count": 24,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_005"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 84,
+          "true_positive": 84,
+          "precision": 1.0,
+          "recall": 0.9545454545454546,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_006"
+        },
+        {
+          "oracle_count": 88,
+          "detected_count": 84,
+          "true_positive": 84,
+          "precision": 1.0,
+          "recall": 0.9545454545454546,
+          "high_angle_oracle_count": 32,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_007"
+        },
+        {
+          "oracle_count": 99,
+          "detected_count": 61,
+          "true_positive": 60,
+          "precision": 0.9836065573770492,
+          "recall": 0.6060606060606061,
+          "high_angle_oracle_count": 29,
+          "high_angle_recall": 0.7931034482758621,
+          "sample_id": "clean_ori_008"
+        },
+        {
+          "oracle_count": 186,
+          "detected_count": 186,
+          "true_positive": 181,
+          "precision": 0.9731182795698925,
+          "recall": 0.9731182795698925,
+          "high_angle_oracle_count": 57,
+          "high_angle_recall": 0.9649122807017544,
+          "sample_id": "clean_ori_009"
+        },
+        {
+          "oracle_count": 125,
+          "detected_count": 131,
+          "true_positive": 125,
+          "precision": 0.9541984732824428,
+          "recall": 1.0,
+          "high_angle_oracle_count": 36,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_010"
+        },
+        {
+          "oracle_count": 140,
+          "detected_count": 138,
+          "true_positive": 137,
+          "precision": 0.9927536231884058,
+          "recall": 0.9785714285714285,
+          "high_angle_oracle_count": 45,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_011"
+        },
+        {
+          "oracle_count": 137,
+          "detected_count": 137,
+          "true_positive": 135,
+          "precision": 0.9854014598540146,
+          "recall": 0.9854014598540146,
+          "high_angle_oracle_count": 44,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_012"
+        },
+        {
+          "oracle_count": 141,
+          "detected_count": 111,
+          "true_positive": 110,
+          "precision": 0.990990990990991,
+          "recall": 0.7801418439716312,
+          "high_angle_oracle_count": 36,
+          "high_angle_recall": 0.8333333333333334,
+          "sample_id": "clean_ori_013"
+        },
+        {
+          "oracle_count": 255,
+          "detected_count": 254,
+          "true_positive": 247,
+          "precision": 0.9724409448818898,
+          "recall": 0.9686274509803922,
+          "high_angle_oracle_count": 90,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_014"
+        },
+        {
+          "oracle_count": 115,
+          "detected_count": 114,
+          "true_positive": 114,
+          "precision": 1.0,
+          "recall": 0.991304347826087,
+          "high_angle_oracle_count": 38,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_015"
+        },
+        {
+          "oracle_count": 70,
+          "detected_count": 69,
+          "true_positive": 68,
+          "precision": 0.9855072463768116,
+          "recall": 0.9714285714285714,
+          "high_angle_oracle_count": 17,
+          "high_angle_recall": 1.0,
+          "sample_id": "clean_ori_016"
+        }
+      ]
+    }
+  ]
+}

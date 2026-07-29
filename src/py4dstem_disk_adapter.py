@@ -6,6 +6,8 @@ from typing import Any
 import numpy as np
 from py4DSTEM.braggvectors import find_Bragg_disks
 
+from autodisk_adapter import measure_vacuum_probe
+
 
 @dataclass(frozen=True)
 class Py4DSTEMDiskResult:
@@ -95,7 +97,33 @@ def detect_py4dstem_bragg_disks(
     qx = qx[keep]
     qy = qy[keep]
     correlation = correlation[keep]
-    normalized = correlation / correlation.max()
+    _, _, disk_radius_px = measure_vacuum_probe(vacuum_probe)
+    integration_radius = (
+        disk_radius_px * float(config["integration_radius_fraction"])
+    )
+    patch_half = int(np.ceil(integration_radius)) + 1
+    integrated = []
+    for peak_row, peak_col in zip(row, col):
+        r0 = max(0, int(np.floor(peak_row)) - patch_half)
+        r1 = min(raw.shape[0], int(np.floor(peak_row)) + patch_half + 2)
+        c0 = max(0, int(np.floor(peak_col)) - patch_half)
+        c1 = min(raw.shape[1], int(np.floor(peak_col)) + patch_half + 2)
+        yy, xx = np.mgrid[r0:r1, c0:c1]
+        mask = np.hypot(yy - peak_row, xx - peak_col) <= integration_radius
+        integrated.append(float(raw[r0:r1, c0:c1][mask].sum()))
+    integrated = np.asarray(integrated, dtype=float)
+    normalized = integrated / integrated.max()
+    keep_intensity = normalized >= float(
+        config["min_integrated_intensity_relative"]
+    )
+    row = row[keep_intensity]
+    col = col[keep_intensity]
+    qx = qx[keep_intensity]
+    qy = qy[keep_intensity]
+    correlation = correlation[keep_intensity]
+    normalized = normalized[keep_intensity]
+    if not len(normalized):
+        raise RuntimeError("find_Bragg_disks intensity threshold removed every disk")
     order = np.lexsort((qy, qx, np.hypot(qx, qy)))
     return Py4DSTEMDiskResult(
         qx_Ainv=qx[order].astype(np.float32),
