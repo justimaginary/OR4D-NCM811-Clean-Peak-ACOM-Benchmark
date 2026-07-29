@@ -185,8 +185,11 @@ open reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html
 It keeps the v3 direct-peak results, parameters, matrices, HKL tables, and
 `HKL → B → g_crystal → g_sample → q` trace, then compares them with the new
 Clean-E/C diffraction-image paths. It also embeds the actual representative
-512×512 images, v3/physical-oracle/detected peak layers, AutoDisk versus
-`find_Bragg_disks`, dose curves, and all completed ACOM aggregate results.
+512×512 images, a step-by-step explanation of image formation, explicit
+definitions of v3/Clean-E/C, a separate v3 direct-input reciprocal-space
+diagnostic, and side-by-side AutoDisk versus `find_Bragg_disks` TP/FP/FN
+overlays with position-error lines. Dose curves and all completed ACOM
+aggregate results are included as well.
 Like the v3 page, it is a self-contained offline snapshot; regenerate it after
 rerunning the benchmark:
 

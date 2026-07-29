@@ -142,6 +142,7 @@ def match_metrics(oracle: list[dict], detected: list[dict], q_per_px: float) -> 
     used_o: set[int] = set()
     used_d: set[int] = set()
     distances = []
+    matches = []
     for distance2, oi, di in candidates:
         distance_px = distance2**0.5 / q_per_px
         if distance_px > 1.0:
@@ -150,6 +151,13 @@ def match_metrics(oracle: list[dict], detected: list[dict], q_per_px: float) -> 
             used_o.add(oi)
             used_d.add(di)
             distances.append(distance_px)
+            matches.append(
+                {
+                    "oracle_index": oi,
+                    "detected_index": di,
+                    "distance_px": distance_px,
+                }
+            )
     tp = len(distances)
     return {
         "oracle": len(oracle),
@@ -159,6 +167,9 @@ def match_metrics(oracle: list[dict], detected: list[dict], q_per_px: float) -> 
         "recall": tp / len(oracle) if oracle else 0.0,
         "rmse_px": float(np.sqrt(np.mean(np.square(distances)))) if distances else None,
         "p95_px": float(np.percentile(distances, 95)) if distances else None,
+        "matches": matches,
+        "false_negative_indices": sorted(set(range(len(oracle))) - used_o),
+        "false_positive_indices": sorted(set(range(len(detected))) - used_d),
     }
 
 
@@ -237,6 +248,13 @@ def read_v3_traces(wanted: set[str]) -> dict[str, dict]:
                         "g_sample": reflection["g_sample_Ainv"],
                     }
                     for reflection in row["acom_simulated_reflections"]
+                ],
+                "matches": [
+                    {
+                        "observed_index": int(match["observed_index"]),
+                        "predicted_index": int(match["predicted_index"]),
+                    }
+                    for match in row["detector_q_assignment"]["matches"]
                 ],
             }
             if len(result) == len(wanted):
@@ -530,8 +548,9 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:14px;background:var(--wash);border-radius:12px}.control label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.control select,.seg button{height:36px;border:1px solid #cbd3df;background:#fff;border-radius:7px;padding:0 10px;color:var(--ink)}.seg{display:flex;gap:5px}.seg button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
 .diag{display:grid;grid-template-columns:minmax(480px,1.1fr) minmax(410px,.9fr);gap:16px;margin-top:14px}.image-panel{position:relative;background:#081223;border-radius:10px;overflow:hidden;aspect-ratio:1}.image-panel img,.image-panel svg{position:absolute;inset:0;width:100%;height:100%}.image-panel img{image-rendering:auto}.image-panel svg{overflow:visible}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin:9px 0}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid var(--blue);margin-right:5px}.cross{color:var(--orange);font-size:18px;vertical-align:-1px}.matrix-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.matrix{background:var(--wash);border-radius:8px;padding:10px}.matrix>b,.matrix>.mini{display:block}.matrix pre{font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0;white-space:pre-wrap}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:11px 0}.metric{border:1px solid var(--line);border-radius:8px;padding:9px}.metric b{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
 .path-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.path{border:1px solid var(--line);border-radius:12px;padding:16px}.path.v3{border-top:4px solid var(--purple)}.path.image{border-top:4px solid var(--green)}.path code{display:block;margin:10px 0;padding:10px;background:var(--wash);border-radius:7px;white-space:normal}.equation-grid{display:grid;grid-template-columns:.7fr 1.2fr 1fr;gap:10px}.transform-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.definitions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{font-size:18px}.definition .tag{display:inline-block;background:var(--wash);border-radius:99px;padding:3px 8px;font-size:12px;margin-bottom:8px}.formation{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.formation>div{position:relative;border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--wash);min-height:112px}.formation>div:not(:last-child):after{content:"→";position:absolute;right:-10px;top:43%;z-index:2;color:var(--blue);font-weight:800}.formation b{display:block;color:var(--blue);margin-bottom:5px}.detector-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.compare-image{position:relative;aspect-ratio:1;background:#081223;border-radius:10px;overflow:hidden}.compare-image img,.compare-image svg{position:absolute;inset:0;width:100%;height:100%}.compare-metric{margin-top:8px;font-size:13px}.v3-diagnostic{display:grid;grid-template-columns:minmax(500px,1.15fr) minmax(360px,.85fr);gap:14px;margin-top:14px}.v3-plot{width:100%;background:#fafbfc;border:1px solid var(--line);border-radius:10px}.v3-plot text{font-size:10px;fill:#5e6879}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow{grid-template-columns:1fr 1fr}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -541,6 +560,28 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
   <span class="stamp">全量实际运行结果 / completed full run</span>
 </header>
 <div class="flow"><div><b>1</b> 运动学 CBED<br><span class="mini">physical expectation</span></div><div><b>2</b> 电子计数<br><span class="mini">10⁴ / 10⁵ / 10⁶ e⁻</span></div><div><b>3</b> 衍射盘检测<br><span class="mini">AutoDisk / find_Bragg_disks</span></div><div><b>4</b> ACOM + GT 评测<br><span class="mini">same 2° orientation plan</span></div></div>
+
+<h2>先看懂三个名字 / What v3, Clean-E, and Clean-C mean</h2>
+<div class="definitions">
+ <section class="definition v3"><span class="tag">旧基线 / frozen baseline</span><h3>v3：直接峰输入</h3><p><b>不是衍射图。</b>每个样本直接提供一组连续浮点数 <code>(qx, qy, intensity)</code> 给 ACOM。它相当于假设峰中心和强度已经完美获得，用来测 ACOM 本身的取向恢复上限。</p><p class="mini">回答的问题：如果峰列表已经给定，ACOM 能否找回取向？</p></section>
+ <section class="definition e"><span class="tag">E = Expectation / 期望强度</span><h3>Clean-E：无随机噪声衍射图</h3><p>由同一 CIF 和取向生成的 <b>512×512 浮点期望强度图 P(q)</b>。它包含中心盘和有限尺寸衍射盘，但没有电子计数涨落、背景、读出噪声、椭圆畸变或饱和。</p><p class="mini">回答的问题：从理想图像自动检峰，会比直接给峰损失多少？</p></section>
+ <section class="definition c"><span class="tag">C = Counted / 电子计数</span><h3>Clean-C：有限剂量计数图</h3><p>从同一张 Clean-E 概率图逐电子抽样得到的 <b>uint32 整数计数图</b>。每张图严格含 10⁴、10⁵ 或 10⁶ 个电子，并为每个剂量生成 5 个独立随机重复。</p><p class="mini">回答的问题：有限电子量带来的散粒噪声会让检峰和 ACOM 下降多少？</p></section>
+</div>
+<div class="verdict warn"><b>关系：</b>Clean-C 不是另一种散射模型，而是 Clean-E 的有限电子观测；v3 则根本没有图像输入。三者必须分开比较，才能区分 ACOM 误差、图像检峰误差和剂量噪声。</div>
+
+<h2>输入衍射图是怎样得到的 / How the diffraction image is formed</h2>
+<section class="panel">
+ <div class="formation">
+  <div><b>① CIF + R</b>NCM811 晶体结构与样品→晶体取向矩阵。</div>
+  <div><b>② 运动学反射</b>py4DSTEM 生成与 ACOM 模板一致的 HKL、(qx,qy) 和积分强度 I<sub>g</sub>。</div>
+  <div><b>③ 有限衍射盘</b>在每个亚像素中心放置软边圆孔振幅；盘半径由 α/λ 决定。</div>
+  <div><b>④ 相干成像</b>4× 过采样，累加 √I<sub>g</sub>A(q−g)e<sup>−iχ</sup>，再取模平方并做像素积分。</div>
+  <div><b>⑤ Clean-E</b>中心盘与散射盘分别归一化后按 0.90/0.10 合成概率图 P(q)。</div>
+  <div><b>⑥ Clean-C</b>counts ∼ Multinomial(N<sub>e</sub>, P)，然后交给两个检峰器。</div>
+ </div>
+ <div class="formula" style="margin-top:12px">disk radius = α / λ = 4.063 px<br>Ψ<sub>scat</sub>(q) = Σ<sub>g</sub> √I<sub>g</sub> A(q−g) exp[−iχ(q−g)]<br>P<sub>E</sub>(q) = 0.90 P<sub>direct</sub>(q) + 0.10 P<sub>scattered</sub>(q)<br>Clean-C: n(q) ∼ Multinomial(N<sub>e</sub>, P<sub>E</sub>), &nbsp; Σ<sub>q</sub>n(q)=N<sub>e</sub></div>
+ <p class="mini"><b>当前 canonical 模型的边界：</b>反射支持和积分强度来自与 ACOM 匹配的 py4DSTEM 运动学模型；图像形成使用有限会聚盘，而不是高斯点。它不是 multislice，也不声称模拟 dynamical scattering。有限厚度 First-Born+sinc 模型只保留为诊断模式，没有混入本页 canonical 结果。</p>
+</section>
 
 <h2>总体结果 / Overview</h2>
 <div class="cards" id="headline-cards"></div>
@@ -583,6 +624,23 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
   <p class="mini">四者均为同一语义的样品坐标→晶体坐标旋转矩阵。矩阵元素外观可能因晶体/Friedel 对称等价表示而明显不同；上方角度使用对称性约化后的取向误差。图像检峰误差与 ACOM 相对 GT 的取向误差分开报告。</p>
  </section>
 </div>
+
+<h2>同一样本的 v3 直接峰诊断 / v3 direct-input sample view</h2>
+<div class="v3-diagnostic">
+ <section><svg id="v3-direct-plot" class="v3-plot" viewBox="0 0 620 520" role="img" aria-label="v3 direct peaks and ACOM template peaks"></svg><div class="legend"><span style="color:var(--blue)">○ v3 直接输入峰 / observed</span><span style="color:var(--orange)">× v3 ACOM 模板峰 / simulated</span><span style="color:#9aa4b2">— 一对一匹配 / assignment</span></div></section>
+ <section class="panel"><h3>这才是旧 v3 的实际输入</h3><p>蓝色圆圈是 v3 直接交给 ACOM 的 <code>(qx,qy,I)</code>；橙色叉是预测取向下 orientation plan 生成的模拟模板峰。灰线表示 v3 报告保存的一对一峰匹配。</p><div class="metrics" id="v3-plot-metrics"></div><p class="mini">这张图没有“检峰器”：蓝色圆圈本身就是输入。它与上面的衍射图诊断并列，才能看清从直接峰 benchmark 到图像 benchmark 多出来了什么。</p></section>
+</div>
+
+<h2>衍射盘是否被正确识别 / Visual disk-detection accuracy</h2>
+<section class="panel">
+ <p>下面两幅图使用当前选择的同一张 Clean-E 或 Clean-C 图像，同时显示两个检峰器。<b>绿色圆圈和连线</b>是 1 px 容差内的一对一真阳性；<b>黄色圆圈</b>是漏检 Oracle 盘；<b>红色叉</b>是误检盘。线段长度就是位置误差。</p>
+ <div class="detector-compare">
+  <div><h3>AutoDisk</h3><div class="compare-image"><img id="compare-image-autodisk" alt="AutoDisk comparison image"><svg id="compare-overlay-autodisk" viewBox="0 0 512 512"></svg></div><div id="compare-metric-autodisk" class="compare-metric"></div></div>
+  <div><h3>py4DSTEM find_Bragg_disks</h3><div class="compare-image"><img id="compare-image-py4dstem" alt="find Bragg disks comparison image"><svg id="compare-overlay-py4dstem" viewBox="0 0 512 512"></svg></div><div id="compare-metric-py4dstem" class="compare-metric"></div></div>
+ </div>
+ <div class="legend"><span style="color:#42d392">○ TP + error line</span><span style="color:#ffd166">○ FN / 漏检</span><span style="color:#ff5d5d">× FP / 误检</span></div>
+</section>
+
 <section class="panel" style="margin-top:14px"><h3>物理 Oracle 逐反射表 / All oracle reflections</h3><p class="mini">HKL 是倒易晶格反射索引，不是“样品只有一个晶面”。每个可见衍射盘对应一个满足当前探测范围和激发条件的 (h,k,l)。</p><div class="peak-table-wrap"><table><thead><tr><th>#</th><th>HKL</th><th>q<sub>x</sub> (Å⁻¹)</th><th>q<sub>y</sub> (Å⁻¹)</th><th>强度 / Intensity</th></tr></thead><tbody id="peak-rows"></tbody></table></div></section>
 
 <h2>v3 逐反射坐标追踪 / Direct-peak coordinate trace</h2>
@@ -626,7 +684,8 @@ const pct=x=>fmt(100*x,2)+"%";
 const matrix=m=>m.map(r=>"["+r.map(x=>(x>=0?" ":"")+Number(x).toFixed(5)).join(", ")+"]").join("\n");
 const vector=(v,n=5)=>"["+v.map(x=>(x>=0?" ":"")+Number(x).toFixed(n)).join(", ")+"]";
 const norm=v=>Math.sqrt(v.reduce((s,x)=>s+x*x,0));
-function variantKey(){return state.track==="expectation"?`${state.detector}_expectation`:`counted_dose${state.dose}_repeat${state.repeat}_${state.detector}`}
+function variantKeyFor(detector){return state.track==="expectation"?`${detector}_expectation`:`counted_dose${state.dose}_repeat${state.repeat}_${detector}`}
+function variantKey(){return variantKeyFor(state.detector)}
 function svgChart(id,rows,field,yLabel,percent=false){
  const svg=$(id),W=620,H=280,L=52,R=18,T=22,B=42, xs=[10000,100000,1000000];
  const vals=rows.map(r=>r[field]); let ymin=Math.min(...vals),ymax=Math.max(...vals); if(percent){ymin=Math.max(0,ymin-.05);ymax=Math.min(1,ymax+.03)} else {ymin*=.92;ymax*=1.08}
@@ -655,6 +714,28 @@ function initOverview(){
  $("v3-sweep-table").innerHTML=`<table><thead><tr><th>Angle step</th><th>Median</th><th>P95</th><th>Acc@2°</th><th>Acc@5°</th></tr></thead><tbody>${DATA.v3_sweep.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${fmt(r.median_deg,3)}°</td><td>${fmt(r.p95_deg,3)}°</td><td>${pct(r.acc_at_2deg)}</td><td>${pct(r.acc_at_5deg)}</td></tr>`).join("")}</tbody></table>`;
 }
 function setButton(id,on){$(id).classList.toggle("active",on)}
+function renderV3Plot(s){
+ const trace=s.v3,W=620,H=520,cx=W/2,cy=H/2,scale=215/1.5,qx=q=>cx+q*scale,qy=q=>cy-q*scale;
+ let svg=`<circle cx="${cx}" cy="${cy}" r="215" fill="none" stroke="#cfd6e1"/><line x1="${cx}" y1="30" x2="${cx}" y2="${H-30}" stroke="#cfd6e1"/><line x1="70" y1="${cy}" x2="${W-70}" y2="${cy}" stroke="#cfd6e1"/><text x="${W-82}" y="${cy-8}">qₓ</text><text x="${cx+8}" y="45">qᵧ</text>`;
+ trace.matches.forEach(m=>{let o=trace.observed[m.observed_index],p=trace.predicted[m.predicted_index];if(o&&p)svg+=`<line x1="${qx(o.q[0])}" y1="${qy(o.q[1])}" x2="${qx(p.q[0])}" y2="${qy(p.q[1])}" stroke="#aeb7c4" stroke-width="1"/>`});
+ const labeled=new Set([...trace.observed.keys()].sort((a,b)=>trace.observed[b].intensity-trace.observed[a].intensity).slice(0,10));
+ trace.observed.forEach((p,i)=>{let x=qx(p.q[0]),y=qy(p.q[1]),r=4+5*Math.sqrt(Math.max(0,p.intensity));svg+=`<circle cx="${x}" cy="${y}" r="${r}" fill="#fff" stroke="#246bce" stroke-width="2"/>${labeled.has(i)?`<text x="${x+8}" y="${y-8}">[${p.hkl.join(" ")}]</text>`:""}`});
+ trace.predicted.forEach(p=>{let x=qx(p.q[0]),y=qy(p.q[1]);svg+=`<path d="M${x-4},${y-4}L${x+4},${y+4}M${x+4},${y-4}L${x-4},${y+4}" stroke="#e56b3f" stroke-width="2"/>`});
+ $("v3-direct-plot").innerHTML=svg;
+ $("v3-plot-metrics").innerHTML=[["输入峰",trace.observed.length],["模板峰",trace.predicted.length],["匹配率",pct(trace.observed_match_fraction)],["q-RMSE",fmt(trace.q_rmse_Ainv,6)+" Å⁻¹"],["ACOM → GT",fmt(trace.orientation_error_deg,3)+"°"]].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join("");
+}
+function renderDetectorComparison(s,detector){
+ const v=DATA.variants[variantKeyFor(detector)],peaks=v.peaks[state.sample],m=v.sample_peak_metrics[state.sample];
+ const image=state.track==="expectation"?s.expectation_image:s.counted_images[`${state.dose}:${state.repeat}`];
+ $(`compare-image-${detector}`).src=image;
+ const [xmin,xmax,ymin,ymax]=DATA.q_bounds,px=q=>512*(q-xmin)/(xmax-xmin),py=q=>512*(ymax-q)/(ymax-ymin);
+ let svg="";
+ m.matches.forEach(match=>{let o=s.oracle_peaks[match.oracle_index],d=peaks[match.detected_index],ox=px(o.qx),oy=py(o.qy),dx=px(d.qx),dy=py(d.qy);svg+=`<line x1="${ox}" y1="${oy}" x2="${dx}" y2="${dy}" stroke="#42d392" stroke-width="1.4"/><circle cx="${ox}" cy="${oy}" r="${DATA.disk_radius_px+2}" fill="none" stroke="#42d392" stroke-width="1.5"/><circle cx="${dx}" cy="${dy}" r="2" fill="#42d392"/>`});
+ m.false_negative_indices.forEach(i=>{let o=s.oracle_peaks[i];svg+=`<circle cx="${px(o.qx)}" cy="${py(o.qy)}" r="${DATA.disk_radius_px+3}" fill="none" stroke="#ffd166" stroke-width="2.4"/>`});
+ m.false_positive_indices.forEach(i=>{let d=peaks[i],x=px(d.qx),y=py(d.qy);svg+=`<path d="M${x-6},${y-6}L${x+6},${y+6}M${x+6},${y-6}L${x-6},${y+6}" stroke="#ff5d5d" stroke-width="2.5"/>`});
+ $(`compare-overlay-${detector}`).innerHTML=svg;
+ $(`compare-metric-${detector}`).innerHTML=`TP ${m.tp} · FP ${m.false_positive_indices.length} · FN ${m.false_negative_indices.length} · Precision ${pct(m.precision)} · Recall ${pct(m.recall)} · RMSE ${fmt(m.rmse_px,3)} px · P95 ${fmt(m.p95_px,3)} px`;
+}
 function renderV3Trace(s){
  const trace=s.v3,rows=trace.observed,index=Math.min(state.v3Reflection,rows.length-1),r=rows[index];
  $("v3-reflection").innerHTML=rows.map((p,i)=>`<option value="${i}" ${i===index?"selected":""}>#${i+1} HKL [${p.hkl.join(", ")}] · I=${fmt(p.intensity,4)}</option>`).join("");
@@ -689,6 +770,7 @@ function redraw(){
  if(state.detected)v.peaks[state.sample].forEach(p=>{let x=px(p.qx),y=py(p.qy);svg+=`<path d="M${x-4},${y-4}L${x+4},${y+4}M${x+4},${y-4}L${x-4},${y+4}" stroke="#ff8b5e" stroke-width="1.8"/>`});
  $("overlay").innerHTML=svg;
  $("peak-rows").innerHTML=s.oracle_peaks.map((p,i)=>`<tr><td>${i+1}</td><td>[${p.hkl.join(", ")}]</td><td>${fmt(p.qx,5)}</td><td>${fmt(p.qy,5)}</td><td>${fmt(p.intensity,5)}</td></tr>`).join("");
+ renderV3Plot(s);renderDetectorComparison(s,"autodisk");renderDetectorComparison(s,"py4dstem");
  renderV3Trace(s);
  document.querySelectorAll(".counted").forEach(e=>e.classList.toggle("hidden",state.track!=="counted"));
  setButton("track-e",state.track==="expectation");setButton("track-c",state.track==="counted");setButton("v3-toggle",state.v3);setButton("oracle-toggle",state.oracle);setButton("detected-toggle",state.detected);
