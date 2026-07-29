@@ -10,6 +10,7 @@ from pathlib import Path
 
 import h5py
 import numpy as np
+import yaml
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -19,7 +20,10 @@ COUNTED_FILE = ROOT / "public" / "clean_counted_images.h5"
 ORACLE_FILE = ROOT / "private" / "clean_physical_oracle_reflections.h5"
 GT_FILE = ROOT / "private" / "clean_ground_truth.jsonl"
 TRACE_FILE = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
+CONFIG_FILE = ROOT / "config" / "benchmark.yaml"
 DETAILS_ORACLE = ROOT / "reports" / "acom_clean_details_physical_oracle.json"
+DETAILS_V3 = ROOT / "reports" / "acom_clean_details.json"
+EVALUATION_V3 = ROOT / "reports" / "acom_clean_evaluation.json"
 PEAK_REPORT_E = ROOT / "reports" / "clean_image_pipeline_evaluation.json"
 PEAK_REPORT_C = ROOT / "reports" / "clean_counted_pipeline_evaluation.json"
 ACOM_REPORT_E = ROOT / "reports" / "clean_acom_comparison.json"
@@ -164,6 +168,140 @@ def reciprocal_matrix() -> list[list[float]]:
     return rounded(row["reciprocal_lattice_matrix_B_Ainv"])
 
 
+def read_v3_traces(wanted: set[str]) -> dict[str, dict]:
+    """Load the detailed direct-peak coordinate chain retained by v3."""
+    result: dict[str, dict] = {}
+    with gzip.open(TRACE_FILE, "rt", encoding="utf-8") as handle:
+        for line in handle:
+            row = json.loads(line)
+            sample_id = row["sample_id"]
+            if sample_id not in wanted:
+                continue
+            result[sample_id] = {
+                "direct_lattice_matrix_A": row["direct_lattice_matrix_A"],
+                "reciprocal_lattice_matrix_B": row[
+                    "reciprocal_lattice_matrix_B_Ainv"
+                ],
+                "gt_matrix": row[
+                    "standard_orientation_matrix_sample_to_crystal"
+                ],
+                "acom_matrix": row[
+                    "acom_orientation_matrix_sample_to_crystal"
+                ],
+                "gt_axes": row["standard_sample_axes_in_crystal_cartesian"],
+                "acom_axes": row["acom_sample_axes_in_crystal_cartesian"],
+                "orientation_error_deg": row["acom_result"][
+                    "friedel_equivalent_misorientation_deg"
+                ],
+                "observed_match_fraction": row["comparison_summary"][
+                    "observed_match_fraction"
+                ],
+                "q_rmse_Ainv": row["comparison_summary"][
+                    "q_distance_rmse_Ainv"
+                ],
+                "observed": [
+                    {
+                        "hkl": reflection["hkl"],
+                        "intensity": reflection[
+                            "reported_intensity_normalized"
+                        ],
+                        "q": [
+                            reflection["reported_qx_Ainv"],
+                            reflection["reported_qy_Ainv"],
+                        ],
+                        "g_crystal": reflection[
+                            "g_crystal_cartesian_Ainv"
+                        ],
+                        "g_sample_gt": reflection[
+                            "standard_g_sample_Ainv"
+                        ],
+                        "g_sample_v3_acom_same_hkl": reflection[
+                            "acom_same_hkl_g_sample_Ainv"
+                        ],
+                    }
+                    for reflection in row["standard_observed_reflections"]
+                ],
+                "predicted": [
+                    {
+                        "hkl": reflection["hkl"],
+                        "intensity": reflection[
+                            "reported_by_py4DSTEM_intensity_normalized"
+                        ],
+                        "q": [
+                            reflection["reported_by_py4DSTEM_qx_Ainv"],
+                            reflection["reported_by_py4DSTEM_qy_Ainv"],
+                        ],
+                        "g_crystal": reflection[
+                            "g_crystal_cartesian_Ainv"
+                        ],
+                        "g_sample": reflection["g_sample_Ainv"],
+                    }
+                    for reflection in row["acom_simulated_reflections"]
+                ],
+            }
+            if len(result) == len(wanted):
+                break
+    missing = wanted - set(result)
+    if missing:
+        raise ValueError(f"v3 coordinate trace is missing: {sorted(missing)}")
+    return result
+
+
+def parameter_tables() -> dict[str, list[list[str]]]:
+    config = yaml.safe_load(CONFIG_FILE.read_text(encoding="utf-8"))
+    common, clean, image, acom = (
+        config["common"],
+        config["clean"],
+        config["clean_image"],
+        config["acom"],
+    )
+    v3 = [
+        ["公开输入 / Public input", "input_type", "PointList: qx, qy, intensity"],
+        ["输入来源 / Input source", "forward_model", "py4DSTEM kinematical diffraction pattern"],
+        ["最大倒空间半径 / Kmax", "k_max_Ainv", f"{common['k_max_Ainv']} Å⁻¹"],
+        ["中心束排除 / Central exclusion", "central_beam_exclusion_Ainv", f"{common['central_beam_exclusion_Ainv']} Å⁻¹"],
+        ["加速电压 / Voltage", "accelerating_voltage_V", f"{common['accelerating_voltage_V']/1000:g} kV"],
+        ["激发误差宽度 / Excitation σ", "sigma_excitation_error_Ainv", f"{clean['sigma_excitation_error_Ainv']} Å⁻¹"],
+        ["激发误差截断 / Excitation cutoff", "tol_excitation_error_mult", f"{clean['tol_excitation_error_mult']} σ"],
+        ["结构因子阈值 / Structure-factor tol.", "tol_structure_factor", str(clean["tol_structure_factor"])],
+        ["峰强度阈值 / Intensity tol.", "tol_intensity", str(clean["tol_intensity"])],
+        ["强度归一化 / Normalization", "normalize_peak_intensity", str(common["normalize_peak_intensity"])],
+    ]
+    image_rows = [
+        ["公开输入 / Public input", "input_type", "512 × 512 diffraction image"],
+        ["图像模型 / Image model", "forward_model", str(image["forward_model"])],
+        ["图像倒空间范围 / Image q range", "q_max_Ainv", f"±{image['q_max_Ainv']} Å⁻¹"],
+        ["ACOM 截止 / ACOM Kmax", "k_max_Ainv", f"{common['k_max_Ainv']} Å⁻¹"],
+        ["加速电压 / Voltage", "voltage_kV", f"{common['accelerating_voltage_V']/1000:g} kV"],
+        ["会聚半角 / Semiangle", "convergence_semiangle_mrad", f"{image['convergence_semiangle_mrad']} mrad"],
+        ["样品厚度 / Thickness", "thickness_nm", f"{image['thickness_nm']} nm"],
+        ["过采样 / Oversampling", "oversampling", str(image["oversampling"])],
+        ["孔径软边 / Aperture soft edge", "aperture_soft_edge_fraction", str(image["aperture_soft_edge_fraction"])],
+        ["中心束比例 / Direct beam", "canonical_direct_beam_fraction", str(image["canonical_direct_beam_fraction"])],
+        ["计数模型 / Counting", "counting.model", str(image["counting"]["model"])],
+        ["剂量 / Doses", "doses_electrons", ", ".join(str(value) for value in image["counting"]["doses_electrons"])],
+        ["随机重复 / Repeats", "counting.repeats", str(image["counting"]["repeats"])],
+        ["噪声/背景/畸变 / Noise/background/distortion", "detector", "disabled / disabled / disabled"],
+    ]
+    acom_rows = [
+        ["搜索范围 / Zone-axis range", "zone_axis_range", str(acom["zone_axis_range"])],
+        ["晶带轴角步长 / Zone-axis step", "angle_step_zone_axis_deg", f"{acom['angle_step_zone_axis_deg']}°"],
+        ["面内角步长 / In-plane step", "angle_step_in_plane_deg", f"{acom['angle_step_in_plane_deg']}°"],
+        ["对照角步长 / Sweep", "sweep_angle_steps_deg", ", ".join(f"{value}°" for value in acom["sweep_angle_steps_deg"])],
+        ["相关核半径 / Correlation kernel", "corr_kernel_size_Ainv", f"{acom['corr_kernel_size_Ainv']} Å⁻¹"],
+        ["ACOM 激发误差 σ", "sigma_excitation_error_Ainv", f"{acom['sigma_excitation_error_Ainv']} Å⁻¹"],
+        ["径向权重 / Radial power", "power_radial", str(acom["power_radial"])],
+        ["模拟强度权重 / Sim. intensity power", "power_intensity_simulated", str(acom["power_intensity_simulated"])],
+        ["输入强度权重 / Input intensity power", "power_intensity_experiment", str(acom["power_intensity_experiment"])],
+        ["峰距离容差 / Distance tol.", "tol_distance_Ainv", f"{acom['tol_distance_Ainv']} Å⁻¹"],
+        ["最少峰数 / Minimum peaks", "min_number_peaks", str(acom["min_number_peaks"])],
+        ["反演/Friedel 对称 / Inversion symmetry", "inversion_symmetry", str(acom["inversion_symmetry"])],
+        ["返回候选数 / Matches returned", "num_matches_return", str(acom["num_matches_return"])],
+        ["GPU", "cuda", str(acom["cuda"])],
+    ]
+    return {"v3": v3, "image": image_rows, "acom": acom_rows}
+
+
 def details_path(track: str, dose: int | None, repeat: int, detector: str) -> Path:
     if track == "expectation":
         return ROOT / "reports" / f"acom_clean_details_expectation_{detector}.json"
@@ -191,6 +329,7 @@ def comparison_index(report: dict) -> dict[str, dict]:
 def build_data() -> dict:
     representatives = representative_samples()
     wanted = {sample_id for sample_id, _ in representatives}
+    v3_traces = read_v3_traces(wanted)
     gt_rows = {
         row["sample_id"]: row
         for row in (
@@ -314,10 +453,27 @@ def build_data() -> dict:
             "expectation_image": expectation_images[sample_id],
             "counted_images": counted_images[sample_id],
             "seeds": seeds[sample_id],
+            "v3": v3_traces[sample_id],
         }
 
     peak_e = load_json(PEAK_REPORT_E)
     peak_c = load_json(PEAK_REPORT_C)
+    v3_sweep = []
+    for angle, filename in (
+        (4, "acom_clean_evaluation_angle_4deg.json"),
+        (3, "acom_clean_evaluation_angle_3deg.json"),
+        (2, "acom_clean_evaluation.json"),
+    ):
+        metrics = load_json(ROOT / "reports" / filename)["metrics"]
+        v3_sweep.append(
+            {
+                "angle_step_deg": angle,
+                "median_deg": metrics["median_misorientation_deg"],
+                "p95_deg": metrics["p95_misorientation_deg"],
+                "acc_at_2deg": metrics["accuracy_within_2deg"],
+                "acc_at_5deg": metrics["accuracy_within_5deg"],
+            }
+        )
     return rounded(
         {
             "generated_from": {
@@ -335,6 +491,9 @@ def build_data() -> dict:
             "sample_order": [sample_id for sample_id, _ in representatives],
             "variants": variants,
             "parameters": parameters,
+            "parameter_tables": parameter_tables(),
+            "v3_sweep": v3_sweep,
+            "v3_metrics": load_json(EVALUATION_V3)["metrics"],
             "peak_expectation": peak_e["detectors"],
             "peak_dose_summary": peak_c["dose_summary"],
             "acom_oracle": acom_e["physical_oracle_versus_ground_truth"],
@@ -369,9 +528,10 @@ main{max-width:1440px;margin:auto;padding:34px 42px 70px} h1{font-size:30px;marg
 table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;padding:8px 9px;border-bottom:1px solid var(--line);vertical-align:top}th{color:#4f596b;background:#fafbfc;position:sticky;top:0}
 .verdict{border-left:4px solid var(--green);background:#f1faf7;padding:13px 15px;margin-top:14px}.warn{border-left-color:#dc8b1d;background:#fff8e9}
 .toolbar{display:flex;flex-wrap:wrap;gap:10px;align-items:end;padding:14px;background:var(--wash);border-radius:12px}.control label{display:block;font-size:11px;color:var(--muted);margin-bottom:3px}.control select,.seg button{height:36px;border:1px solid #cbd3df;background:#fff;border-radius:7px;padding:0 10px;color:var(--ink)}.seg{display:flex;gap:5px}.seg button.active{background:var(--ink);color:#fff;border-color:var(--ink)}
-.diag{display:grid;grid-template-columns:minmax(480px,1.1fr) minmax(410px,.9fr);gap:16px;margin-top:14px}.image-panel{position:relative;background:#081223;border-radius:10px;overflow:hidden;aspect-ratio:1}.image-panel img,.image-panel svg{position:absolute;inset:0;width:100%;height:100%}.image-panel img{image-rendering:auto}.image-panel svg{overflow:visible}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin:9px 0}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid var(--blue);margin-right:5px}.cross{color:var(--orange);font-size:18px;vertical-align:-1px}.matrix-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.matrix{background:var(--wash);border-radius:8px;padding:10px}.matrix pre{font:12px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:4px 0;white-space:pre-wrap}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:11px 0}.metric{border:1px solid var(--line);border-radius:8px;padding:9px}.metric b{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
+.diag{display:grid;grid-template-columns:minmax(480px,1.1fr) minmax(410px,.9fr);gap:16px;margin-top:14px}.image-panel{position:relative;background:#081223;border-radius:10px;overflow:hidden;aspect-ratio:1}.image-panel img,.image-panel svg{position:absolute;inset:0;width:100%;height:100%}.image-panel img{image-rendering:auto}.image-panel svg{overflow:visible}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin:9px 0}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid var(--blue);margin-right:5px}.cross{color:var(--orange);font-size:18px;vertical-align:-1px}.matrix-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.matrix{background:var(--wash);border-radius:8px;padding:10px}.matrix>b,.matrix>.mini{display:block}.matrix pre{font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0;white-space:pre-wrap}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:11px 0}.metric{border:1px solid var(--line);border-radius:8px;padding:9px}.metric b{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
+.path-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.path{border:1px solid var(--line);border-radius:12px;padding:16px}.path.v3{border-top:4px solid var(--purple)}.path.image{border-top:4px solid var(--green)}.path code{display:block;margin:10px 0;padding:10px;background:var(--wash);border-radius:7px;white-space:normal}.equation-grid{display:grid;grid-template-columns:.7fr 1.2fr 1fr;gap:10px}.transform-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow{grid-template-columns:1fr 1fr}.summary-grid,.diag{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.cards,.flow{grid-template-columns:1fr 1fr}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -390,6 +550,13 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </div>
 <section class="panel" style="margin-top:14px"><h3>全量指标 / Full-run metrics</h3><div id="overview-table"></div><div class="verdict"><b>结论：</b>电子量增大有效。10⁴ e⁻ 时两种检峰器均明显丢峰；10⁵ e⁻ 已接近 oracle ACOM；10⁶ e⁻ 时 find_Bragg_disks 达到 100% Precision/Recall，且相对 oracle 的 ACOM P95 差异仅 0.0067°。当前正式推荐路径是 <b>10⁶ e⁻ + find_Bragg_disks</b>。</div></section>
 
+<h2>v3 直接峰输入 vs 新图像输入 / Pipeline comparison</h2>
+<div class="path-compare">
+ <section class="path v3"><h3>冻结的 v3 基线 / Direct-peak baseline</h3><code>orientation → py4DSTEM 运动学峰 (qx, qy, I) → ACOM → orientation</code><p>公开输入直接是浮点峰列表。它验证取向采样、坐标变换、ACOM 搜索和评测，但没有检验图像形成、电子统计或检峰器。</p><div id="v3-summary"></div></section>
+ <section class="path image"><h3>当前完整 Clean / Image-first benchmark</h3><code>orientation → physical CBED image → AutoDisk / find_Bragg_disks → (qx, qy, I) → same ACOM → orientation</code><p>ACOM 入口仍然是同一种 PointList；新增损失只来自物理图像形成、计数观测和自动检峰。两条路径共享同一个 2° orientation plan 和同一套对称性评测。</p><div id="image-summary"></div></section>
+</div>
+<section class="panel" style="margin-top:14px"><h3>v3 角步长基线 / Frozen v3 angular sweep</h3><div id="v3-sweep-table"></div><p class="mini">该表是之前 v3 真实运行的 4°、3°、2° 结果；新图像链路使用同一个 canonical 2° 检测与评价方法，不把不同角步长的方法混在一起。</p></section>
+
 <h2>样本诊断 / Pattern diagnostics</h2>
 <div class="toolbar">
  <div class="control"><label>代表样本 / Representative</label><select id="sample"></select></div>
@@ -397,25 +564,44 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000">10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000" selected>10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
  <div class="control"><label>检峰器 / Detector</label><select id="detector"><option value="py4dstem">py4DSTEM find_Bragg_disks</option><option value="autodisk">AutoDisk</option></select></div>
- <div class="control"><label>图层 / Overlay</label><div class="seg"><button id="oracle-toggle" class="active">Oracle + HKL</button><button id="detected-toggle" class="active">Detected</button></div></div>
+ <div class="control"><label>图层 / Overlay</label><div class="seg"><button id="v3-toggle" class="active">v3 direct peaks</button><button id="oracle-toggle" class="active">Physical oracle</button><button id="detected-toggle" class="active">Detected</button></div></div>
 </div>
 <div class="diag">
  <section>
   <div class="image-panel"><img id="pattern" alt="diffraction pattern"><svg id="overlay" viewBox="0 0 512 512"></svg></div>
-  <div class="legend"><span><i class="dot"></i>物理 oracle + HKL</span><span><b class="cross">×</b>当前检峰</span><span id="seed-label" class="mini"></span></div>
+  <div class="legend"><span style="color:var(--purple)">□ v3 直接输入峰</span><span><i class="dot"></i>物理 oracle + HKL</span><span><b class="cross">×</b>当前检峰</span><span id="seed-label" class="mini"></span></div>
  </section>
  <section class="panel">
   <h3 id="selection-title"></h3>
   <div class="metrics" id="sample-metrics"></div>
   <div class="matrix-grid">
    <div class="matrix"><b>Ground Truth</b><span class="mini">R<sub>sample→crystal</sub></span><pre id="gt-matrix"></pre></div>
+   <div class="matrix"><b>v3 Direct-Peak ACOM</b><span class="mini">R<sub>sample→crystal</sub></span><pre id="v3-matrix"></pre></div>
    <div class="matrix"><b>Oracle-ACOM</b><span class="mini">R<sub>sample→crystal</sub></span><pre id="oracle-matrix"></pre></div>
    <div class="matrix"><b>当前 ACOM / Selected</b><span class="mini">R<sub>sample→crystal</sub></span><pre id="selected-matrix"></pre></div>
   </div>
-  <p class="mini">三者均为同一语义的样品坐标→晶体坐标旋转矩阵。图像检峰误差与 ACOM 相对 GT 的取向误差分开报告。</p>
+  <p class="mini">四者均为同一语义的样品坐标→晶体坐标旋转矩阵。矩阵元素外观可能因晶体/Friedel 对称等价表示而明显不同；上方角度使用对称性约化后的取向误差。图像检峰误差与 ACOM 相对 GT 的取向误差分开报告。</p>
  </section>
 </div>
 <section class="panel" style="margin-top:14px"><h3>物理 Oracle 逐反射表 / All oracle reflections</h3><p class="mini">HKL 是倒易晶格反射索引，不是“样品只有一个晶面”。每个可见衍射盘对应一个满足当前探测范围和激发条件的 (h,k,l)。</p><div class="peak-table-wrap"><table><thead><tr><th>#</th><th>HKL</th><th>q<sub>x</sub> (Å⁻¹)</th><th>q<sub>y</sub> (Å⁻¹)</th><th>强度 / Intensity</th></tr></thead><tbody id="peak-rows"></tbody></table></div></section>
+
+<h2>v3 逐反射坐标追踪 / Direct-peak coordinate trace</h2>
+<section class="panel">
+ <p>这一节保留旧 v3 的完整诊断语义。选择任意一个 v3 输入反射，逐步查看 <b>HKL → g<sub>crystal</sub> → g<sub>sample</sub> → detector q</b>；这里的 v3 峰是 ACOM 的直接输入，不是从衍射图检测得到。</p>
+ <div class="control" style="max-width:500px"><label>选择 v3 输入反射 / Select direct-input reflection</label><select id="v3-reflection" style="width:100%"></select></div>
+ <div class="equation-grid" style="margin-top:12px">
+  <div class="matrix"><b>① h = [h,k,l]</b><span class="mini">Miller reflection index</span><pre id="trace-hkl"></pre></div>
+  <div class="matrix"><b>② B = [a*; b*; c*]</b><span class="mini">reciprocal basis · Å⁻¹ · no 2π</span><pre id="trace-b"></pre></div>
+  <div class="matrix"><b>③ g<sub>crystal</sub> = hB</b><span class="mini">crystal Cartesian · Å⁻¹</span><pre id="trace-gcrystal"></pre></div>
+ </div>
+ <div class="transform-grid" style="margin-top:10px">
+  <div class="matrix"><b>④ GT: g<sub>sample</sub> = g<sub>crystal</sub> R<sup>GT</sup></b><span class="mini">[qx, qy, qz] · detector uses qx,qy</span><pre id="trace-gsample-gt"></pre></div>
+  <div class="matrix"><b>④ v3 ACOM: same HKL under R<sup>v3</sup></b><span class="mini">diagnostic transform, not a separate ACOM input</span><pre id="trace-gsample-v3"></pre></div>
+ </div>
+ <div class="formula" id="trace-equation" style="margin-top:10px"></div>
+</section>
+<section class="panel" style="margin-top:14px"><h3>全部 v3 输入反射 / All v3 direct-input reflections</h3><div class="peak-table-wrap"><table><thead><tr><th>#</th><th>HKL</th><th>I</th><th>g<sub>crystal</sub> (Å⁻¹)</th><th>g<sub>sample</sub><sup>GT</sup> = [qx,qy,qz]</th><th>g<sub>sample</sub><sup>v3 ACOM|same h</sup></th><th>‖Δg‖₂</th></tr></thead><tbody id="v3-reflection-rows"></tbody></table></div></section>
+<section class="panel" style="margin-top:14px"><h3>v3 ACOM 模拟模板反射 / v3 ACOM simulated reflections</h3><p class="mini">这些是预测取向下 orientation plan 生成的模板峰，用于与上表的 v3 观测峰做稀疏相关；它们不是 Ground Truth HKL 的逐项拷贝。</p><div class="peak-table-wrap"><table><thead><tr><th>#</th><th>Predicted HKL</th><th>q<sub>x</sub></th><th>q<sub>y</sub></th><th>I</th><th>g<sub>crystal</sub></th><th>g<sub>sample</sub></th></tr></thead><tbody id="v3-predicted-rows"></tbody></table></div></section>
 
 <h2>坐标与变量 / Coordinates and variables</h2>
 <section class="panel">
@@ -425,16 +611,21 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </section>
 
 <h2>运行参数 / Runtime parameters</h2>
-<details><summary>显示/隐藏中英文参数 · Show/hide bilingual parameters</summary><div id="parameter-table" style="margin-top:10px"></div></details>
+<details open><summary>v3 直接峰生成参数 · Direct-peak generation parameters</summary><div id="v3-parameter-table" style="margin-top:10px"></div></details>
+<details><summary>新图像生成与计数参数 · Image formation and counting parameters</summary><div id="image-parameter-table" style="margin-top:10px"></div></details>
+<details><summary>两条路径共用的 ACOM 参数 · Shared ACOM parameters</summary><div id="acom-parameter-table" style="margin-top:10px"></div></details>
+<details><summary>当前页面显示参数 · Current display/runtime parameters</summary><div id="parameter-table" style="margin-top:10px"></div></details>
 <details><summary>结果来源与限制 / Provenance and limitation</summary><p>网页由 <code>scripts/17_write_clean_image_visualization.py</code> 从本地 HDF5 和 JSON 结果重新生成。汇总图使用全部 1081 个图样；headline 取向指标统计 1024 个 headline_core。Clean 图像与 ACOM 模板共享同一 CIF 和匹配的运动学模型，因此这里验证的是端到端自洽性，不代表真实实验数据或跨模拟器泛化能力。</p></details>
 </main>
 <script>
 const DATA = __DATA__;
 const $ = id => document.getElementById(id);
-let state={sample:DATA.sample_order[0],track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",oracle:true,detected:true};
+let state={sample:DATA.sample_order[0],track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",v3:true,oracle:true,detected:true,v3Reflection:0};
 const fmt=(x,n=3)=>x==null?"—":Number(x).toFixed(n);
 const pct=x=>fmt(100*x,2)+"%";
 const matrix=m=>m.map(r=>"["+r.map(x=>(x>=0?" ":"")+Number(x).toFixed(5)).join(", ")+"]").join("\n");
+const vector=(v,n=5)=>"["+v.map(x=>(x>=0?" ":"")+Number(x).toFixed(n)).join(", ")+"]";
+const norm=v=>Math.sqrt(v.reduce((s,x)=>s+x*x,0));
 function variantKey(){return state.track==="expectation"?`${state.detector}_expectation`:`counted_dose${state.dose}_repeat${state.repeat}_${state.detector}`}
 function svgChart(id,rows,field,yLabel,percent=false){
  const svg=$(id),W=620,H=280,L=52,R=18,T=22,B=42, xs=[10000,100000,1000000];
@@ -444,7 +635,7 @@ function svgChart(id,rows,field,yLabel,percent=false){
  h+=`<line class="axis" x1="${L}" y1="${H-B}" x2="${W-R}" y2="${H-B}"/><text x="12" y="15">${yLabel}</text>`;
  xs.forEach((v,i)=>h+=`<text x="${x(i)}" y="${H-17}" text-anchor="middle">10${["⁴","⁵","⁶"][i]} e⁻</text>`);
  ["autodisk","py4dstem"].forEach((det,di)=>{let rs=xs.map(d=>rows.find(r=>r.detector===det&&r.dose_electrons===d));let cls=det==="autodisk"?"auto":"py";h+=`<polyline class="${cls}" points="${rs.map((r,i)=>x(i)+","+y(r[field])).join(" ")}"/>`;rs.forEach((r,i)=>h+=`<circle class="${cls}" cx="${x(i)}" cy="${y(r[field])}" r="4"/>`)});
- h+=`<line class="auto" x1="405" y1="13" x2="430" y2="13"/><text x="436" y="17">AutoDisk</text><line class="py" x1="510" y1="13" x2="535" y2="13"/><text x="541" y="17">find_Bragg_disks</text>`;svg.innerHTML=h;
+ h+=`<line class="auto" x1="390" y1="13" x2="415" y2="13"/><text x="421" y="17">AutoDisk</text><line class="py" x1="490" y1="13" x2="515" y2="13"/><text x="521" y="17">find_Bragg</text>`;svg.innerHTML=h;
 }
 function initOverview(){
  const pyE=DATA.peak_expectation.find(r=>r.detector==="py4dstem"), py1m=DATA.peak_dose_summary.find(r=>r.detector==="py4dstem"&&r.dose_electrons===1000000), a1m=DATA.acom_dose_summary.find(r=>r.detector==="py4dstem"&&r.dose_electrons===1000000);
@@ -458,8 +649,22 @@ function initOverview(){
  let rows=[...DATA.peak_dose_summary].map(p=>{let a=DATA.acom_dose_summary.find(x=>x.detector===p.detector&&x.dose_electrons===p.dose_electrons);return `<tr><td>Clean-C</td><td>${p.dose_electrons.toLocaleString()}</td><td>${p.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk"}</td><td>${pct(p.precision_mean)}</td><td>${pct(p.recall_mean)}</td><td>${fmt(p.position_rmse_px_mean,3)}</td><td>${pct(a.ground_truth_acc_at_2deg_mean)}</td><td>${fmt(a.delta_p95_deg_mean,3)}°</td></tr>`});
  DATA.peak_expectation.forEach(p=>{let a=DATA.acom_expectation.find(x=>x.label===`${p.detector}_expectation`);rows.unshift(`<tr><td>Clean-E</td><td>∞ / expectation</td><td>${p.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk"}</td><td>${pct(p.precision)}</td><td>${pct(p.recall)}</td><td>${fmt(p.position_rmse_px,3)}</td><td>${pct(a.versus_ground_truth.acc_at_2deg)}</td><td>${fmt(a.versus_oracle.p95_deg,3)}°</td></tr>`)});
  $("overview-table").innerHTML=`<table><thead><tr><th>Track</th><th>Dose</th><th>Detector</th><th>Precision</th><th>Recall</th><th>位置 RMSE (px)</th><th>GT Acc@2°</th><th>vs Oracle P95</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
+ const v3=DATA.v3_metrics,oracle=DATA.acom_oracle,py=DATA.acom_expectation.find(x=>x.label==="py4dstem_expectation");
+ $("v3-summary").innerHTML=`<b>2° headline：</b>Median ${fmt(v3.median_misorientation_deg,3)}° · P95 ${fmt(v3.p95_misorientation_deg,3)}° · Acc@2° ${pct(v3.accuracy_within_2deg)} · Acc@5° ${pct(v3.accuracy_within_5deg)}`;
+ $("image-summary").innerHTML=`<b>Physical oracle：</b>Acc@2° ${pct(oracle.acc_at_2deg)}；<b>Clean-E + find_Bragg：</b>Acc@2° ${pct(py.versus_ground_truth.acc_at_2deg)} · vs oracle P95 ${fmt(py.versus_oracle.p95_deg,4)}°`;
+ $("v3-sweep-table").innerHTML=`<table><thead><tr><th>Angle step</th><th>Median</th><th>P95</th><th>Acc@2°</th><th>Acc@5°</th></tr></thead><tbody>${DATA.v3_sweep.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${fmt(r.median_deg,3)}°</td><td>${fmt(r.p95_deg,3)}°</td><td>${pct(r.acc_at_2deg)}</td><td>${pct(r.acc_at_5deg)}</td></tr>`).join("")}</tbody></table>`;
 }
 function setButton(id,on){$(id).classList.toggle("active",on)}
+function renderV3Trace(s){
+ const trace=s.v3,rows=trace.observed,index=Math.min(state.v3Reflection,rows.length-1),r=rows[index];
+ $("v3-reflection").innerHTML=rows.map((p,i)=>`<option value="${i}" ${i===index?"selected":""}>#${i+1} HKL [${p.hkl.join(", ")}] · I=${fmt(p.intensity,4)}</option>`).join("");
+ $("trace-hkl").textContent=vector(r.hkl,0);$("trace-b").textContent=matrix(trace.reciprocal_lattice_matrix_B);$("trace-gcrystal").textContent=vector(r.g_crystal);
+ $("trace-gsample-gt").textContent=vector(r.g_sample_gt);$("trace-gsample-v3").textContent=vector(r.g_sample_v3_acom_same_hkl);
+ const delta=r.g_sample_v3_acom_same_hkl.map((x,i)=>x-r.g_sample_gt[i]);
+ $("trace-equation").innerHTML=`h ${vector(r.hkl,0)} × B → g<sub>crystal</sub> ${vector(r.g_crystal)} Å⁻¹<br>g<sub>crystal</sub> × R<sup>GT</sup> → [q<sub>x</sub>,q<sub>y</sub>,q<sub>z</sub>] ${vector(r.g_sample_gt)} Å⁻¹<br>reported detector q = ${vector(r.q)} Å⁻¹ · same-HKL ‖Δg<sub>sample</sub>‖₂ = ${fmt(norm(delta),6)} Å⁻¹<br><b>v3 实际模板匹配：</b>observed match ${pct(trace.observed_match_fraction)} · matched-q RMSE ${fmt(trace.q_rmse_Ainv,6)} Å⁻¹。ACOM 可能返回晶体/Friedel 对称等价矩阵，因此“固定同一 HKL”的诊断差可以很大；它不等于最近邻模板峰匹配误差。`;
+ $("v3-reflection-rows").innerHTML=rows.map((p,i)=>{let dv=p.g_sample_v3_acom_same_hkl.map((x,j)=>x-p.g_sample_gt[j]);return `<tr><td>${i+1}</td><td>[${p.hkl.join(", ")}]</td><td>${fmt(p.intensity,5)}</td><td>${vector(p.g_crystal)}</td><td>${vector(p.g_sample_gt)}</td><td>${vector(p.g_sample_v3_acom_same_hkl)}</td><td>${fmt(norm(dv),6)}</td></tr>`}).join("");
+ $("v3-predicted-rows").innerHTML=trace.predicted.map((p,i)=>`<tr><td>${i+1}</td><td>[${p.hkl.join(", ")}]</td><td>${fmt(p.q[0],5)}</td><td>${fmt(p.q[1],5)}</td><td>${fmt(p.intensity,5)}</td><td>${vector(p.g_crystal)}</td><td>${vector(p.g_sample)}</td></tr>`).join("");
+}
 function redraw(){
  const s=DATA.samples[state.sample],v=DATA.variants[variantKey()],d=v.details[state.sample],m=v.sample_peak_metrics[state.sample];
  $("pattern").src=state.track==="expectation"?s.expectation_image:s.counted_images[`${state.dose}:${state.repeat}`];
@@ -469,26 +674,32 @@ function redraw(){
   ["位置 RMSE",fmt(m.rmse_px,3)+" px"],
   ["ACOM → GT",fmt(d.gt_error_deg,3)+"°"],
   ["ACOM → Oracle",fmt(d.delta_oracle_deg,3)+"°"],
+  ["v3 ACOM → GT",fmt(s.v3.orientation_error_deg,3)+"°"],
+  ["v3 峰匹配率",pct(s.v3.observed_match_fraction)],
+  ["v3 q-RMSE",fmt(s.v3.q_rmse_Ainv,6)+" Å⁻¹"],
   ["峰数 / Peaks",`${m.detected} / ${m.oracle}`],
   ["Correlation",fmt(d.correlation,4)]
  ].map(x=>`<div class="metric"><span>${x[0]}</span><b>${x[1]}</b></div>`).join("");
- $("gt-matrix").textContent=matrix(s.gt_matrix);$("oracle-matrix").textContent=matrix(s.oracle_matrix);$("selected-matrix").textContent=matrix(d.matrix);
+ $("gt-matrix").textContent=matrix(s.gt_matrix);$("v3-matrix").textContent=matrix(s.v3.acom_matrix);$("oracle-matrix").textContent=matrix(s.oracle_matrix);$("selected-matrix").textContent=matrix(d.matrix);
  $("seed-label").textContent=state.track==="counted"?`RNG seed: ${s.seeds[`${state.dose}:${state.repeat}`]}`:"确定性期望强度图 / deterministic expectation";
  const [xmin,xmax,ymin,ymax]=DATA.q_bounds,px=q=>512*(q-xmin)/(xmax-xmin),py=q=>512*(ymax-q)/(ymax-ymin);
  let svg=`<line x1="256" y1="0" x2="256" y2="512" stroke="#ffffff33"/><line x1="0" y1="256" x2="512" y2="256" stroke="#ffffff33"/>`;
+ if(state.v3)s.v3.observed.forEach(p=>{let x=px(p.q[0]),y=py(p.q[1]);svg+=`<rect x="${x-5}" y="${y-5}" width="10" height="10" fill="none" stroke="#b99be8" stroke-width="1.5"/>`});
  if(state.oracle)s.oracle_peaks.forEach((p,i)=>{let show=i<12;svg+=`<circle cx="${px(p.qx)}" cy="${py(p.qy)}" r="${DATA.disk_radius_px+2}" fill="none" stroke="#58a6ff" stroke-width="1.5"/>${show?`<text x="${px(p.qx)+6}" y="${py(p.qy)-6}" fill="#d9ecff" font-size="9">[${p.hkl.join(" ")}]</text>`:""}`});
  if(state.detected)v.peaks[state.sample].forEach(p=>{let x=px(p.qx),y=py(p.qy);svg+=`<path d="M${x-4},${y-4}L${x+4},${y+4}M${x+4},${y-4}L${x-4},${y+4}" stroke="#ff8b5e" stroke-width="1.8"/>`});
  $("overlay").innerHTML=svg;
  $("peak-rows").innerHTML=s.oracle_peaks.map((p,i)=>`<tr><td>${i+1}</td><td>[${p.hkl.join(", ")}]</td><td>${fmt(p.qx,5)}</td><td>${fmt(p.qy,5)}</td><td>${fmt(p.intensity,5)}</td></tr>`).join("");
+ renderV3Trace(s);
  document.querySelectorAll(".counted").forEach(e=>e.classList.toggle("hidden",state.track!=="counted"));
- setButton("track-e",state.track==="expectation");setButton("track-c",state.track==="counted");setButton("oracle-toggle",state.oracle);setButton("detected-toggle",state.detected);
+ setButton("track-e",state.track==="expectation");setButton("track-c",state.track==="counted");setButton("v3-toggle",state.v3);setButton("oracle-toggle",state.oracle);setButton("detected-toggle",state.detected);
 }
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  $("sample").innerHTML=DATA.sample_order.map(id=>`<option value="${id}">${DATA.samples[id].label} · ${id}</option>`).join("");
- $("parameter-table").innerHTML=`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${DATA.parameters.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
- $("sample").onchange=e=>{state.sample=e.target.value;redraw()};$("dose").onchange=e=>{state.dose=+e.target.value;redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;redraw()};$("detector").onchange=e=>{state.detector=e.target.value;redraw()};
- $("track-e").onclick=()=>{state.track="expectation";redraw()};$("track-c").onclick=()=>{state.track="counted";redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};redraw();
+ const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
+ $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
+ $("sample").onchange=e=>{state.sample=e.target.value;state.v3Reflection=0;redraw()};$("dose").onchange=e=>{state.dose=+e.target.value;redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;redraw()};$("detector").onchange=e=>{state.detector=e.target.value;redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
+ $("track-e").onclick=()=>{state.track="expectation";redraw()};$("track-c").onclick=()=>{state.track="counted";redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};redraw();
 }
 init();
 </script></body></html>"""

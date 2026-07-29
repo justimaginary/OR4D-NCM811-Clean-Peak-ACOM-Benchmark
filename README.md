@@ -144,7 +144,7 @@ in `diagnostics/clean_coordinate_trace.jsonl.gz`.
 
 ## Interactive HTML
 
-Open
+The frozen v3 coordinate page remains available. Open
 [`reports/ACOM_COORDINATE_VISUALIZATION.html`](reports/ACOM_COORDINATE_VISUALIZATION.html)
 directly in a browser:
 
@@ -173,6 +173,26 @@ after the underlying results change:
 ```bash
 conda run -n or4d-clean \
   python scripts/12_write_coordinate_visualization.py
+```
+
+The full image-first comparison is
+[`reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html`](reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html):
+
+```bash
+open reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html
+```
+
+It keeps the v3 direct-peak results, parameters, matrices, HKL tables, and
+`HKL → B → g_crystal → g_sample → q` trace, then compares them with the new
+Clean-E/C diffraction-image paths. It also embeds the actual representative
+512×512 images, v3/physical-oracle/detected peak layers, AutoDisk versus
+`find_Bragg_disks`, dose curves, and all completed ACOM aggregate results.
+Like the v3 page, it is a self-contained offline snapshot; regenerate it after
+rerunning the benchmark:
+
+```bash
+conda run -n or4d-clean \
+  python scripts/17_write_clean_image_visualization.py
 ```
 
 ## Report
