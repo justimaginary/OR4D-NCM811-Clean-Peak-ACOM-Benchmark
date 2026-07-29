@@ -118,6 +118,71 @@ clean:
   tol_structure_factor: 0.0001
   tol_intensity: 0.0001
 
+# Image-first Clean benchmark. This is a separate forward model from the
+# Gaussian excitation-error envelope used by the frozen v3 peak baseline.
+clean_image:
+  gpts: [512, 512]
+  q_max_Ainv: 1.6
+  convergence_semiangle_mrad: 0.5
+  thickness_nm: 5.0
+  oversampling: 4
+  aperture_soft_edge_fraction: 0.10
+  defocus_A: 0.0
+  astigmatism_A: 0.0
+  astigmatism_angle_deg: 0.0
+  detector_psf_sigma_px: 0.0
+  canonical_direct_beam_fraction: 0.90
+  direct_beam_fraction_sweep: [0.80, 0.90, 0.98]
+  beam_center_offset_px: [0.0, 0.0]
+  physical_oracle_min_relative_intensity: 0.0001
+  merge_peak_distance_px: 0.25
+  compression: gzip
+  compression_level: 4
+  detector:
+    noise: false
+    background: false
+    ellipticity: false
+    saturation: false
+  autodisk:
+    ring_radius_fraction: 0.85
+    ring_width_px: 1.0
+    correlation_threshold_rel: 0.002
+    log_min_sigma_px: 0.8
+    log_max_sigma_px: 2.5
+    log_num_sigma: 8
+    min_peak_spacing_px: 5
+    rgm_search_radius_px: 1.0
+    rgm_search_step_px: 0.1
+    rgm_inner_radius_fraction: 0.8
+    rgm_split_radius_fraction: 1.0
+    rgm_outer_radius_fraction: 1.2
+    integration_radius_fraction: 0.9
+    max_num_peaks: 256
+  py4dstem_find_bragg_disks:
+    corr_power: 1.0
+    sigma_cc: 1.0
+    subpixel: multicorr
+    upsample_factor: 16
+    min_relative_intensity: 0.000000000001
+    min_peak_spacing_px: 5
+    edge_boundary_px: 6
+    max_num_peaks: 256
+  counting:
+    model: multinomial_fixed_total
+    doses_electrons: [10000, 100000, 1000000]
+    repeats: 5
+    seed_base: 24052026
+  acceptance:
+    match_tolerance_px: 1.0
+    precision_min: 0.99
+    recall_min: 0.99
+    position_rmse_px_max: 0.20
+    position_p95_px_max: 0.30
+    high_angle_recall_min: 0.98
+    orientation_median_delta_deg_max: 0.10
+    orientation_p95_delta_deg_max: 0.50
+    headline_acc2_drop_max: 0.01
+
 # py4DSTEM ACOM baseline. The test orientations are generated independently
 # from this orientation plan. The canonical report uses 2 degrees; the sweep
 # keeps 4 degrees for backward comparison and adds an intermediate 3 degrees.
