@@ -116,10 +116,20 @@ def read_oracle(sample_indices: dict[str, int]) -> dict[str, list[dict]]:
 
 def image_data_url(array: np.ndarray) -> str:
     values = np.asarray(array, dtype=np.float64)
-    scaled = np.log1p(values)
-    positive = scaled[scaled > 0]
-    ceiling = float(np.percentile(positive, 99.9)) if positive.size else 1.0
-    pixels = np.clip(scaled / max(ceiling, 1e-12), 0, 1)
+    positive_values = values[values > 0]
+    reference = (
+        float(np.percentile(positive_values, 50))
+        if positive_values.size
+        else 1.0
+    )
+    scaled = np.log1p(values / max(reference, 1e-12))
+    positive_scaled = scaled[scaled > 0]
+    ceiling = (
+        float(np.percentile(positive_scaled, 99.5))
+        if positive_scaled.size
+        else 1.0
+    )
+    pixels = np.clip(scaled / max(ceiling, 1e-12), 0, 1) ** 0.65
     # A restrained blue-white map keeps weak disks visible without obscuring overlays.
     rgb = np.empty((*pixels.shape, 3), dtype=np.uint8)
     rgb[..., 0] = (8 + 235 * pixels).astype(np.uint8)
@@ -549,8 +559,9 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .diag{display:grid;grid-template-columns:minmax(480px,1.1fr) minmax(410px,.9fr);gap:16px;margin-top:14px}.image-panel{position:relative;background:#081223;border-radius:10px;overflow:hidden;aspect-ratio:1}.image-panel img,.image-panel svg{position:absolute;inset:0;width:100%;height:100%}.image-panel img{image-rendering:auto}.image-panel svg{overflow:visible}.legend{display:flex;gap:18px;flex-wrap:wrap;font-size:13px;margin:9px 0}.dot{display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid var(--blue);margin-right:5px}.cross{color:var(--orange);font-size:18px;vertical-align:-1px}.matrix-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.matrix{background:var(--wash);border-radius:8px;padding:10px}.matrix>b,.matrix>.mini{display:block}.matrix pre{font:11px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace;margin:6px 0;white-space:pre-wrap}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:11px 0}.metric{border:1px solid var(--line);border-radius:8px;padding:9px}.metric b{display:block;font-size:19px}.metric span{font-size:11px;color:var(--muted)}
 .path-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.path{border:1px solid var(--line);border-radius:12px;padding:16px}.path.v3{border-top:4px solid var(--purple)}.path.image{border-top:4px solid var(--green)}.path code{display:block;margin:10px 0;padding:10px;background:var(--wash);border-radius:7px;white-space:normal}.equation-grid{display:grid;grid-template-columns:.7fr 1.2fr 1fr;gap:10px}.transform-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .definitions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{font-size:18px}.definition .tag{display:inline-block;background:var(--wash);border-radius:99px;padding:3px 8px;font-size:12px;margin-bottom:8px}.formation{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.formation>div{position:relative;border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--wash);min-height:112px}.formation>div:not(:last-child):after{content:"→";position:absolute;right:-10px;top:43%;z-index:2;color:var(--blue);font-weight:800}.formation b{display:block;color:var(--blue);margin-bottom:5px}.detector-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.compare-image{position:relative;aspect-ratio:1;background:#081223;border-radius:10px;overflow:hidden}.compare-image img,.compare-image svg{position:absolute;inset:0;width:100%;height:100%}.compare-metric{margin-top:8px;font-size:13px}.v3-diagnostic{display:grid;grid-template-columns:minmax(500px,1.15fr) minmax(360px,.85fr);gap:14px;margin-top:14px}.v3-plot{width:100%;background:#fafbfc;border:1px solid var(--line);border-radius:10px}.v3-plot text{font-size:10px;fill:#5e6879}
+.input-examples{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.input-example{border:1px solid var(--line);border-radius:12px;padding:12px}.input-example img{display:block;width:100%;aspect-ratio:1;background:#081223;border-radius:9px}.input-example h3{margin:9px 0 3px}.input-example p{margin:0;color:var(--muted);font-size:12px}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -561,15 +572,15 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </header>
 <div class="flow"><div><b>1</b> 运动学 CBED<br><span class="mini">physical expectation</span></div><div><b>2</b> 电子计数<br><span class="mini">10⁴ / 10⁵ / 10⁶ e⁻</span></div><div><b>3</b> 衍射盘检测<br><span class="mini">AutoDisk / find_Bragg_disks</span></div><div><b>4</b> ACOM + GT 评测<br><span class="mini">same 2° orientation plan</span></div></div>
 
-<h2>先看懂三个名字 / What v3, Clean-E, and Clean-C mean</h2>
+<h2>输入类型与评测层级 / Input tracks and evaluation levels</h2>
 <div class="definitions">
- <section class="definition v3"><span class="tag">旧基线 / frozen baseline</span><h3>v3：直接峰输入</h3><p><b>不是衍射图。</b>每个样本直接提供一组连续浮点数 <code>(qx, qy, intensity)</code> 给 ACOM。它相当于假设峰中心和强度已经完美获得，用来测 ACOM 本身的取向恢复上限。</p><p class="mini">回答的问题：如果峰列表已经给定，ACOM 能否找回取向？</p></section>
- <section class="definition e"><span class="tag">E = Expectation / 期望强度</span><h3>Clean-E：无随机噪声衍射图</h3><p>由同一 CIF 和取向生成的 <b>512×512 浮点期望强度图 P(q)</b>。它包含中心盘和有限尺寸衍射盘，但没有电子计数涨落、背景、读出噪声、椭圆畸变或饱和。</p><p class="mini">回答的问题：从理想图像自动检峰，会比直接给峰损失多少？</p></section>
- <section class="definition c"><span class="tag">C = Counted / 电子计数</span><h3>Clean-C：有限剂量计数图</h3><p>从同一张 Clean-E 概率图逐电子抽样得到的 <b>uint32 整数计数图</b>。每张图严格含 10⁴、10⁵ 或 10⁶ 个电子，并为每个剂量生成 5 个独立随机重复。</p><p class="mini">回答的问题：有限电子量带来的散粒噪声会让检峰和 ACOM 下降多少？</p></section>
+ <section class="definition v3"><span class="tag">历史基线 / frozen baseline</span><h3>v3：直接峰输入</h3><p><b>输入不是衍射图。</b>每个样本直接向 ACOM 提供连续浮点峰列表 <code>(qx, qy, intensity)</code>。该路径假设峰中心和强度已经获得，用于测量 ACOM 取向恢复能力。</p><p class="mini">评测目标：给定理想峰列表时的 ACOM 基线性能。</p></section>
+ <section class="definition e"><span class="tag">E = Expectation / 期望强度</span><h3>Clean-E：无随机噪声衍射图</h3><p>由同一 CIF 和取向生成的 <b>512×512 浮点期望强度图 P(q)</b>。图像包含中心盘和有限尺寸衍射盘，不包含电子计数涨落、背景、读出噪声、椭圆畸变或饱和。</p><p class="mini">评测目标：理想二维图像形成与自动检峰引入的性能变化。</p></section>
+ <section class="definition c"><span class="tag">C = Counted / 电子计数</span><h3>Clean-C：有限剂量计数图</h3><p>从同一张 Clean-E 概率图逐电子抽样得到的 <b>uint32 整数计数图</b>。每张图严格包含 10⁴、10⁵ 或 10⁶ 个电子，每个剂量使用 5 个独立随机重复。</p><p class="mini">评测目标：有限电子剂量对检峰和 ACOM 的影响。</p></section>
 </div>
 <div class="verdict warn"><b>关系：</b>Clean-C 不是另一种散射模型，而是 Clean-E 的有限电子观测；v3 则根本没有图像输入。三者必须分开比较，才能区分 ACOM 误差、图像检峰误差和剂量噪声。</div>
 
-<h2>输入衍射图是怎样得到的 / How the diffraction image is formed</h2>
+<h2>二维衍射图生成 / 2D diffraction image formation</h2>
 <section class="panel">
  <div class="formation">
   <div><b>① CIF + R</b>NCM811 晶体结构与样品→晶体取向矩阵。</div>
@@ -581,6 +592,17 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  </div>
  <div class="formula" style="margin-top:12px">disk radius = α / λ = 4.063 px<br>Ψ<sub>scat</sub>(q) = Σ<sub>g</sub> √I<sub>g</sub> A(q−g) exp[−iχ(q−g)]<br>P<sub>E</sub>(q) = 0.90 P<sub>direct</sub>(q) + 0.10 P<sub>scattered</sub>(q)<br>Clean-C: n(q) ∼ Multinomial(N<sub>e</sub>, P<sub>E</sub>), &nbsp; Σ<sub>q</sub>n(q)=N<sub>e</sub></div>
  <p class="mini"><b>当前 canonical 模型的边界：</b>反射支持和积分强度来自与 ACOM 匹配的 py4DSTEM 运动学模型；图像形成使用有限会聚盘，而不是高斯点。它不是 multislice，也不声称模拟 dynamical scattering。有限厚度 First-Born+sinc 模型只保留为诊断模式，没有混入本页 canonical 结果。</p>
+</section>
+
+<h2>二维输入图像示例 / Example 2D inputs</h2>
+<section class="panel">
+ <p>以下三幅图来自同一个实际运行样本 <code id="example-sample-id"></code>。Clean-C 图像均由左侧同一张 Clean-E 期望图采样得到，因此盘的位置不变，低剂量时可见性和计数涨落发生变化。</p>
+ <div class="input-examples">
+  <div class="input-example"><img id="example-clean-e" alt="Clean-E expectation diffraction image"><h3>Clean-E</h3><p>float32 期望强度图；无随机电子计数。</p></div>
+  <div class="input-example"><img id="example-clean-c-low" alt="Clean-C low dose diffraction image"><h3>Clean-C · 10⁴ e⁻</h3><p>低剂量整数计数图；弱盘可能仅获得少量或零电子。</p></div>
+  <div class="input-example"><img id="example-clean-c-high" alt="Clean-C high dose diffraction image"><h3>Clean-C · 10⁶ e⁻</h3><p>高剂量整数计数图；更接近期望强度分布。</p></div>
+ </div>
+ <p class="mini"><b>显示说明：</b>网页对每幅图分别使用以非零像素中位数为参考的自适应对数映射、99.5% 百分位截断和 0.65 显示伽马，以同时显示中心束与弱盘。因此三幅图的显示亮度不能用于比较绝对计数；该变换只用于网页预览，HDF5 中参与检峰和 ACOM 的原始 float32/uint32 像素值未被修改。</p>
 </section>
 
 <h2>总体结果 / Overview</h2>
@@ -601,8 +623,8 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 <h2>样本诊断 / Pattern diagnostics</h2>
 <div class="toolbar">
  <div class="control"><label>代表样本 / Representative</label><select id="sample"></select></div>
- <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e" class="active">Clean-E 期望图</button><button id="track-c">Clean-C 计数图</button></div></div>
- <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000">10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000" selected>10⁶ e⁻</option></select></div>
+ <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e">Clean-E 期望图</button><button id="track-c" class="active">Clean-C 计数图</button></div></div>
+ <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000" selected>10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000">10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
  <div class="control"><label>检峰器 / Detector</label><select id="detector"><option value="py4dstem">py4DSTEM find_Bragg_disks</option><option value="autodisk">AutoDisk</option></select></div>
  <div class="control"><label>图层 / Overlay</label><div class="seg"><button id="v3-toggle" class="active">v3 direct peaks</button><button id="oracle-toggle" class="active">Physical oracle</button><button id="detected-toggle" class="active">Detected</button></div></div>
@@ -625,15 +647,16 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  </section>
 </div>
 
-<h2>同一样本的 v3 直接峰诊断 / v3 direct-input sample view</h2>
+<h2>v3 直接峰样本诊断 / v3 direct-input sample diagnostics</h2>
 <div class="v3-diagnostic">
  <section><svg id="v3-direct-plot" class="v3-plot" viewBox="0 0 620 520" role="img" aria-label="v3 direct peaks and ACOM template peaks"></svg><div class="legend"><span style="color:var(--blue)">○ v3 直接输入峰 / observed</span><span style="color:var(--orange)">× v3 ACOM 模板峰 / simulated</span><span style="color:#9aa4b2">— 一对一匹配 / assignment</span></div></section>
- <section class="panel"><h3>这才是旧 v3 的实际输入</h3><p>蓝色圆圈是 v3 直接交给 ACOM 的 <code>(qx,qy,I)</code>；橙色叉是预测取向下 orientation plan 生成的模拟模板峰。灰线表示 v3 报告保存的一对一峰匹配。</p><div class="metrics" id="v3-plot-metrics"></div><p class="mini">这张图没有“检峰器”：蓝色圆圈本身就是输入。它与上面的衍射图诊断并列，才能看清从直接峰 benchmark 到图像 benchmark 多出来了什么。</p></section>
+ <section class="panel"><h3>v3 输入与模板匹配</h3><p>蓝色圆圈是 v3 直接交给 ACOM 的 <code>(qx,qy,I)</code>；橙色叉是预测取向下 orientation plan 生成的模拟模板峰。灰线表示 v3 报告保存的一对一峰匹配。</p><div class="metrics" id="v3-plot-metrics"></div><p class="mini">v3 路径不包含检峰器，蓝色圆圈本身就是 ACOM 输入。该图与二维衍射图诊断并列显示，用于区分直接峰基线和图像输入链路。</p></section>
 </div>
 
-<h2>衍射盘是否被正确识别 / Visual disk-detection accuracy</h2>
+<h2>衍射盘检测结果 / Visual disk-detection accuracy</h2>
 <section class="panel">
  <p>下面两幅图使用当前选择的同一张 Clean-E 或 Clean-C 图像，同时显示两个检峰器。<b>绿色圆圈和连线</b>是 1 px 容差内的一对一真阳性；<b>黄色圆圈</b>是漏检 Oracle 盘；<b>红色叉</b>是误检盘。线段长度就是位置误差。</p>
+ <div class="verdict warn"><b>默认错误案例：</b><code>clean_core_0970 · Clean-C · 10⁴ e⁻ · repeat 0</code>。AutoDisk 为 TP 14 / FP 6 / FN 7；<code>find_Bragg_disks</code> 为 TP 16 / FP 5 / FN 5。可在上方切换到 Clean-E 或更高剂量观察错误如何减少。</div>
  <div class="detector-compare">
   <div><h3>AutoDisk</h3><div class="compare-image"><img id="compare-image-autodisk" alt="AutoDisk comparison image"><svg id="compare-overlay-autodisk" viewBox="0 0 512 512"></svg></div><div id="compare-metric-autodisk" class="compare-metric"></div></div>
   <div><h3>py4DSTEM find_Bragg_disks</h3><div class="compare-image"><img id="compare-image-py4dstem" alt="find Bragg disks comparison image"><svg id="compare-overlay-py4dstem" viewBox="0 0 512 512"></svg></div><div id="compare-metric-py4dstem" class="compare-metric"></div></div>
@@ -678,7 +701,7 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 <script>
 const DATA = __DATA__;
 const $ = id => document.getElementById(id);
-let state={sample:DATA.sample_order[0],track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",v3:true,oracle:true,detected:true,v3Reflection:0};
+let state={sample:DATA.sample_order[0],track:"counted",dose:10000,repeat:0,detector:"py4dstem",v3:true,oracle:true,detected:true,v3Reflection:0};
 const fmt=(x,n=3)=>x==null?"—":Number(x).toFixed(n);
 const pct=x=>fmt(100*x,2)+"%";
 const matrix=m=>m.map(r=>"["+r.map(x=>(x>=0?" ":"")+Number(x).toFixed(5)).join(", ")+"]").join("\n");
@@ -777,6 +800,8 @@ function redraw(){
 }
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
+ const example=DATA.samples[DATA.sample_order[0]];
+ $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
  $("sample").innerHTML=DATA.sample_order.map(id=>`<option value="${id}">${DATA.samples[id].label} · ${id}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
