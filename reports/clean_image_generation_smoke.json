@@ -1,5 +1,6 @@
 {
   "num_samples": 17,
+  "forward_model": "acom_matched",
   "roles": [
     "legacy_smoke"
   ],
@@ -10,8 +11,15 @@
     512,
     512
   ],
-  "mean_render_seconds": 0.2267541864010341,
-  "total_render_seconds": 3.8548211688175797,
+  "mean_render_seconds": 0.030843465654042494,
+  "total_render_seconds": 0.5243389161187224,
+  "oracle_diagnostics": {
+    "candidate_reflections": 571,
+    "merged_disks_before_threshold": 571,
+    "retained_disks": 571,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 0
+  },
   "versions": {
     "python": "3.11.15",
     "numpy": "1.26.4",

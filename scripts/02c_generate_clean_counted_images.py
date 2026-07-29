@@ -113,6 +113,9 @@ def main() -> None:
         for key, value in source.attrs.items():
             target.attrs[f"expectation_{key}"] = value
         target.attrs["track"] = "clean_counted"
+        target.attrs["forward_model"] = source.attrs.get(
+            "forward_model", "unknown"
+        )
         target.attrs["counting_model"] = "multinomial_fixed_total"
         target.attrs["detector_model"] = "ideal_counting"
         target.attrs["normalization"] = "each count image sums exactly to dose_electrons"
@@ -133,10 +136,12 @@ def main() -> None:
         "total_seconds": time.perf_counter() - started,
         "fixed_total_verified": True,
     }
+    with h5py.File(source_path, "r") as source:
+        forward_model = str(source.attrs.get("forward_model", "unknown"))
+    model_suffix = "" if forward_model == "acom_matched" else "_first_born"
+    smoke_suffix = "_smoke" if "smoke" in output_path.stem else ""
     report_name = (
-        "clean_counted_generation_smoke.json"
-        if "smoke" in output_path.stem
-        else "clean_counted_generation.json"
+        f"clean_counted_generation{model_suffix}{smoke_suffix}.json"
     )
     report_path = ROOT / "reports" / report_name
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

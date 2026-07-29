@@ -13,10 +13,10 @@
       "num_samples": 17,
       "num_failures": 0,
       "failures": [],
-      "total_seconds": 1.8762667500413954,
-      "mean_seconds": 0.1103686323553762,
-      "p95_seconds": 0.12484859219985082,
-      "throughput_patterns_per_second": 9.06054536202005
+      "total_seconds": 1.750364208186511,
+      "mean_seconds": 0.10296260048155947,
+      "p95_seconds": 0.1171832162304781,
+      "throughput_patterns_per_second": 9.712264407881767
     },
     {
       "variant": "expectation",
@@ -25,10 +25,10 @@
       "num_samples": 17,
       "num_failures": 0,
       "failures": [],
-      "total_seconds": 6.190102246939205,
-      "mean_seconds": 0.3641236615846591,
-      "p95_seconds": 0.5036985251936129,
-      "throughput_patterns_per_second": 2.746319741068239
+      "total_seconds": 1.4687449991470203,
+      "mean_seconds": 0.08639676465570707,
+      "p95_seconds": 0.16811849160585546,
+      "throughput_patterns_per_second": 11.574507494407008
     }
   ]
 }

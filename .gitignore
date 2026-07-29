@@ -98,11 +98,25 @@ diagnostics/clean_expectation_*_peaks*.h5
 diagnostics/clean_counted_dose*_peaks*.h5
 diagnostics/clean_image_overlays*/
 diagnostics/clean_counted_overlays*/
+diagnostics/clean_oracle_ablation_*.h5
 submissions/acom_clean_counted_*.jsonl
 submissions/acom_clean_expectation_*.jsonl
 submissions/acom_clean_physical_oracle_*.jsonl
+submissions/acom_clean_ablation_*.jsonl
+submissions/acom_clean_matched_*.jsonl
+submissions/acom_clean_image_matched_*.jsonl
 reports/acom_clean_details_counted_*.json
 reports/acom_plan_audit_counted_*.json
+reports/acom_clean_details_ablation_*.json
+reports/acom_plan_audit_ablation_*.json
+reports/acom_clean_details_image_matched_*.json
+reports/acom_plan_audit_image_matched_*.json
+reports/acom_clean_details_matched_*.json
+reports/acom_plan_audit_matched_*.json
+reports/acom_clean_details_physical_oracle_pi*.json
+reports/acom_plan_audit_physical_oracle_pi*.json
+reports/acom_clean_details_physical_oracle_s*.json
+reports/acom_plan_audit_physical_oracle_s*.json
 
 # Timing / profiling / debug dumps
 *.prof

@@ -172,6 +172,16 @@ def parse_args() -> argparse.Namespace:
         help="Override both zone-axis and in-plane ACOM angle steps.",
     )
     parser.add_argument(
+        "--power-intensity-experiment",
+        type=float,
+        help="Override the ACOM exponent applied to measured peak intensity.",
+    )
+    parser.add_argument(
+        "--power-intensity-simulated",
+        type=float,
+        help="Override the ACOM exponent applied to simulated template intensity.",
+    )
+    parser.add_argument(
         "--output-tag",
         "--report-tag",
         default="",
@@ -212,8 +222,20 @@ def main() -> None:
         if args.angle_step_deg is not None
         else acom["angle_step_in_plane_deg"]
     )
+    power_intensity_experiment = float(
+        args.power_intensity_experiment
+        if args.power_intensity_experiment is not None
+        else acom["power_intensity_experiment"]
+    )
+    power_intensity_simulated = float(
+        args.power_intensity_simulated
+        if args.power_intensity_simulated is not None
+        else acom["power_intensity_simulated"]
+    )
     if angle_step_zone_axis <= 0.0 or angle_step_in_plane <= 0.0:
         raise ValueError("ACOM angle steps must be positive")
+    if power_intensity_experiment < 0.0 or power_intensity_simulated < 0.0:
+        raise ValueError("intensity exponents must be non-negative")
     if args.output_tag and not args.output_tag.replace("_", "").isalnum():
         raise ValueError(
             "output tag may contain only letters, numbers, and underscores"
@@ -268,8 +290,8 @@ def main() -> None:
         corr_kernel_size=float(acom["corr_kernel_size_Ainv"]),
         sigma_excitation_error=float(acom["sigma_excitation_error_Ainv"]),
         power_radial=float(acom["power_radial"]),
-        power_intensity=float(acom["power_intensity_simulated"]),
-        power_intensity_experiment=float(acom["power_intensity_experiment"]),
+        power_intensity=power_intensity_simulated,
+        power_intensity_experiment=power_intensity_experiment,
         tol_distance=float(acom["tol_distance_Ainv"]),
         CUDA=bool(acom["cuda"]),
         progress_bar=bool(acom["progress_bar"]),
@@ -469,6 +491,8 @@ def main() -> None:
         "output_tag": args.output_tag or "canonical",
         "acom_angle_step_zone_axis_deg": angle_step_zone_axis,
         "acom_angle_step_in_plane_deg": angle_step_in_plane,
+        "acom_power_intensity_experiment": power_intensity_experiment,
+        "acom_power_intensity_simulated": power_intensity_simulated,
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
         "headline_sample_role": config["evaluation"]["headline_sample_role"],

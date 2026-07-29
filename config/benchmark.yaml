@@ -121,6 +121,8 @@ clean:
 # Image-first Clean benchmark. This is a separate forward model from the
 # Gaussian excitation-error envelope used by the frozen v3 peak baseline.
 clean_image:
+  forward_model: acom_matched
+  diagnostic_forward_model: coherent_first_born
   gpts: [512, 512]
   q_max_Ainv: 1.6
   convergence_semiangle_mrad: 0.5
@@ -135,7 +137,10 @@ clean_image:
   direct_beam_fraction_sweep: [0.80, 0.90, 0.98]
   beam_center_offset_px: [0.0, 0.0]
   physical_oracle_min_relative_intensity: 0.0001
-  merge_peak_distance_px: 0.25
+  oracle_merge_distance_px: 5.0
+  oracle_integration_radius_fraction: 0.9
+  oracle_require_full_disk: true
+  detector_central_exclusion_radius_fraction: 2.0
   compression: gzip
   compression_level: 4
   detector:
@@ -150,7 +155,7 @@ clean_image:
     log_min_sigma_px: 0.8
     log_max_sigma_px: 2.5
     log_num_sigma: 8
-    min_peak_spacing_px: 5
+    min_peak_spacing_px: 8
     rgm_search_radius_px: 1.0
     rgm_search_step_px: 0.1
     rgm_inner_radius_fraction: 0.8

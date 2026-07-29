@@ -116,6 +116,9 @@ def main() -> None:
                 "label": label,
                 "details_file": str(path),
                 "versus_physical_oracle_acom": metric_summary(delta),
+                "versus_physical_oracle_acom_on_baseline_gt_le5": (
+                    metric_summary(delta[baseline_gt <= 5.0])
+                ),
                 "versus_ground_truth": metric_summary(candidate_gt),
                 "acc_at_2deg_change_from_physical_oracle": float(
                     np.mean(candidate_gt <= 2.0) - np.mean(baseline_gt <= 2.0)
@@ -162,6 +165,14 @@ def main() -> None:
                 "median_deg",
             ),
             "delta_p95_deg": ("versus_physical_oracle_acom", "p95_deg"),
+            "stable_delta_median_deg": (
+                "versus_physical_oracle_acom_on_baseline_gt_le5",
+                "median_deg",
+            ),
+            "stable_delta_p95_deg": (
+                "versus_physical_oracle_acom_on_baseline_gt_le5",
+                "p95_deg",
+            ),
             "ground_truth_acc_at_2deg": ("versus_ground_truth", "acc_at_2deg"),
             "ground_truth_acc_at_5deg": ("versus_ground_truth", "acc_at_5deg"),
             "ground_truth_catastrophic_gt_5deg": (

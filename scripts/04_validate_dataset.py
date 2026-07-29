@@ -180,6 +180,12 @@ def validate_clean_expectation(path: Path) -> dict:
             raise ValueError(f"{path} q_max differs from the configured value")
         return {
             "track": "clean_expectation",
+            "forward_model": str(
+                h5.attrs.get(
+                    "forward_model",
+                    h5.attrs.get("expectation_forward_model", "unknown"),
+                )
+            ),
             "path": str(path),
             "num_samples": int(images.shape[0]),
             "image_shape": list(images.shape[1:]),
@@ -218,6 +224,12 @@ def validate_clean_counted(path: Path) -> dict:
                     totals.append(total)
         return {
             "track": "clean_counted",
+            "forward_model": str(
+                h5.attrs.get(
+                    "forward_model",
+                    h5.attrs.get("expectation_forward_model", "unknown"),
+                )
+            ),
             "path": str(path),
             "shape": list(counts.shape),
             "dtype": str(counts.dtype),

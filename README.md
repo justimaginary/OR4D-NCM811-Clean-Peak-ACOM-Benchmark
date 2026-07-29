@@ -74,7 +74,7 @@ The repository now also contains a separate, Clean-only image path:
 
 ```text
 CIF + orientation
-→ coherent first-Born kinematical CBED expectation (Clean-E)
+→ ACOM-matched kinematical finite-disk expectation (Clean-E)
 → fixed-total multinomial electron counts (Clean-C)
 → AutoDisk and py4DSTEM find_Bragg_disks
 → the same 2° ACOM
@@ -88,8 +88,8 @@ regression set first:
 conda run -n or4d-clean ./run_clean_image_acom.sh smoke
 ```
 
-Only after the smoke limitations are resolved should the 1,081-case command be
-used:
+The corrected 17-case smoke now passes, so the next formal step is the
+1,081-case command:
 
 ```bash
 conda run -n or4d-clean ./run_clean_image_acom.sh full
@@ -102,12 +102,13 @@ real py4DSTEM 0.14.18 public function, not an alias for the local AutoDisk
 implementation. Both outputs are converted to the same physical
 `(qx, qy, integrated intensity)` contract before ACOM.
 
-Current 17-case smoke status is **diagnostic, not accepted**. On Clean-E,
-AutoDisk peak precision/recall are 0.921/0.463 and py4DSTEM values are
-0.983/0.857. More importantly, physical-oracle ACOM itself reaches only
-35.3% Acc@2° on these legacy cases and has 5/17 errors above 5°. The physical
-intensity model and the current ACOM orientation-plan model therefore need to
-be reconciled before a full run can be treated as a benchmark result.
+Current 17-case matched smoke status: both detectors recover Clean-E with
+100% precision and recall. At \(10^5\) electrons, AutoDisk reaches
+89.2%/89.1% precision/recall and `find_Bragg_disks` reaches 96.9%/96.8%;
+both retain the oracle ACOM Acc@2° of 88.2%. At \(10^6\), both detectors are
+approximately or exactly 100% at peak level. The separate finite-thickness
+First-Born mode remains diagnostic because its sinc excitation envelope is not
+matched by the current ACOM orientation plan.
 
 See [`docs/CLEAN_IMAGE_PIPELINE.md`](docs/CLEAN_IMAGE_PIPELINE.md) for the
 formulas, HDF5 schema, detector comparison, commands, and current measured

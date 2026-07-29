@@ -99,6 +99,15 @@ def main() -> None:
     report_rows: list[dict] = []
 
     with h5py.File(source_path, "r") as h5:
+        forward_model = str(
+            h5.attrs.get(
+                "forward_model",
+                h5.attrs.get("expectation_forward_model", "unknown"),
+            )
+        )
+        model_suffix = (
+            "" if forward_model == "acom_matched" else "_first_born"
+        )
         sample_ids = decode_ids(h5["sample_id"][:])
         qx_axis = np.asarray(h5["detector/qx_Ainv"][:], dtype=float)
         qy_axis = np.asarray(h5["detector/qy_Ainv"][:], dtype=float)
@@ -110,7 +119,13 @@ def main() -> None:
                 np.sqrt(np.count_nonzero(vacuum_probe >= 0.5) / np.pi),
             )
         )
-        central_exclusion = disk_radius_px * q_pixel
+        central_exclusion = (
+            disk_radius_px
+            * q_pixel
+            * float(
+                image_cfg["detector_central_exclusion_radius_fraction"]
+            )
+        )
 
         for variant in variants(h5, args):
             for detector_name in detectors:
@@ -173,7 +188,10 @@ def main() -> None:
                 suffix = "_smoke" if "smoke" in source_path.stem else ""
                 output = (
                     args.output_dir
-                    / f"clean_{variant['name']}_{detector_name}_peaks{suffix}.h5"
+                    / (
+                        f"clean_{variant['name']}_{detector_name}_peaks"
+                        f"{model_suffix}{suffix}.h5"
+                    )
                 )
                 attrs = {
                     "track": f"clean_{variant['name']}",
@@ -186,6 +204,7 @@ def main() -> None:
                     if variant["repeat"] is not None
                     else "not_applicable",
                     "coordinate_units": "1/angstrom",
+                    "forward_model": forward_model,
                     "central_exclusion_Ainv": central_exclusion,
                     "detector_config": image_cfg[
                         "autodisk"
@@ -219,8 +238,8 @@ def main() -> None:
         "runs": report_rows,
     }
     suffix = "_smoke" if "smoke" in source_path.stem else ""
-    report_path = (
-        ROOT / "reports" / f"clean_disk_detection_{args.track}{suffix}.json"
+    report_path = ROOT / "reports" / (
+        f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
     )
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Detection report: {report_path}")
