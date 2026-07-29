@@ -549,6 +549,7 @@ HTML = r"""<!doctype html>
 :root{--ink:#172033;--muted:#697386;--line:#dce2ea;--paper:#fff;--wash:#f5f7fa;--blue:#246bce;--orange:#e56b3f;--green:#16866b;--purple:#7251b5}
 *{box-sizing:border-box} body{margin:0;background:#fff;color:var(--ink);font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC",sans-serif}
 main{max-width:1440px;margin:auto;padding:34px 42px 70px} h1{font-size:30px;margin:0 0 6px} h2{font-size:21px;margin:36px 0 14px} h3{font-size:16px;margin:0 0 9px}
+.page-header{display:flex;justify-content:space-between;align-items:flex-start;gap:18px}.page-switch{display:inline-block;border:1px solid var(--line);border-radius:8px;padding:9px 12px;color:var(--ink);background:var(--wash);text-decoration:none;font-weight:650;white-space:nowrap}.page-switch:hover{border-color:var(--purple);background:#f7f4fc}
 .lead{color:var(--muted);margin:0}.stamp{display:inline-block;margin-top:14px;padding:5px 10px;border-radius:99px;background:#e9f6f1;color:#126850;font-weight:650}
 .flow{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:24px 0}.flow div{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--wash);font-weight:650}.flow b{color:var(--blue)}
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card,.panel{border:1px solid var(--line);border-radius:12px;background:var(--paper);padding:16px}.value{font-size:26px;font-weight:760}.unit{font-size:13px;color:var(--muted)}
@@ -562,14 +563,17 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .input-examples{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.input-example{border:1px solid var(--line);border-radius:12px;padding:12px}.input-example img{display:block;width:100%;aspect-ratio:1;background:#081223;border-radius:9px}.input-example h3{margin:9px 0 3px}.input-example p{margin:0;color:var(--muted);font-size:12px}
 .case-description{margin-top:10px;padding:11px 13px;border-left:4px solid var(--purple);background:#f7f4fc;border-radius:0 8px 8px 0}.control-help{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.control-help div{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.control-help b{display:block;margin-bottom:3px}.control-help span{font-size:12px;color:var(--muted)}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.input-schema section{border:1px solid var(--line);border-radius:9px;padding:13px}.input-schema h3{margin-bottom:6px}.input-schema code{font-size:12px}.schema-note{padding:10px 12px;background:var(--wash);border-radius:8px;margin-top:10px}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic,.input-schema{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.page-header{display:block}.page-switch{margin-top:14px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic,.input-schema{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
-<header>
+<header class="page-header">
+ <div>
   <h1>Clean 图像 Benchmark：衍射图 → 检峰 → ACOM</h1>
   <p class="lead">Full Clean image benchmark · expectation + counted electrons · AutoDisk vs py4DSTEM find_Bragg_disks</p>
   <span class="stamp">全量实际运行结果 / completed full run</span>
+ </div>
+ <a class="page-switch" href="ACOM_COORDINATE_VISUALIZATION.html">← 返回 v3 直接峰页面</a>
 </header>
 <div class="flow"><div><b>1</b> 运动学 CBED<br><span class="mini">physical expectation</span></div><div><b>2</b> 电子计数<br><span class="mini">10⁴ / 10⁵ / 10⁶ e⁻</span></div><div><b>3</b> 衍射盘检测<br><span class="mini">AutoDisk / find_Bragg_disks</span></div><div><b>4</b> ACOM + GT 评测<br><span class="mini">same 2° orientation plan</span></div></div>
 
@@ -651,9 +655,9 @@ python scripts/03_extract_clean_disks.py \
 <section class="panel" style="margin-top:14px"><h3>v3 角步长基线 / Frozen v3 angular sweep</h3><div id="v3-sweep-table"></div><p class="mini">该表是之前 v3 真实运行的 4°、3°、2° 结果；新图像链路使用同一个 canonical 2° 检测与评价方法，不把不同角步长的方法混在一起。</p></section>
 
 <h2>单张衍射图检查 / Per-pattern inspection</h2>
-<p class="lead" style="margin-bottom:10px">所有控件都可以修改，修改后下方主诊断立即显示所选组合的实际运行结果。“案例预设”只是一次性填入一组有代表性的参数，不会限制后续选择。</p>
+<p class="lead" style="margin-bottom:10px">所有控件都可以修改。第一项用于一次性载入一个示例样本及其初始参数；之后修改图像层、剂量、重复次数或检峰器，下方主图和单样本结果会立即切换到修改后的组合。</p>
 <div class="toolbar">
- <div class="control"><label>案例预设（可选）/ Example preset</label><select id="sample"></select></div>
+ <div class="control"><label>示例样本 + 初始参数 / Load sample + initial settings</label><select id="sample"></select></div>
  <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e">Clean-E 期望图</button><button id="track-c" class="active">Clean-C 计数图</button></div></div>
  <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000" selected>10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000">10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
@@ -856,19 +860,22 @@ function showCaseDescription(text,label="场景说明 / Case note"){$("case-desc
 function applyCase(id){
  const item=CASES.find(candidate=>candidate.id===id);if(!item)return;
  activeCase=id;state.sample=item.sample;state.track=item.track;state.dose=item.dose;state.repeat=item.repeat;state.detector=item.detector;state.v3Reflection=0;
- $("sample").value=id;$("dose").value=String(item.dose);$("repeat").value=String(item.repeat);$("detector").value=item.detector;showCaseDescription(item.description);redraw();
+ $("sample").value=id;$("dose").value=String(item.dose);$("repeat").value=String(item.repeat);$("detector").value=item.detector;
+ const imageLabel=item.track==="expectation"?"Clean-E 期望图":`Clean-C 计数图 · ${item.dose.toLocaleString()} e⁻ · repeat ${item.repeat}`;
+ const detectorLabel=item.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk";
+ showCaseDescription(`<b>${item.sample} · ${imageLabel} · ${detectorLabel}</b>。${item.description}`,"当前显示 / Now showing");redraw();
 }
 function markViewAdjusted(){
  activeCase=null;$("sample").value="";
  const imageLabel=state.track==="expectation"?"Clean-E 期望图":`Clean-C 计数图 · ${state.dose.toLocaleString()} e⁻ · repeat ${state.repeat}`;
  const detectorLabel=state.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk";
- showCaseDescription(`<b>${imageLabel} · ${detectorLabel}</b>。下方主衍射图、橙色 Detected 标记、样本指标和“当前 ACOM”矩阵已经切换到这一组合。双检峰器对比区仍固定并列显示 AutoDisk 与 find_Bragg_disks 在同一张图上的结果。`,"已应用 / Applied");
+ showCaseDescription(`<b>${state.sample} · ${imageLabel} · ${detectorLabel}</b>。下方主衍射图、橙色 Detected 标记、单样本指标和“当前 ACOM”矩阵均已使用这组参数。双检峰器并排对比区是例外：它会在同一张图上同时显示 AutoDisk 与 find_Bragg_disks。`,"当前显示 / Now showing");
 }
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  const example=DATA.samples[DATA.sample_order[0]];
  $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
- $("sample").innerHTML=`<option value="" disabled>选择一个案例预设 / Select a preset</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
+ $("sample").innerHTML=`<option value="" disabled>选择示例样本并载入初始参数</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
  $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markViewAdjusted();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markViewAdjusted();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markViewAdjusted();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};

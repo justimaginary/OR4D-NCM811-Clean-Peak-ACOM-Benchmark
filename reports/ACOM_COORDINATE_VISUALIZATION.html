@@ -25,6 +25,13 @@ body {
 }
 main { max-width: 1320px; margin: 0 auto; padding: 24px; }
 h1 { margin: 0 0 6px; font-size: 24px; font-weight: 600; }
+.page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; margin-bottom: 16px; }
+.page-switch {
+  display: inline-block; flex: none; padding: 9px 12px; color: var(--foreground);
+  background: var(--muted); border: 1px solid var(--border); border-radius: 8px;
+  text-decoration: none; font-weight: 600; white-space: nowrap;
+}
+.page-switch:hover { border-color: var(--series-3); background: #f7f4fc; }
 .overview { margin: 18px 0 24px; padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .overview-head { display: flex; justify-content: space-between; gap: 12px; align-items: baseline; flex-wrap: wrap; }
 .overview h2 { margin: 0; font-size: 19px; }
@@ -112,6 +119,8 @@ th { color: var(--muted-foreground); font-weight: 600; background: var(--muted);
 tbody tr.is-selected { background: #eef4ff; }
 @media (max-width: 720px) {
   main { padding: 16px; }
+  .page-header { display: block; }
+  .page-switch { margin-top: 12px; }
   .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
@@ -120,6 +129,7 @@ tbody tr.is-selected { background: #eef4ff; }
   body { color: #000000; background: #ffffff; }
   main { max-width: none; padding: 0; }
   button, select, pre, th { color: #000000; background: #ffffff; }
+  .page-switch { display: none; }
   details.parameters > :not(summary) { display: block !important; }
   .process-grid, .parameters, .notation, .plots, .transform, .all-reflections, .matrix-wrap { break-inside: avoid; }
   .all-reflections { break-before: page; }
@@ -128,7 +138,10 @@ tbody tr.is-selected { background: #eef4ff; }
 </head>
 <body>
 <main>
-  <h1>Clean v3 坐标与倒空间中间变量</h1>
+  <header class="page-header">
+    <h1>Clean v3 坐标与倒空间中间变量</h1>
+    <a class="page-switch" href="CLEAN_IMAGE_ACOM_VISUALIZATION.html">进入二维衍射图版本 →</a>
+  </header>
   <section class="overview">
     <div class="overview-head">
       <h2>Overview｜总体结果</h2>
