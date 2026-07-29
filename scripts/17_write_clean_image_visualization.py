@@ -560,9 +560,9 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .path-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.path{border:1px solid var(--line);border-radius:12px;padding:16px}.path.v3{border-top:4px solid var(--purple)}.path.image{border-top:4px solid var(--green)}.path code{display:block;margin:10px 0;padding:10px;background:var(--wash);border-radius:7px;white-space:normal}.equation-grid{display:grid;grid-template-columns:.7fr 1.2fr 1fr;gap:10px}.transform-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .definitions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{font-size:18px}.definition .tag{display:inline-block;background:var(--wash);border-radius:99px;padding:3px 8px;font-size:12px;margin-bottom:8px}.formation{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.formation>div{position:relative;border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--wash);min-height:112px}.formation>div:not(:last-child):after{content:"→";position:absolute;right:-10px;top:43%;z-index:2;color:var(--blue);font-weight:800}.formation b{display:block;color:var(--blue);margin-bottom:5px}.detector-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.compare-image{position:relative;aspect-ratio:1;background:#081223;border-radius:10px;overflow:hidden}.compare-image img,.compare-image svg{position:absolute;inset:0;width:100%;height:100%}.compare-metric{margin-top:8px;font-size:13px}.v3-diagnostic{display:grid;grid-template-columns:minmax(500px,1.15fr) minmax(360px,.85fr);gap:14px;margin-top:14px}.v3-plot{width:100%;background:#fafbfc;border:1px solid var(--line);border-radius:10px}.v3-plot text{font-size:10px;fill:#5e6879}
 .input-examples{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.input-example{border:1px solid var(--line);border-radius:12px;padding:12px}.input-example img{display:block;width:100%;aspect-ratio:1;background:#081223;border-radius:9px}.input-example h3{margin:9px 0 3px}.input-example p{margin:0;color:var(--muted);font-size:12px}
-.case-description{margin-top:10px;padding:11px 13px;border-left:4px solid var(--purple);background:#f7f4fc;border-radius:0 8px 8px 0}.control-help{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.control-help div{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.control-help b{display:block;margin-bottom:3px}.control-help span{font-size:12px;color:var(--muted)}
+.case-description{margin-top:10px;padding:11px 13px;border-left:4px solid var(--purple);background:#f7f4fc;border-radius:0 8px 8px 0}.control-help{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.control-help div{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.control-help b{display:block;margin-bottom:3px}.control-help span{font-size:12px;color:var(--muted)}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.input-schema section{border:1px solid var(--line);border-radius:9px;padding:13px}.input-schema h3{margin-bottom:6px}.input-schema code{font-size:12px}.schema-note{padding:10px 12px;background:var(--wash);border-radius:8px;margin-top:10px}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic,.input-schema{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -595,6 +595,35 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  <p class="mini"><b>当前 canonical 模型的边界：</b>反射支持和积分强度来自与 ACOM 匹配的 py4DSTEM 运动学模型；图像形成使用有限会聚盘，而不是高斯点。它不是 multislice，也不声称模拟 dynamical scattering。有限厚度 First-Born+sinc 模型只保留为诊断模式，没有混入本页 canonical 结果。</p>
 </section>
 
+<h2>二维衍射图输入接口 / Diffraction-image input interface</h2>
+<section class="panel">
+ <p>检峰器接收的不是 PNG、网页截图或峰坐标表，而是下面两个 <b>HDF5 文件中的二维数值数组</b>。对样本索引 <code>i</code>，图像像素 <code>[row, col]</code> 的倒空间坐标为 <code>(detector/qx_Ainv[col], detector/qy_Ainv[row])</code>，单位 Å⁻¹；<code>sample_id[i]</code> 给出该图对应的样本编号。</p>
+ <div class="input-schema">
+  <section><h3>Clean-E：<code>public/clean_images.h5</code></h3><p>实际检峰输入为 <code>expectation/intensity[i, :, :]</code>，整体形状 <code>[1081, 512, 512]</code>，dtype 为 <code>float32</code>。每张图是归一化概率/期望强度，满足 <code>image.sum() = 1</code>。</p></section>
+  <section><h3>Clean-C：<code>public/clean_counted_images.h5</code></h3><p>实际检峰输入为 <code>images/counts[i, d, r, :, :]</code>，整体形状 <code>[1081, 3, 5, 512, 512]</code>，dtype 为 <code>uint32</code>。其中 <code>d</code> 选择 10⁴/10⁵/10⁶ e⁻，<code>r</code> 选择 5 次独立抽样；每张图的像素和严格等于所选剂量。</p></section>
+ </div>
+ <div class="schema-note"><b>两个文件共用的标定数据：</b><code>sample_id [1081]</code>、<code>detector/qx_Ainv [512]</code>、<code>detector/qy_Ainv [512]</code>、<code>detector/vacuum_probe [512,512]</code> 和 <code>detector/valid_mask [512,512]</code>。Clean-C 另外保存 <code>dose_electrons [3]</code> 与 <code>rng_seed [1081,3,5]</code>。AutoDisk 和 <code>find_Bragg_disks</code> 读取同一幅原始数组、同一套 q 轴和同一个真空探针模板；网页的亮度映射不参与检测。</div>
+ <details><summary>HDF5 层级与索引示例 / Schema and indexing example</summary><pre class="formula">public/clean_images.h5
+├── expectation/intensity   float32 [sample, row, col]
+├── sample_id
+└── detector/{qx_Ainv, qy_Ainv, vacuum_probe, valid_mask}
+
+public/clean_counted_images.h5
+├── expectation/intensity   float32 [sample, row, col]
+├── images/counts           uint32  [sample, dose, repeat, row, col]
+├── dose_electrons          int64   [3]
+├── rng_seed                uint64  [sample, dose, repeat]
+├── sample_id
+└── detector/{qx_Ainv, qy_Ainv, vacuum_probe, valid_mask}
+
+# 检峰脚本的实际入口
+python scripts/03_extract_clean_disks.py \
+  --image-file public/clean_images.h5 --track expectation
+
+python scripts/03_extract_clean_disks.py \
+  --image-file public/clean_counted_images.h5 --track counted</pre></details>
+</section>
+
 <h2>二维输入图像示例 / Example 2D inputs</h2>
 <section class="panel">
  <p>以下三幅图来自同一个实际运行样本 <code id="example-sample-id"></code>。Clean-C 图像均由左侧同一张 Clean-E 期望图采样得到，因此盘的位置不变，低剂量时可见性和计数涨落发生变化。</p>
@@ -621,9 +650,10 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 </div>
 <section class="panel" style="margin-top:14px"><h3>v3 角步长基线 / Frozen v3 angular sweep</h3><div id="v3-sweep-table"></div><p class="mini">该表是之前 v3 真实运行的 4°、3°、2° 结果；新图像链路使用同一个 canonical 2° 检测与评价方法，不把不同角步长的方法混在一起。</p></section>
 
-<h2>样本诊断 / Pattern diagnostics</h2>
+<h2>单张衍射图检查 / Per-pattern inspection</h2>
+<p class="lead" style="margin-bottom:10px">在一张实际二维输入图上查看参考盘、检峰结果和 ACOM 取向。左侧“快速载入案例”只是把下方查看参数切到一个有代表性的组合；你仍可单独改变图像层、剂量、重复次数、检峰器和叠加标记。</p>
 <div class="toolbar">
- <div class="control"><label>诊断场景 / Diagnostic case</label><select id="sample"></select></div>
+ <div class="control"><label>快速载入案例 / Load example</label><select id="sample"></select></div>
  <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e">Clean-E 期望图</button><button id="track-c" class="active">Clean-C 计数图</button></div></div>
  <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000" selected>10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000">10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
@@ -631,16 +661,18 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
  <div class="control"><label>图层 / Overlay</label><div class="seg"><button id="v3-toggle" class="active">v3 direct peaks</button><button id="oracle-toggle" class="active">Physical oracle</button><button id="detected-toggle" class="active">Detected</button></div></div>
 </div>
 <div id="case-description" class="case-description"></div>
-<div class="control-help">
- <div><b>期望图 / Expectation</b><span>Clean-E 的确定性浮点图。每个像素表示模型预测的平均强度或电子落点概率；没有进行随机电子抽样。</span></div>
- <div><b>计数图 / Counted</b><span>Clean-C 的整数图。从期望图按所选 Dose 抽样；Repeat 是相同取向和剂量下的独立随机实现。</span></div>
- <div><b>Physical oracle</b><span>根据已知物理模型和最终无噪声图得到的参考盘中心及积分强度，只用于私有评测，不提供给检峰器。</span></div>
- <div><b>Detected</b><span>当前所选 AutoDisk 或 <code>find_Bragg_disks</code> 从二维图像自动输出的盘中心；它是算法结果，不是 Ground Truth。</span></div>
- <div><b>v3 direct peaks</b><span>旧 v3 直接交给 ACOM 的浮点峰列表，不是从当前二维图像检测得到。</span></div>
- <div><b>Dose</b><span>每张 Clean-C 图的固定总电子数。剂量越低，弱盘获得零电子或少量电子的概率越高。</span></div>
- <div><b>Repeat</b><span>同一个期望图、同一个剂量下的独立多项分布采样编号；用于估计随机波动。</span></div>
- <div><b>Overlay</b><span>只控制网页上显示哪些标记，不改变输入图、检峰结果或 ACOM 结果。</span></div>
-</div>
+<details><summary>查看参数与图例说明 / Terms and controls</summary>
+ <div class="control-help">
+  <div><b>期望图 / Expectation</b><span>Clean-E 的确定性浮点图。每个像素表示模型预测的平均强度或电子落点概率；没有进行随机电子抽样。</span></div>
+  <div><b>计数图 / Counted</b><span>Clean-C 的整数图。从期望图按所选 Dose 抽样；Repeat 是相同取向和剂量下的独立随机实现。</span></div>
+  <div><b>Physical oracle</b><span>根据已知物理模型和最终无噪声图得到的参考盘中心及积分强度，只用于私有评测，不提供给检峰器。</span></div>
+  <div><b>Detected</b><span>当前所选 AutoDisk 或 <code>find_Bragg_disks</code> 从二维图像自动输出的盘中心；它是算法结果，不是 Ground Truth。</span></div>
+  <div><b>v3 direct peaks</b><span>旧 v3 直接交给 ACOM 的浮点峰列表，不是从当前二维图像检测得到。</span></div>
+  <div><b>Dose</b><span>每张 Clean-C 图的固定总电子数。剂量越低，弱盘获得零电子或少量电子的概率越高。</span></div>
+  <div><b>Repeat</b><span>同一个期望图、同一个剂量下的独立多项分布采样编号；用于估计随机波动。</span></div>
+  <div><b>Overlay</b><span>只控制网页上显示哪些标记，不改变输入图、检峰结果或 ACOM 结果。</span></div>
+ </div>
+</details>
 <div class="diag">
  <section>
   <div class="image-panel"><img id="pattern" alt="diffraction pattern"><svg id="overlay" viewBox="0 0 512 512"></svg></div>
@@ -826,19 +858,19 @@ function applyCase(id){
  activeCase=id;state.sample=item.sample;state.track=item.track;state.dose=item.dose;state.repeat=item.repeat;state.detector=item.detector;state.v3Reflection=0;
  $("sample").value=id;$("dose").value=String(item.dose);$("repeat").value=String(item.repeat);$("detector").value=item.detector;showCaseDescription(item.description);redraw();
 }
-function markCustom(){
- activeCase="custom";$("sample").value="custom";
- showCaseDescription("当前设置由上方控件手动组合，不再对应预设诊断场景。汇总指标和底层运行结果不受影响。","自定义配置 / Custom");
+function markViewAdjusted(){
+ activeCase=null;$("sample").value="";
+ showCaseDescription("你已单独调整下方查看参数。页面正在展示这个样本、图像层、剂量、重复次数和检峰器对应的已保存运行结果；这不是新建样本，也不会重新运行 benchmark。","当前查看 / Current view");
 }
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  const example=DATA.samples[DATA.sample_order[0]];
  $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
- $("sample").innerHTML=`<option value="custom" disabled>自定义配置 / Custom</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
+ $("sample").innerHTML=`<option value="" disabled>选择案例以快速载入 / Select a case</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
- $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markCustom();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markCustom();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markCustom();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
- $("track-e").onclick=()=>{state.track="expectation";markCustom();redraw()};$("track-c").onclick=()=>{state.track="counted";markCustom();redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};applyCase(activeCase);
+ $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markViewAdjusted();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markViewAdjusted();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markViewAdjusted();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
+ $("track-e").onclick=()=>{state.track="expectation";markViewAdjusted();redraw()};$("track-c").onclick=()=>{state.track="counted";markViewAdjusted();redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};applyCase(activeCase);
 }
 init();
 </script></body></html>"""
