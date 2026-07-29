@@ -109,13 +109,16 @@ real py4DSTEM 0.14.18 public function, not an alias for the local AutoDisk
 implementation. Both outputs are converted to the same physical
 `(qx, qy, integrated intensity)` contract before ACOM.
 
-Current 1,081-pattern peak status: both detectors recover Clean-E with 100%
+Current 1,081-pattern status: both detectors recover Clean-E with 100%
 precision and recall. At \(10^5\) electrons, AutoDisk reaches 95.66%/95.66%
 precision/recall and `find_Bragg_disks` reaches 99.38%/99.38%. At \(10^6\),
-AutoDisk reaches 99.95% and `find_Bragg_disks` reaches 100%. Full ACOM is
-intentionally paused after the peak stage. The separate finite-thickness
-First-Born mode remains diagnostic because its sinc excitation envelope is not
-matched by the current ACOM orientation plan.
+AutoDisk reaches 99.95% and `find_Bragg_disks` reaches 100%. Full ACOM is also
+complete: the image-matched oracle reaches 90.19% Acc@2°, while \(10^6\)
+`find_Bragg_disks` matches that mean with a 0.0067° P95 orientation delta.
+AutoDisk saturates near a 0.076–0.079° P95 delta and consistently introduces
+one new >5° case. The separate finite-thickness First-Born mode remains
+diagnostic because its sinc excitation envelope is not matched by the current
+ACOM orientation plan.
 
 See [`docs/CLEAN_IMAGE_PIPELINE.md`](docs/CLEAN_IMAGE_PIPELINE.md) for the
 formulas, HDF5 schema, detector comparison, commands, and current measured

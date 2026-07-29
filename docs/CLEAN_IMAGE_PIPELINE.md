@@ -6,8 +6,8 @@ This is an experimental Clean-only extension of Clean-Peak v3. It has been
 implemented and run on all 17 `legacy_smoke` orientations. The canonical
 ACOM-matched image interface passes the peak and orientation smoke tests. The
 Clean-E and Clean-C peak stages have also been completed on all 1,081 patterns.
-The full ACOM stage is intentionally paused and no 1,081-pattern orientation
-headline is claimed yet.
+The full ACOM stage has now been completed for the image-matched oracle,
+Clean-E, and all 30 counted detector/dose/repeat paths.
 
 Dynamical scattering is out of scope. The existing Clean-Peak v3 data and
 results remain unchanged.
@@ -256,7 +256,7 @@ realizations.
 ## Measured 1,081-pattern peak results
 
 These are full-data results from 1,024 `headline_core`, 17 `legacy_smoke`, and
-40 `acom_grid_probe` patterns. ACOM has not yet been completed on this set.
+40 `acom_grid_probe` patterns.
 
 | Input | Detector | Precision | Recall | RMSE (px) | P95 (px) | High-angle recall |
 | --- | --- | ---: | ---: | ---: | ---: | ---: |
@@ -274,6 +274,44 @@ for near-complete `find_Bragg_disks` recovery, but not for the 99% AutoDisk
 target. \(10^6\) electrons is the first tested dose at which both detectors
 are effectively complete. `find_Bragg_disks` is consistently more accurate
 and faster at every tested dose.
+
+## Measured 1,081-pattern ACOM results
+
+The image-matched oracle itself reaches 90.19% Acc@2° and 95.93% Acc@5°
+against ground truth. Its 44 >5° cases are therefore baseline ACOM/model
+failures, not image-detector failures.
+
+Clean-E relative to the same oracle ACOM:
+
+| Detector | GT Acc@2° | GT Acc@5° | Delta median | Delta P95 | New GT >5° |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| AutoDisk | 90.29% | 95.84% | 0.0230° | 0.0832° | 1 |
+| find_Bragg_disks | 90.29% | 95.93% | 0.0006° | 0.0023° | 0 |
+
+The AutoDisk failure is `clean_core_0744`; it is present in Clean-E and every
+\(10^6\)-electron repeat. Higher dose cannot fix it because it originates in
+the current center-refinement bias rather than count noise.
+
+Five-repeat Clean-C means:
+
+| Dose | Detector | GT Acc@2° | GT Acc@5° | Delta median | Delta P95 | Mean GT >5° |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| \(10^4\) e⁻ | AutoDisk | 88.58±0.27% | 95.54±0.26% | 0.0429° | 2.0323° | 48.2 |
+| \(10^4\) e⁻ | find_Bragg_disks | 89.55±0.27% | 95.67±0.32% | 0.0231° | 0.9714° | 46.8 |
+| \(10^5\) e⁻ | AutoDisk | 90.10±0.13% | 95.84±0.07% | 0.0229° | 0.0760° | 45.0 |
+| \(10^5\) e⁻ | find_Bragg_disks | 90.10±0.11% | 95.89±0.08% | 0.0059° | 0.0211° | 44.4 |
+| \(10^6\) e⁻ | AutoDisk | 90.25±0.14% | 95.84±0.00% | 0.0219° | 0.0786° | 45.0 |
+| \(10^6\) e⁻ | find_Bragg_disks | 90.19±0.09% | 95.93±0.00% | 0.0020° | 0.0067° | 44.0 |
+
+The orientation result confirms the peak-level conclusion:
+
+- \(10^4\) electrons is below the reliable operating range.
+- \(10^5\) `find_Bragg_disks` is already close to the oracle, but its peak
+  position RMSE/P95 miss the original peak-level acceptance limits.
+- \(10^6\) `find_Bragg_disks` is the only tested counted path that meets the
+  peak criteria and adds no >5° ground-truth failures.
+- AutoDisk improves strongly from \(10^4\) to \(10^5\), then saturates; the
+  present refinement method, not dose, is its remaining limitation.
 
 ### Why the forward models are separated
 
@@ -318,10 +356,10 @@ orientation differences from the oracle have P95 0.047° for AutoDisk and
 
 ## Next gates
 
-1. Freeze the 17 legacy cases as the detector calibration split; do not tune
-   thresholds on `headline_core`.
-2. Run the canonical matched path on all 1,081 patterns and report the 1,024
-   headline cases separately from the 40 grid probes.
+1. Freeze the current full matched run and add an explicit role-stratified
+   summary for the 1,024 headline cases, 17 legacy cases, and 40 grid probes.
+2. Diagnose AutoDisk's `clean_core_0744` branch failure and replace or correct
+   the biased center-refinement stage without tuning on `headline_core`.
 3. Keep `coherent_first_born` results in a separate model-generalization
    report until a matching physical orientation plan is implemented.
 4. Add detector background, PSF, and direct-beam-fraction sweeps only after the
