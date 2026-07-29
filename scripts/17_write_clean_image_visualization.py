@@ -560,8 +560,9 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .path-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.path{border:1px solid var(--line);border-radius:12px;padding:16px}.path.v3{border-top:4px solid var(--purple)}.path.image{border-top:4px solid var(--green)}.path code{display:block;margin:10px 0;padding:10px;background:var(--wash);border-radius:7px;white-space:normal}.equation-grid{display:grid;grid-template-columns:.7fr 1.2fr 1fr;gap:10px}.transform-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .definitions{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{font-size:18px}.definition .tag{display:inline-block;background:var(--wash);border-radius:99px;padding:3px 8px;font-size:12px;margin-bottom:8px}.formation{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}.formation>div{position:relative;border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--wash);min-height:112px}.formation>div:not(:last-child):after{content:"→";position:absolute;right:-10px;top:43%;z-index:2;color:var(--blue);font-weight:800}.formation b{display:block;color:var(--blue);margin-bottom:5px}.detector-compare{display:grid;grid-template-columns:1fr 1fr;gap:14px}.compare-image{position:relative;aspect-ratio:1;background:#081223;border-radius:10px;overflow:hidden}.compare-image img,.compare-image svg{position:absolute;inset:0;width:100%;height:100%}.compare-metric{margin-top:8px;font-size:13px}.v3-diagnostic{display:grid;grid-template-columns:minmax(500px,1.15fr) minmax(360px,.85fr);gap:14px;margin-top:14px}.v3-plot{width:100%;background:#fafbfc;border:1px solid var(--line);border-radius:10px}.v3-plot text{font-size:10px;fill:#5e6879}
 .input-examples{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.input-example{border:1px solid var(--line);border-radius:12px;padding:12px}.input-example img{display:block;width:100%;aspect-ratio:1;background:#081223;border-radius:9px}.input-example h3{margin:9px 0 3px}.input-example p{margin:0;color:var(--muted);font-size:12px}
+.case-description{margin-top:10px;padding:11px 13px;border-left:4px solid var(--purple);background:#f7f4fc;border-radius:0 8px 8px 0}.control-help{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.control-help div{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.control-help b{display:block;margin-bottom:3px}.control-help span{font-size:12px;color:var(--muted)}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+@media(max-width:900px){main{padding:24px 16px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -622,12 +623,23 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 
 <h2>样本诊断 / Pattern diagnostics</h2>
 <div class="toolbar">
- <div class="control"><label>代表样本 / Representative</label><select id="sample"></select></div>
+ <div class="control"><label>诊断场景 / Diagnostic case</label><select id="sample"></select></div>
  <div class="control"><label>图像层 / Image track</label><div class="seg"><button id="track-e">Clean-E 期望图</button><button id="track-c" class="active">Clean-C 计数图</button></div></div>
  <div class="control counted"><label>电子剂量 / Dose</label><select id="dose"><option value="10000" selected>10⁴ e⁻</option><option value="100000">10⁵ e⁻</option><option value="1000000">10⁶ e⁻</option></select></div>
  <div class="control counted"><label>随机重复 / Repeat</label><select id="repeat"><option>0</option><option>1</option><option>2</option><option>3</option><option>4</option></select></div>
  <div class="control"><label>检峰器 / Detector</label><select id="detector"><option value="py4dstem">py4DSTEM find_Bragg_disks</option><option value="autodisk">AutoDisk</option></select></div>
  <div class="control"><label>图层 / Overlay</label><div class="seg"><button id="v3-toggle" class="active">v3 direct peaks</button><button id="oracle-toggle" class="active">Physical oracle</button><button id="detected-toggle" class="active">Detected</button></div></div>
+</div>
+<div id="case-description" class="case-description"></div>
+<div class="control-help">
+ <div><b>期望图 / Expectation</b><span>Clean-E 的确定性浮点图。每个像素表示模型预测的平均强度或电子落点概率；没有进行随机电子抽样。</span></div>
+ <div><b>计数图 / Counted</b><span>Clean-C 的整数图。从期望图按所选 Dose 抽样；Repeat 是相同取向和剂量下的独立随机实现。</span></div>
+ <div><b>Physical oracle</b><span>根据已知物理模型和最终无噪声图得到的参考盘中心及积分强度，只用于私有评测，不提供给检峰器。</span></div>
+ <div><b>Detected</b><span>当前所选 AutoDisk 或 <code>find_Bragg_disks</code> 从二维图像自动输出的盘中心；它是算法结果，不是 Ground Truth。</span></div>
+ <div><b>v3 direct peaks</b><span>旧 v3 直接交给 ACOM 的浮点峰列表，不是从当前二维图像检测得到。</span></div>
+ <div><b>Dose</b><span>每张 Clean-C 图的固定总电子数。剂量越低，弱盘获得零电子或少量电子的概率越高。</span></div>
+ <div><b>Repeat</b><span>同一个期望图、同一个剂量下的独立多项分布采样编号；用于估计随机波动。</span></div>
+ <div><b>Overlay</b><span>只控制网页上显示哪些标记，不改变输入图、检峰结果或 ACOM 结果。</span></div>
 </div>
 <div class="diag">
  <section>
@@ -701,7 +713,16 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 <script>
 const DATA = __DATA__;
 const $ = id => document.getElementById(id);
-let state={sample:DATA.sample_order[0],track:"counted",dose:10000,repeat:0,detector:"py4dstem",v3:true,oracle:true,detected:true,v3Reflection:0};
+const CASES=[
+ {id:"error_low_auto",label:"错误案例 · Clean-C 10⁴ e⁻ · AutoDisk",sample:"clean_core_0970",track:"counted",dose:10000,repeat:0,detector:"autodisk",description:"低剂量检峰错误：AutoDisk 为 TP 14、FP 6、FN 7。该场景用于查看黄色漏检盘、红色误检盘及位置误差线。"},
+ {id:"error_low_py",label:"错误案例 · Clean-C 10⁴ e⁻ · find_Bragg_disks",sample:"clean_core_0970",track:"counted",dose:10000,repeat:0,detector:"py4dstem",description:"同一张低剂量图上的另一种检测结果：find_Bragg_disks 为 TP 16、FP 5、FN 5，可与 AutoDisk 直接比较。"},
+ {id:"error_clean_e_auto",label:"错误案例 · Clean-E · AutoDisk 新增 >5° ACOM 失败",sample:"clean_core_0744",track:"expectation",dose:1000000,repeat:0,detector:"autodisk",description:"无噪声 Clean-E 中 AutoDisk 的峰 Precision/Recall 仍为 100%，但亚像素位置与积分强度变化使该样本成为相对 Oracle 新增的 >5° ACOM 失败。"},
+ {id:"correct_clean_e_py",label:"正确案例 · Clean-E · find_Bragg_disks",sample:"clean_core_0970",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"理想期望图的正确检峰案例：全部物理 Oracle 盘被恢复，位置误差约为百分之一像素，ACOM 与 Oracle 基本一致。"},
+ {id:"median_clean_e",label:"代表案例 · Clean-E · 中位 ACOM 误差",sample:"clean_core_0530",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"按 Physical-Oracle ACOM 对 Ground Truth 的 headline 误差排序选取的中位样本，用于查看典型而非极端结果。"},
+ {id:"worst_clean_e",label:"极端案例 · Clean-E · 最差 ACOM 误差",sample:"clean_core_0037",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"headline 中 Ground Truth 取向误差最大的代表样本。用于区分检峰正确与 ACOM 对称性或模板歧义造成的灾难性错误。"}
+];
+let activeCase=CASES[0].id;
+let state={sample:CASES[0].sample,track:CASES[0].track,dose:CASES[0].dose,repeat:CASES[0].repeat,detector:CASES[0].detector,v3:true,oracle:true,detected:true,v3Reflection:0};
 const fmt=(x,n=3)=>x==null?"—":Number(x).toFixed(n);
 const pct=x=>fmt(100*x,2)+"%";
 const matrix=m=>m.map(r=>"["+r.map(x=>(x>=0?" ":"")+Number(x).toFixed(5)).join(", ")+"]").join("\n");
@@ -772,7 +793,8 @@ function renderV3Trace(s){
 function redraw(){
  const s=DATA.samples[state.sample],v=DATA.variants[variantKey()],d=v.details[state.sample],m=v.sample_peak_metrics[state.sample];
  $("pattern").src=state.track==="expectation"?s.expectation_image:s.counted_images[`${state.dose}:${state.repeat}`];
- $("selection-title").textContent=`${s.label} · ${state.sample} · ${state.track==="expectation"?"Clean-E":`Clean-C ${state.dose.toLocaleString()} e⁻ / repeat ${state.repeat}`} · ${state.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk"}`;
+ const preset=CASES.find(item=>item.id===activeCase);
+ $("selection-title").textContent=preset?`${preset.label} · ${state.sample}`:`${s.label} · ${state.sample} · ${state.track==="expectation"?"Clean-E":`Clean-C ${state.dose.toLocaleString()} e⁻ / repeat ${state.repeat}`} · ${state.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk"}`;
  $("sample-metrics").innerHTML=[
   ["Peak P/R",pct(m.precision)+" / "+pct(m.recall)],
   ["位置 RMSE",fmt(m.rmse_px,3)+" px"],
@@ -798,15 +820,25 @@ function redraw(){
  document.querySelectorAll(".counted").forEach(e=>e.classList.toggle("hidden",state.track!=="counted"));
  setButton("track-e",state.track==="expectation");setButton("track-c",state.track==="counted");setButton("v3-toggle",state.v3);setButton("oracle-toggle",state.oracle);setButton("detected-toggle",state.detected);
 }
+function showCaseDescription(text,label="场景说明 / Case note"){$("case-description").innerHTML=`<b>${label}：</b>${text}`}
+function applyCase(id){
+ const item=CASES.find(candidate=>candidate.id===id);if(!item)return;
+ activeCase=id;state.sample=item.sample;state.track=item.track;state.dose=item.dose;state.repeat=item.repeat;state.detector=item.detector;state.v3Reflection=0;
+ $("sample").value=id;$("dose").value=String(item.dose);$("repeat").value=String(item.repeat);$("detector").value=item.detector;showCaseDescription(item.description);redraw();
+}
+function markCustom(){
+ activeCase="custom";$("sample").value="custom";
+ showCaseDescription("当前设置由上方控件手动组合，不再对应预设诊断场景。汇总指标和底层运行结果不受影响。","自定义配置 / Custom");
+}
 function init(){
  initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  const example=DATA.samples[DATA.sample_order[0]];
  $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
- $("sample").innerHTML=DATA.sample_order.map(id=>`<option value="${id}">${DATA.samples[id].label} · ${id}</option>`).join("");
+ $("sample").innerHTML=`<option value="custom" disabled>自定义配置 / Custom</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
- $("sample").onchange=e=>{state.sample=e.target.value;state.v3Reflection=0;redraw()};$("dose").onchange=e=>{state.dose=+e.target.value;redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;redraw()};$("detector").onchange=e=>{state.detector=e.target.value;redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
- $("track-e").onclick=()=>{state.track="expectation";redraw()};$("track-c").onclick=()=>{state.track="counted";redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};redraw();
+ $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markCustom();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markCustom();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markCustom();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
+ $("track-e").onclick=()=>{state.track="expectation";markCustom();redraw()};$("track-c").onclick=()=>{state.track="counted";markCustom();redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};applyCase(activeCase);
 }
 init();
 </script></body></html>"""
