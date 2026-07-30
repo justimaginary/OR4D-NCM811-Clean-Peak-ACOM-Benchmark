@@ -183,7 +183,7 @@ def detect_py4dstem_bragg_disks_batch(
     k_max_Ainv: float,
     central_exclusion_Ainv: float,
     cuda: bool,
-) -> list[Py4DSTEMDiskResult]:
+) -> list[Py4DSTEMDiskResult | Exception]:
     """Run py4DSTEM on an image stack, using its batched CUDA path when requested."""
     raw = np.maximum(np.asarray(images, dtype=np.float32), 0.0)
     qx_axis = np.asarray(qx_axis_Ainv, dtype=float)
@@ -211,16 +211,23 @@ def detect_py4dstem_bragg_disks_batch(
         CUDA=bool(cuda),
         CUDA_batched=bool(cuda),
     )
-    return [
-        _postprocess_py4dstem_peaks(
-            raw[index],
-            vectors.raw[index, 0].data,
-            qx_axis,
-            qy_axis,
-            probe,
-            config,
-            k_max_Ainv=k_max_Ainv,
-            central_exclusion_Ainv=central_exclusion_Ainv,
-        )
-        for index in range(len(raw))
-    ]
+    results: list[Py4DSTEMDiskResult | Exception] = []
+    for index in range(len(raw)):
+        try:
+            result = _postprocess_py4dstem_peaks(
+                raw[index],
+                vectors.raw[index, 0].data,
+                qx_axis,
+                qy_axis,
+                probe,
+                config,
+                k_max_Ainv=k_max_Ainv,
+                central_exclusion_Ainv=central_exclusion_Ainv,
+            )
+        except Exception as error:
+            # A detector-level failure belongs to this diffraction pattern,
+            # not to the complete CUDA batch.  The caller persists it as an
+            # empty peak list plus the exact exception type/message.
+            result = error
+        results.append(result)
+    return results

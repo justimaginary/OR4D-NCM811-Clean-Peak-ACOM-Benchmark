@@ -368,6 +368,8 @@ def main() -> None:
                                     central_exclusion_Ainv=central_exclusion,
                                 )
                             )
+                            if isinstance(result, Exception):
+                                raise result
                             peak_diagnostics = {
                                 "refined_row_px": result.row_px,
                                 "refined_col_px": result.col_px,
