@@ -160,11 +160,13 @@ def main() -> None:
     )
     ground_truth_rows = read_jsonl(args.ground_truth_file)
     ground_truth_by_id = {
-        row["sample_id"]: np.asarray(
+        row.get("sample_id", row.get("orientation_id")): np.asarray(
             row["orientation_matrix_sample_to_crystal"], dtype=np.float64
         )
         for row in ground_truth_rows
     }
+    if None in ground_truth_by_id:
+        raise ValueError("ground-truth rows lack sample_id/orientation_id")
     summaries: list[dict[str, object]] = []
     clean_e_details: list[dict[str, object]] = []
     with h5py.File(args.result_file, "r") as result:
