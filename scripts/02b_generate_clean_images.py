@@ -240,6 +240,10 @@ def main() -> None:
     oracle_samples: list[dict] = []
     raw_rows: list[dict] = []
     timings: list[float] = []
+    render_timings: list[float] = []
+    postprocess_timings: list[float] = []
+    cuda_batch_timings: list[dict] = []
+    generation_started = time.perf_counter()
 
     with h5py.File(temporary_image, "w") as h5:
         images = h5.create_dataset(
@@ -330,6 +334,7 @@ def main() -> None:
                     ],
                     dtype=float,
                 )
+                cuda_batch_started = time.perf_counter()
                 batch_rendered = render_kinematic_cbed_batch_cuda(
                     library,
                     batch_matrices,
@@ -337,18 +342,33 @@ def main() -> None:
                     k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                     direct_beam_fraction=args.direct_beam_fraction,
                 )
+                cuda_batch_elapsed = time.perf_counter() - cuda_batch_started
+                cuda_batch_timings.append(
+                    {
+                        "start_index": batch_start,
+                        "stop_index": batch_stop,
+                        "num_patterns": batch_stop - batch_start,
+                        "seconds": cuda_batch_elapsed,
+                        "seconds_per_pattern": (
+                            cuda_batch_elapsed / (batch_stop - batch_start)
+                        ),
+                    }
+                )
                 rendered_batches = {
                     batch_start + offset: value
                     for offset, value in enumerate(batch_rendered)
                 }
-            start = time.perf_counter()
             sample_id = f"clean_{orientation['orientation_id']}"
             matrix = np.asarray(
                 orientation["orientation_matrix_sample_to_crystal"], dtype=float
             )
             if args.compute_backend == "cuda":
                 rendered = rendered_batches[index]
+                render_elapsed = cuda_batch_timings[-1][
+                    "seconds_per_pattern"
+                ]
             elif forward_model == "acom_matched":
+                render_started = time.perf_counter()
                 point_list = crystal.generate_diffraction_pattern(
                     orientation_matrix=matrix,
                     sigma_excitation_error=float(
@@ -375,7 +395,9 @@ def main() -> None:
                     k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                     direct_beam_fraction=args.direct_beam_fraction,
                 )
+                render_elapsed = time.perf_counter() - render_started
             else:
+                render_started = time.perf_counter()
                 rendered = render_kinematic_cbed(
                     library,
                     matrix,
@@ -383,6 +405,8 @@ def main() -> None:
                     k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                     direct_beam_fraction=args.direct_beam_fraction,
                 )
+                render_elapsed = time.perf_counter() - render_started
+            postprocess_started = time.perf_counter()
             images[index] = rendered.expectation
             if first is None:
                 first = rendered
@@ -452,15 +476,20 @@ def main() -> None:
                     "excitation_error_center_Ainv": excitation_error,
                 }
             )
-            elapsed = time.perf_counter() - start
+            postprocess_elapsed = time.perf_counter() - postprocess_started
+            elapsed = render_elapsed + postprocess_elapsed
             timings.append(elapsed)
+            render_timings.append(render_elapsed)
+            postprocess_timings.append(postprocess_elapsed)
             print(
                 f"{index + 1}/{len(orientations)} {sample_id}: "
                 f"peaks={len(rendered.oracle_qx_Ainv)}, "
                 f"candidates={rendered.oracle_candidate_reflection_count}, "
                 f"merged={rendered.oracle_merged_disk_count}, "
                 f"max_probability={rendered.expectation.max():.4g}, "
-                f"seconds={elapsed:.3f}"
+                f"render_seconds={render_elapsed:.3f}, "
+                f"postprocess_seconds={postprocess_elapsed:.3f}, "
+                f"amortized_seconds={elapsed:.3f}"
             )
             h5.flush()
             rendered_batches.pop(index, None)
@@ -529,17 +558,30 @@ def main() -> None:
     write_raw_reflections(
         raw_path, raw_rows, common_attrs, reciprocal_basis
     )
+    generation_wall_seconds = time.perf_counter() - generation_started
 
     report = {
         "num_samples": len(orientations),
         "forward_model": forward_model,
+        "compute_backend": args.compute_backend,
+        "cuda_batch_size": (
+            cuda_batch_size if args.compute_backend == "cuda" else None
+        ),
         "roles": sorted({row["sample_role"] for row in orientations}),
         "image_path": str(image_path),
         "physical_oracle_path": str(oracle_path),
         "raw_reflections_path": str(raw_path),
         "image_shape": [ny, nx],
-        "mean_render_seconds": float(np.mean(timings)),
-        "total_render_seconds": float(np.sum(timings)),
+        "mean_amortized_seconds_per_pattern": float(np.mean(timings)),
+        "total_amortized_pattern_seconds": float(np.sum(timings)),
+        "mean_render_seconds_per_pattern": float(np.mean(render_timings)),
+        "total_render_seconds": float(np.sum(render_timings)),
+        "mean_postprocess_seconds_per_pattern": float(
+            np.mean(postprocess_timings)
+        ),
+        "total_postprocess_seconds": float(np.sum(postprocess_timings)),
+        "generation_wall_seconds": generation_wall_seconds,
+        "cuda_batches": cuda_batch_timings,
         "oracle_diagnostics": {
             "candidate_reflections": int(
                 sum(row["candidate_reflection_count"] for row in raw_rows)
