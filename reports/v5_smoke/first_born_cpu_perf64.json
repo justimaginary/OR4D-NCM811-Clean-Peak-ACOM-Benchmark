@@ -1,0 +1,38 @@
+{
+  "num_samples": 64,
+  "forward_model": "coherent_first_born",
+  "compute_backend": "cpu",
+  "cuda_batch_size": null,
+  "roles": [
+    "headline_core"
+  ],
+  "image_path": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_cpu_perf64.h5",
+  "physical_oracle_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cpu_oracle_perf64.h5",
+  "raw_reflections_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cpu_trace_perf64.h5",
+  "image_shape": [
+    512,
+    512
+  ],
+  "mean_amortized_seconds_per_pattern": 0.46388096976625093,
+  "total_amortized_pattern_seconds": 29.68838206504006,
+  "mean_render_seconds_per_pattern": 0.4632128821176593,
+  "total_render_seconds": 29.645624455530196,
+  "mean_postprocess_seconds_per_pattern": 0.0006680876485916087,
+  "total_postprocess_seconds": 0.04275760950986296,
+  "generation_wall_seconds": 30.079219556064345,
+  "cuda_batches": [],
+  "oracle_diagnostics": {
+    "candidate_reflections": 41968,
+    "merged_disks_before_threshold": 36194,
+    "retained_disks": 8405,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 27789
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  }
+}

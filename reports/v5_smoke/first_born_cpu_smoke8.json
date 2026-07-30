@@ -1,0 +1,30 @@
+{
+  "num_samples": 8,
+  "forward_model": "coherent_first_born",
+  "roles": [
+    "headline_core"
+  ],
+  "image_path": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_cpu_smoke8.h5",
+  "physical_oracle_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cpu_oracle_smoke8.h5",
+  "raw_reflections_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cpu_trace_smoke8.h5",
+  "image_shape": [
+    512,
+    512
+  ],
+  "mean_render_seconds": 0.465636148233898,
+  "total_render_seconds": 3.725089185871184,
+  "oracle_diagnostics": {
+    "candidate_reflections": 5248,
+    "merged_disks_before_threshold": 4542,
+    "retained_disks": 955,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 3587
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  }
+}

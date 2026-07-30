@@ -1,0 +1,67 @@
+{
+  "num_samples": 64,
+  "forward_model": "coherent_first_born",
+  "compute_backend": "cuda",
+  "cuda_batch_size": 16,
+  "roles": [
+    "headline_core"
+  ],
+  "image_path": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_cuda_perf64.h5",
+  "physical_oracle_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cuda_oracle_perf64.h5",
+  "raw_reflections_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_first_born_cuda_trace_perf64.h5",
+  "image_shape": [
+    512,
+    512
+  ],
+  "mean_amortized_seconds_per_pattern": 0.42439166633084824,
+  "total_amortized_pattern_seconds": 27.161066645174287,
+  "mean_render_seconds_per_pattern": 0.4238497923433897,
+  "total_render_seconds": 27.12638670997694,
+  "mean_postprocess_seconds_per_pattern": 0.0005418739874585299,
+  "total_postprocess_seconds": 0.03467993519734591,
+  "generation_wall_seconds": 27.540121058933437,
+  "cuda_batches": [
+    {
+      "start_index": 0,
+      "stop_index": 16,
+      "num_patterns": 16,
+      "seconds": 7.198158086976036,
+      "seconds_per_pattern": 0.4498848804360023
+    },
+    {
+      "start_index": 16,
+      "stop_index": 32,
+      "num_patterns": 16,
+      "seconds": 6.577466937946156,
+      "seconds_per_pattern": 0.41109168362163473
+    },
+    {
+      "start_index": 32,
+      "stop_index": 48,
+      "num_patterns": 16,
+      "seconds": 6.866261780029163,
+      "seconds_per_pattern": 0.4291413612518227
+    },
+    {
+      "start_index": 48,
+      "stop_index": 64,
+      "num_patterns": 16,
+      "seconds": 6.4844999050255865,
+      "seconds_per_pattern": 0.40528124406409916
+    }
+  ],
+  "oracle_diagnostics": {
+    "candidate_reflections": 41968,
+    "merged_disks_before_threshold": 36194,
+    "retained_disks": 8405,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 27789
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  }
+}

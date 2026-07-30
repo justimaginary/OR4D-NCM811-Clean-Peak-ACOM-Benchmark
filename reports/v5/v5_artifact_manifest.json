@@ -1,0 +1,231 @@
+{
+  "schema_version": "clean-v5.1",
+  "dataset_id": "OR4D-NCM811-CleanImage-v5",
+  "created_at_utc": "2026-07-30T14:45:54.141091+00:00",
+  "git_commit": "9e29f9916e240c1a2a8303a9ff525b982a541bd0",
+  "git_branch": "codex/v5-clean-low-dose-friedel",
+  "git_status_porcelain": "?? environment/\n?? reports/v5/\n?? reports/v5_smoke/",
+  "config_files": [
+    {
+      "path": "config/benchmark.yaml",
+      "sha256": "c898559f5b7cd770485dc0222bc4448e860a797ef28d610c47df708f31ecec91"
+    },
+    {
+      "path": "config/benchmark_v5.yaml",
+      "sha256": "43ec014fcc306d9636ee2e64b2c58e5df0c1ed6e25bcda0345567bfc48a392f3"
+    }
+  ],
+  "runtime": {
+    "python": "3.11.15",
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "hostname": "ubuntu",
+    "conda_default_env": "",
+    "cuda_visible_devices": "",
+    "omp_num_threads": "8"
+  },
+  "data_root": "/mnt/data/xietianhong/or4d-clean-v5",
+  "artifacts": [
+    {
+      "artifact_id": "headline_orientation",
+      "server_relative_path": "manifests/clean_v5_orientations.jsonl",
+      "size_bytes": 2727248,
+      "sha256": "54145770b6bfa251621077bdea2e8357853da3c21e3341475f7745a03a57d492"
+    },
+    {
+      "artifact_id": "headline_expectation",
+      "server_relative_path": "datasets/clean_v5_first_born_expectation_2048.h5",
+      "size_bytes": 334789541,
+      "sha256": "4199f2f32967784244b3edb8ae788f2b6dfdd674c8c90e23cd8ed0277b5af6e9",
+      "hdf5_root_keys": [
+        "detector",
+        "expectation",
+        "orientation",
+        "sample_id"
+      ],
+      "track": "clean_expectation",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "headline_oracle",
+      "server_relative_path": "intermediates/clean_v5_first_born_oracle_2048.h5",
+      "size_bytes": 2740045,
+      "sha256": "a2953357bbd2bcf2834dd73786a389c4832f22113379b20513db74c86973d91d",
+      "hdf5_root_keys": [
+        "peaks",
+        "sample_id"
+      ],
+      "track": "clean_physical_oracle",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "headline_trace",
+      "server_relative_path": "intermediates/clean_v5_first_born_trace_2048.h5",
+      "size_bytes": 9963840,
+      "sha256": "09bad376c5467bb248658c687667682e86afc268d7d27f296e3f6c24fc845bfe",
+      "hdf5_root_keys": [
+        "crystallography",
+        "diagnostics",
+        "reflections",
+        "sample_id"
+      ],
+      "track": "clean_physical_oracle",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "headline_counted",
+      "server_relative_path": "datasets/clean_v5_first_born_counted_2048.h5",
+      "size_bytes": 580978224,
+      "sha256": "9f9dfd9a8070a23d1a33e6e39185eba52f0862c6fcba3b6a22d8696a5eb5ce27",
+      "hdf5_root_keys": [
+        "detector",
+        "diagnostics",
+        "dose_electrons",
+        "expectation",
+        "images",
+        "rng_seed",
+        "sample_id"
+      ],
+      "track": "clean_counted",
+      "counting_model": "poisson_expected_total",
+      "git_commit_attribute": "aa4a753c7d7b257fc63f5d06bbca16cf437f9755"
+    },
+    {
+      "artifact_id": "headline_dose_noiseless",
+      "server_relative_path": "datasets/clean_v5_first_born_dose_noiseless_2048.h5",
+      "size_bytes": 3221409431,
+      "sha256": "7b59115ae585ed2c00f41df3acf49f970cd05689e6420ecc82fee0cfc9cfc0a4",
+      "hdf5_root_keys": [
+        "detector",
+        "diagnostics",
+        "dose_electrons",
+        "images",
+        "sample_id"
+      ],
+      "track": "clean_counted_noiseless",
+      "counting_model": "",
+      "git_commit_attribute": "e3e48dc40167f4bfde646366cb8a5479889ab7e1"
+    },
+    {
+      "artifact_id": "headline_noise_manifest",
+      "server_relative_path": "manifests/clean_v5_instrument_noise_2048.h5",
+      "size_bytes": 4560632,
+      "sha256": "57bf6a5284862837415ebb8503d1ff1ec0e9ce8ff0537824eed8d6b6fcce734f",
+      "hdf5_root_keys": [
+        "dose_electrons",
+        "noise_level_id",
+        "poisson_shot_noise_enabled",
+        "read_noise_seed",
+        "read_noise_sigma_primary_e_rms_per_pixel",
+        "sample_id",
+        "summed_frame_count"
+      ],
+      "track": "clean_instrument_noise_manifest",
+      "counting_model": "",
+      "git_commit_attribute": "aba9d4168d7d13016ded14c2e48c1cb9ed37778d"
+    },
+    {
+      "artifact_id": "study001_orientation",
+      "server_relative_path": "manifests/clean_v5_001_orientations.jsonl",
+      "size_bytes": 585117,
+      "sha256": "fbc2557c1bca240270bc5b959e8ae78631394694d61180a72cfd4532a1c6b0b0"
+    },
+    {
+      "artifact_id": "study001_expectation",
+      "server_relative_path": "datasets/clean_v5_001_first_born_expectation_512.h5",
+      "size_bytes": 20659534,
+      "sha256": "91763c7d8640e040283c5d37f73b1a059c68e88fd2d80150f200a4b162f5f80a",
+      "hdf5_root_keys": [
+        "detector",
+        "expectation",
+        "orientation",
+        "sample_id"
+      ],
+      "track": "clean_expectation",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "study001_oracle",
+      "server_relative_path": "intermediates/clean_v5_001_first_born_oracle_512.h5",
+      "size_bytes": 317846,
+      "sha256": "fde82c2f958adb347bd95e89af14fe949052b8159b175a11811149ba0dd5c29f",
+      "hdf5_root_keys": [
+        "peaks",
+        "sample_id"
+      ],
+      "track": "clean_physical_oracle",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "study001_trace",
+      "server_relative_path": "intermediates/clean_v5_001_first_born_trace_512.h5",
+      "size_bytes": 832838,
+      "sha256": "0c6f1bbe4298a79944f45790aaca6fe878ac9da5e245d29d820c458ad2364263",
+      "hdf5_root_keys": [
+        "crystallography",
+        "diagnostics",
+        "reflections",
+        "sample_id"
+      ],
+      "track": "clean_physical_oracle",
+      "counting_model": "",
+      "git_commit_attribute": ""
+    },
+    {
+      "artifact_id": "study001_counted",
+      "server_relative_path": "datasets/clean_v5_001_first_born_counted_512.h5",
+      "size_bytes": 71024678,
+      "sha256": "26d7e6be1d276fd932ca62dc280600814d4a060abc7a99f9ed9f81b44046fbe9",
+      "hdf5_root_keys": [
+        "detector",
+        "diagnostics",
+        "dose_electrons",
+        "expectation",
+        "images",
+        "rng_seed",
+        "sample_id"
+      ],
+      "track": "clean_counted",
+      "counting_model": "poisson_expected_total",
+      "git_commit_attribute": "9e29f9916e240c1a2a8303a9ff525b982a541bd0"
+    },
+    {
+      "artifact_id": "study001_dose_noiseless",
+      "server_relative_path": "datasets/clean_v5_001_first_born_dose_noiseless_512.h5",
+      "size_bytes": 204057720,
+      "sha256": "cb202858fb9ca45e4b92339339cd9f9508e10f1e54674ad8a3469035c3976643",
+      "hdf5_root_keys": [
+        "detector",
+        "diagnostics",
+        "dose_electrons",
+        "images",
+        "sample_id"
+      ],
+      "track": "clean_counted_noiseless",
+      "counting_model": "",
+      "git_commit_attribute": "9e29f9916e240c1a2a8303a9ff525b982a541bd0"
+    },
+    {
+      "artifact_id": "study001_noise_manifest",
+      "server_relative_path": "manifests/clean_v5_001_instrument_noise_512.h5",
+      "size_bytes": 1152760,
+      "sha256": "fee91d71ce8c5290897d21918831fd912fbae52ed37849d521dd2d22392e8d72",
+      "hdf5_root_keys": [
+        "dose_electrons",
+        "noise_level_id",
+        "poisson_shot_noise_enabled",
+        "read_noise_seed",
+        "read_noise_sigma_primary_e_rms_per_pixel",
+        "sample_id",
+        "summed_frame_count"
+      ],
+      "track": "clean_instrument_noise_manifest",
+      "counting_model": "",
+      "git_commit_attribute": "9e29f9916e240c1a2a8303a9ff525b982a541bd0"
+    }
+  ]
+}

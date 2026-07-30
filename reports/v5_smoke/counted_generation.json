@@ -1,0 +1,31 @@
+{
+  "expectation_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_expectation_smoke.h5",
+  "output": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_counted_smoke.h5",
+  "samples": 64,
+  "shape": [
+    64,
+    9,
+    5,
+    512,
+    512
+  ],
+  "doses_electrons": [
+    100,
+    300,
+    1000,
+    3000,
+    10000,
+    30000,
+    100000,
+    300000,
+    1000000
+  ],
+  "repeats": 5,
+  "total_seconds": 17.412729860050604,
+  "counting_model": "poisson_expected_total",
+  "fixed_total_verified": false,
+  "git_commit": "218cf941863a9eab57441f184d9bb9cddeb0220b",
+  "source_sha256": "75af4a4c2cad1509d9f742da4d4be237da0d06e44f69c640e7cbbbcc7c3e1d45",
+  "output_sha256": "d7684b0a6d23d7070fa61895ca642dd47bef64b530297caf91b11c18e9d92dbf",
+  "seed_derivation": "blake2b(seed_base, sample_id, dose_electrons, repeat)"
+}
