@@ -252,6 +252,16 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Allow a strict sample-ID subset for legacy smoke runs.",
     )
+    parser.add_argument(
+        "--insufficient-peaks-policy",
+        choices=("error", "skip"),
+        default="error",
+        help=(
+            "Behavior when a pattern has fewer than acom.min_number_peaks. "
+            "'skip' records a deterministic indexing failure and omits only "
+            "that prediction."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -333,11 +343,39 @@ def main() -> None:
             raise ValueError("Peak input includes IDs absent from ground truth")
     elif sample_id_set != ground_truth_id_set:
         raise ValueError("Clean peak input and ground-truth sample IDs differ")
-    for sample in samples:
-        if len(sample["qx"]) < int(acom["min_number_peaks"]):
+    min_number_peaks = int(acom["min_number_peaks"])
+    insufficient_peak_rows = [
+        {
+            "sample_id": str(sample["sample_id"]),
+            "num_peaks": int(len(sample["qx"])),
+            "required_min_number_peaks": min_number_peaks,
+            "failure_reason": "insufficient_detected_peaks",
+        }
+        for sample in samples
+        if len(sample["qx"]) < min_number_peaks
+    ]
+    if insufficient_peak_rows and args.insufficient_peaks_policy == "error":
+        first = insufficient_peak_rows[0]
+        raise ValueError(
+            f"{first['sample_id']} has only {first['num_peaks']} peaks; "
+            f"ACOM requires {min_number_peaks}. "
+            "Use --insufficient-peaks-policy skip to record indexing failures."
+        )
+    insufficient_ids = {
+        str(row["sample_id"]) for row in insufficient_peak_rows
+    }
+    matched_samples = [
+        sample
+        for sample in samples
+        if str(sample["sample_id"]) not in insufficient_ids
+    ]
+    if not matched_samples:
+        raise ValueError("No samples have enough peaks for ACOM matching")
+    for sample in matched_samples:
+        if len(sample["qx"]) < min_number_peaks:
             raise ValueError(
                 f"{sample['sample_id']} has only {len(sample['qx'])} peaks; "
-                f"ACOM requires {acom['min_number_peaks']}"
+                f"ACOM requires {min_number_peaks}"
             )
 
     structure = Structure.from_file(cif_path(config))
@@ -419,6 +457,7 @@ def main() -> None:
                 "nearest_discrete_search_seed_misorientation_deg": discrete_distance,
                 "nearest_zone_axis_node_misorientation_deg": zone_distance,
                 "probe_discrete_seed_threshold_deg": probe_threshold,
+                "acom_eligible": sample_id not in insufficient_ids,
                 "passed": passed,
             }
         )
@@ -480,13 +519,13 @@ def main() -> None:
     predictions: list[dict] = []
     details: list[dict] = []
     prediction_seconds: list[float] = []
-    for sample_index, sample in enumerate(samples):
+    for sample_index, sample in enumerate(matched_samples):
         point_list = make_point_list(sample)
         start = time.perf_counter()
         orientation = crystal.match_single_pattern(
             bragg_peaks=point_list,
             num_matches_return=int(acom["num_matches_return"]),
-            min_number_peaks=int(acom["min_number_peaks"]),
+            min_number_peaks=min_number_peaks,
             inversion_symmetry=inversion_symmetry,
             plot_polar=False,
             plot_corr=False,
@@ -549,9 +588,12 @@ def main() -> None:
                 ),
             }
         )
-        if (sample_index + 1) % 50 == 0 or sample_index + 1 == len(samples):
+        if (
+            (sample_index + 1) % 50 == 0
+            or sample_index + 1 == len(matched_samples)
+        ):
             print(
-                f"Matched {sample_index + 1}/{len(samples)} samples; "
+                f"Matched {sample_index + 1}/{len(matched_samples)} samples; "
                 f"latest Friedel error={friedel_error:.3f}°"
             )
 
@@ -576,6 +618,11 @@ def main() -> None:
         "ground_truth_file": str(gt_path),
         "ground_truth_id_prefix": args.ground_truth_id_prefix,
         "orientation_manifest_file": str(manifest_path),
+        "insufficient_peaks_policy": args.insufficient_peaks_policy,
+        "num_input_samples": len(samples),
+        "num_matched_samples": len(matched_samples),
+        "num_indexing_failures": len(insufficient_peak_rows),
+        "indexing_failures": insufficient_peak_rows,
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
         "headline_sample_role": config["evaluation"]["headline_sample_role"],
