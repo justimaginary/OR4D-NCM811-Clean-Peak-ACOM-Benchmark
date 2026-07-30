@@ -56,6 +56,11 @@ class OrientationAlignmentTest(unittest.TestCase):
             matrix_gt @ small_error,
             atol=1e-12,
         )
+        np.testing.assert_allclose(
+            result["symmetry_aligned_matrix"],
+            result["aligned_matrix"],
+            atol=1e-12,
+        )
         np.testing.assert_allclose(result["crystal_symmetry"], symmetry, atol=1e-12)
 
     def test_v3_visualization_aligns_axes_and_maps_related_hkl(self) -> None:
@@ -98,6 +103,14 @@ class OrientationAlignmentTest(unittest.TestCase):
         self.assertTrue(friedel["friedel_used"])
         self.assertGreater(friedel["strict_misorientation_deg"], 80.0)
         self.assertLess(friedel["orientation_error_deg"], 1.0)
+        self.assertGreater(friedel["symmetry_step_misorientation_deg"], 170.0)
+        self.assertFalse(
+            np.allclose(
+                friedel["acom_symmetry_aligned_matrix"],
+                friedel["acom_aligned_matrix"],
+                atol=1e-3,
+            )
+        )
         np.testing.assert_allclose(
             np.asarray(friedel["acom_aligned_matrix"])
             @ np.asarray(friedel["standard_matrix"]).T,

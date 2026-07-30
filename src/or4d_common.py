@@ -256,15 +256,20 @@ def best_friedel_alignment(
         raise ValueError("At least one crystal symmetry rotation is required.")
 
     error, symmetry, friedel = min(candidates, key=lambda item: item[0])
-    aligned = nearest_rotation(symmetry.T @ predicted @ friedel.T)
+    symmetry_aligned = nearest_rotation(symmetry.T @ predicted)
+    aligned = nearest_rotation(symmetry_aligned @ friedel.T)
     return {
         "aligned_matrix": aligned,
+        "symmetry_aligned_matrix": symmetry_aligned,
         "crystal_symmetry": symmetry,
         "friedel_matrix": friedel,
         "friedel_used": bool(
             np.allclose(friedel, FRIEDEL_SAMPLE_ROTATION, atol=1e-10)
         ),
         "equivalent_misorientation_deg": float(error),
+        "symmetry_step_misorientation_deg": float(
+            rotation_angle_deg(symmetry_aligned @ ground_truth.T)
+        ),
         "raw_misorientation_deg": float(
             rotation_angle_deg(predicted @ ground_truth.T)
         ),

@@ -308,6 +308,10 @@ def compact_trace(
             f"reported {reported_error}"
         )
     symmetry = np.asarray(alignment["crystal_symmetry"], dtype=float)
+    symmetry_aligned_matrix = np.asarray(
+        alignment["symmetry_aligned_matrix"],
+        dtype=float,
+    )
     aligned_matrix = np.asarray(alignment["aligned_matrix"], dtype=float)
     hkl_transform = reciprocal_matrix @ symmetry.T @ np.linalg.inv(
         reciprocal_matrix
@@ -357,10 +361,19 @@ def compact_trace(
                 f"{row['sample_id']}: {related_float.tolist()}"
             )
         g_crystal = np.asarray(reflection["g_crystal"], dtype=float)
+        symmetry_step_hkl = (friedel_sign * hkl).astype(int)
         related_g = related_hkl @ reciprocal_matrix
+        symmetry_step_g = symmetry_step_hkl @ reciprocal_matrix
         reflection["acom_related_hkl"] = related_hkl.tolist()
         reflection["acom_related_g_crystal"] = related_g.tolist()
         reflection["q_acom_related_raw"] = (related_g @ acom_matrix).tolist()
+        reflection["acom_symmetry_step_hkl"] = symmetry_step_hkl.tolist()
+        reflection["acom_symmetry_step_g_crystal"] = (
+            symmetry_step_g.tolist()
+        )
+        reflection["q_acom_symmetry_step_related"] = (
+            symmetry_step_g @ symmetry_aligned_matrix
+        ).tolist()
         reflection["q_acom_aligned_same_hkl"] = (
             g_crystal @ aligned_matrix
         ).tolist()
@@ -395,12 +408,18 @@ def compact_trace(
                 "strict_misorientation_deg"
             ],
             "raw_misorientation_deg": alignment["raw_misorientation_deg"],
+            "symmetry_step_misorientation_deg": alignment[
+                "symmetry_step_misorientation_deg"
+            ],
             "observed_match_fraction": row["comparison_summary"][
                 "observed_match_fraction"
             ],
             "q_rmse_Ainv": row["comparison_summary"]["q_distance_rmse_Ainv"],
             "standard_matrix": standard_matrix.tolist(),
             "acom_matrix": acom_matrix.tolist(),
+            "acom_symmetry_aligned_matrix": (
+                symmetry_aligned_matrix.tolist()
+            ),
             "acom_aligned_matrix": aligned_matrix.tolist(),
             "best_crystal_symmetry": symmetry.tolist(),
             "best_crystal_symmetry_description": symmetry_description(
@@ -558,7 +577,7 @@ svg { display: block; width: 100%; height: auto; color: var(--foreground); }
 .operator { align-self: center; color: var(--muted-foreground); font-size: 22px; }
 .matrix-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
 .matrix-equation { display: grid; grid-template-columns: minmax(260px, 1fr) auto minmax(220px, .8fr); gap: 10px; align-items: center; }
-.representation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 18px; }
+.representation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin: 12px 0 18px; }
 .representation-grid article { min-width: 0; }
 .representation-grid h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted-foreground); }
 .representation-note { margin: 8px 0 14px; padding: 10px 12px; border-left: 4px solid var(--series-3); background: #f7f4fc; font-size: 13px; }
@@ -639,6 +658,7 @@ tbody tr.is-selected { background: #eef4ff; }
     <div class="metric"><span>Friedel 等价误差 / Primary</span><strong id="error"></strong></div>
     <div class="metric"><span>仅晶体对称误差 / Strict</span><strong id="strict-error"></strong></div>
     <div class="metric"><span>原始代表矩阵差 / Raw</span><strong id="raw-error"></strong></div>
+    <div class="metric"><span>按最终 S<sub>best</sub> 仅做晶体对称后的矩阵差</span><strong id="symmetry-step-error"></strong></div>
     <div class="metric"><span>最佳晶体对称操作</span><strong id="best-symmetry"></strong></div>
     <div class="metric"><span>Friedel branch</span><strong id="friedel-branch"></strong></div>
     <div class="metric"><span>探测器观测峰匹配率</span><strong id="match"></strong></div>
@@ -647,7 +667,7 @@ tbody tr.is-selected { background: #eef4ff; }
   <details class="friedel-explanation" open>
     <summary>Friedel branch 做了什么，为什么需要它？ / What and why</summary>
     <p><b>它处理理想运动学衍射中的 Friedel 二义性。</b>本 Clean benchmark 的峰集同时包含 <code>q</code> 与 <code>−q</code> 的 Friedel 对，因此把样品坐标的 x、y 方向同时反转、保持电子束 z 方向不变，得到的二维峰位置集合不变。仅凭这种理想峰集，算法不能区分这两个取向代表。</p>
-    <div class="friedel-formula">F = diag(−1, −1, 1)<br>R<sub>equiv</sub> = S R<sub>GT</sub> F<br>R<sub>ACOM aligned</sub> = S<sub>best</sub><sup>T</sup> R<sub>ACOM raw</sub> F<sub>best</sub><sup>T</sup></div>
+    <div class="friedel-formula">F = diag(−1, −1, 1)<br>R<sub>equiv</sub> = S R<sub>GT</sub> F<br>① R<sub>raw</sub> = R<sub>ACOM output</sub><br>② R<sub>sym</sub> = S<sub>best</sub><sup>T</sup> R<sub>raw</sub><br>③ R<sub>sym+F</sub> = R<sub>sym</sub> F<sub>best</sub><sup>T</sup></div>
     <p>评测会同时检查 <code>F = I</code> 和 <code>F = diag(−1,−1,1)</code>，只采用误差更小的分支。“Strict”只搜索晶体点群操作 <code>S</code>；“Friedel-equivalent”再加入 <code>F</code>。该操作<b>不会修改 ACOM 原始输出、不会移动检测峰，也不会制造更好的结果</b>，只是把观测上不可区分的代表放到同一个坐标表示中比较。它也不同于晶体三重旋转：晶体对称在左侧作用，Friedel branch 在样品坐标右侧作用。</p>
     <p id="friedel-example-summary"></p>
   </details>
@@ -702,10 +722,11 @@ tbody tr.is-selected { background: #eef4ff; }
     <div id="orientation-tabs" class="tabs" aria-label="选择对称对齐后或原始 ACOM 取向矩阵"></div>
   </div>
   <div id="representation-note" class="representation-note"></div>
-  <section class="representation-grid" aria-label="GT、原始 ACOM 与对齐后 ACOM 矩阵">
+  <section class="representation-grid" aria-label="GT、原始 ACOM、晶体对称后及晶体对称加 Friedel 后矩阵">
     <article><h3>R<sup>GT</sup> / Ground Truth</h3><pre id="summary-gt-matrix"></pre></article>
-    <article><h3>R<sup>ACOM raw</sup> / 原始输出</h3><pre id="summary-raw-matrix"></pre></article>
-    <article><h3>R<sup>ACOM aligned</sup> / 对称对齐后</h3><pre id="summary-aligned-matrix"></pre></article>
+    <article><h3>① R<sup>ACOM raw</sup> / 原始输出</h3><pre id="summary-raw-matrix"></pre></article>
+    <article><h3>② S<sub>best</sub><sup>T</sup>R<sup>ACOM raw</sup> / 仅晶体对称后</h3><pre id="summary-symmetry-matrix"></pre></article>
+    <article><h3>③ S<sub>best</sub><sup>T</sup>R<sup>ACOM raw</sup>F<sub>best</sub><sup>T</sup> / 对称 + Friedel 后</h3><pre id="summary-aligned-matrix"></pre></article>
   </section>
   <div class="view-control">
     <strong>图层显示</strong>
@@ -795,19 +816,38 @@ const qPixelsPerAinv = 165 / kMaxAinv;
 const qX = value => 280 + value * qPixelsPerAinv;
 const qY = value => 200 - value * qPixelsPerAinv;
 const axisScale = value => value * 125;
-const selectedAcomMatrix = sample =>
-  orientationMode === "aligned" ? sample.acom_aligned_matrix : sample.acom_matrix;
-const selectedAcomReflection = peak => orientationMode === "aligned"
-  ? {
-      hkl: peak.hkl,
-      gCrystal: peak.g_crystal,
-      q: peak.q_acom_aligned_same_hkl,
-    }
-  : {
+const selectedAcomMatrix = sample => {
+  if (orientationMode === "raw") return sample.acom_matrix;
+  if (orientationMode === "symmetry") return sample.acom_symmetry_aligned_matrix;
+  return sample.acom_aligned_matrix;
+};
+const selectedAcomReflection = peak => {
+  if (orientationMode === "raw") {
+    return {
       hkl: peak.acom_related_hkl,
       gCrystal: peak.acom_related_g_crystal,
       q: peak.q_acom_related_raw,
     };
+  }
+  if (orientationMode === "symmetry") {
+    return {
+      hkl: peak.acom_symmetry_step_hkl,
+      gCrystal: peak.acom_symmetry_step_g_crystal,
+      q: peak.q_acom_symmetry_step_related,
+    };
+  }
+  return {
+      hkl: peak.hkl,
+      gCrystal: peak.g_crystal,
+      q: peak.q_acom_aligned_same_hkl,
+    };
+};
+const orientationModeLabel = () =>
+  orientationMode === "raw"
+    ? "raw"
+    : orientationMode === "symmetry"
+      ? "symmetry-only"
+      : "symmetry+Friedel";
 
 function renderOverview() {
   const runs = overviewResults.runs;
@@ -953,13 +993,14 @@ function renderViewTabs() {
     `${showACOM ? '<i class="cross">×</i>ACOM 预测峰' : ''}`;
   document.getElementById("axes-legend").innerHTML =
     `${showGT ? '<i class="line"></i>R<sup>GT</sup>' : ''}` +
-    `${showACOM ? `<i class="line acom"></i>R<sup>ACOM ${orientationMode}</sup>` : ''}`;
+    `${showACOM ? `<i class="line acom"></i>R<sup>ACOM ${orientationModeLabel()}</sup>` : ''}`;
 }
 
 function renderOrientationTabs(sample) {
   const modes = [
-    ["aligned", "对称对齐后（默认）"],
-    ["raw", "原始 ACOM 输出"],
+    ["aligned", "③ 晶体对称 + Friedel 后（默认）"],
+    ["symmetry", "② 仅晶体对称后"],
+    ["raw", "① 原始 ACOM 输出"],
   ];
   orientationTabs.innerHTML = "";
   modes.forEach(([mode, label]) => {
@@ -975,8 +1016,10 @@ function renderOrientationTabs(sample) {
   });
   document.getElementById("representation-note").innerHTML =
     orientationMode === "aligned"
-      ? `<strong>当前绘图使用对称/Friedel 对齐后代表。</strong> R<sup>ACOM aligned</sup> = S<sub>best</sub><sup>T</sup> R<sup>ACOM raw</sup> F<sub>best</sub><sup>T</sup>；它与上方 Friedel 等价误差使用同一个最佳分支。当前 F<sub>best</sub> = ${sample.friedel_used ? "diag(-1,-1,1)（已使用）" : "I（未使用）"}。`
-      : `<strong>当前绘图使用原始 ACOM 输出。</strong> 坐标轴可能因晶体对称等价操作而与 GT 相差很大；这时应同时查看原始代表矩阵差、对称相关 HKL 和对称等价误差。`;
+      ? `<strong>阶段 ③：当前绘图已依次撤销最佳晶体对称操作和 Friedel branch。</strong> R<sup>ACOM sym+F</sup> = S<sub>best</sub><sup>T</sup> R<sup>ACOM raw</sup> F<sub>best</sub><sup>T</sup>；它与 Friedel 等价误差使用同一个最佳分支。当前 F<sub>best</sub> = ${sample.friedel_used ? "diag(-1,-1,1)（已使用）" : "I（未使用）"}。`
+      : orientationMode === "symmetry"
+        ? `<strong>阶段 ②：当前绘图只撤销联合最优分支中的晶体对称操作 S<sub>best</sub>，尚未应用 F<sub>best</sub><sup>T</sup>。</strong>这是三步变换的中间状态，其矩阵差显示在上方“按最终 S_best 仅做晶体对称后”；它不是另行搜索得到的全局 Strict 最优代表。`
+        : `<strong>阶段 ①：当前绘图使用 ACOM 原始输出。</strong> 坐标轴可能因晶体对称和 Friedel 等价操作而与 GT 相差很大；这时应同时查看三阶段矩阵、对称/Friedel 相关 HKL 和各误差指标。`;
 }
 
 function renderDetector(sample) {
@@ -1067,8 +1110,8 @@ function renderAxes(sample) {
     displayMode === "gt"
       ? "仅显示 R<sup>GT</sup>；紫色为所选 GT 反射的 g<sub>c</sub> 方向"
       : displayMode === "acom"
-        ? `仅显示 R<sup>ACOM ${orientationMode}</sup>；虚线表示算法估计的样品坐标轴`
-        : `叠加 R<sup>GT</sup>（实线）与 R<sup>ACOM ${orientationMode}</sup>（虚线）；紫色为所选 GT 反射的 g<sub>c</sub> 方向`;
+        ? `仅显示 R<sup>ACOM ${orientationModeLabel()}</sup>；虚线表示算法估计的样品坐标轴`
+        : `叠加 R<sup>GT</sup>（实线）与 R<sup>ACOM ${orientationModeLabel()}</sup>（虚线）；紫色为所选 GT 反射的 g<sub>c</sub> 方向`;
 }
 
 function renderTransform(sample) {
@@ -1082,33 +1125,57 @@ function renderTransform(sample) {
   document.getElementById("acom-matrix").textContent = matrix(acomMatrix);
   document.getElementById("standard-q").textContent = vector(selected.q_standard);
   document.getElementById("acom-q").textContent = vector(acomReflection.q);
-  document.getElementById("acom-transform-title").innerHTML =
-    orientationMode === "aligned"
-      ? "④ 对齐后：g<sub>s</sub><sup>ACOM aligned</sup> = g<sub>c</sub><sup>GT</sup> R<sup>ACOM aligned</sup>"
-      : "④ 原始代表：g<sub>s</sub><sup>ACOM raw</sup> = g<sub>c</sub><sup>related</sup> R<sup>ACOM raw</sup>";
-  document.getElementById("acom-reflection-map").innerHTML =
-    orientationMode === "aligned"
-      ? `对齐后使用同一个 GT HKL [${selected.hkl.join(", ")}]。`
-      : `晶体对称重标记：GT HKL [${selected.hkl.join(", ")}] ↔ raw ACOM HKL [${acomReflection.hkl.join(", ")}]；不是强行比较同一个 HKL。`;
-  document.getElementById("acom-transform-note").textContent =
-    orientationMode === "aligned"
-      ? "该矩阵和坐标与对称等价误差使用同一个最佳晶体对称/Friedel 分支。"
-      : "原始矩阵保留 ACOM 实际输出；对称相关 HKL 在原始代表下投到同一探测器峰。";
+  if (orientationMode === "aligned") {
+    document.getElementById("acom-transform-title").innerHTML =
+      "④ 阶段 ③：g<sub>s</sub><sup>ACOM sym+F</sup> = g<sub>c</sub><sup>GT</sup> R<sup>ACOM sym+F</sup>";
+    document.getElementById("acom-reflection-map").innerHTML =
+      `晶体对称和 Friedel 均撤销后，使用同一个 GT HKL [${selected.hkl.join(", ")}]。`;
+    document.getElementById("acom-transform-note").textContent =
+      "该矩阵和坐标与 Friedel-equivalent 主误差使用同一个最佳 S、F 分支。";
+  } else if (orientationMode === "symmetry") {
+    document.getElementById("acom-transform-title").innerHTML =
+      "④ 阶段 ②：gₛᵃᶜᵒᵐ ˢʸᵐ = g<sub>c</sub><sup>F-related</sup> R<sup>ACOM sym</sup>";
+    document.getElementById("acom-reflection-map").innerHTML =
+      `已撤销晶体对称 S，但尚未撤销 Friedel：GT HKL [${selected.hkl.join(", ")}] ↔ 中间代表 HKL [${acomReflection.hkl.join(", ")}]。`;
+    document.getElementById("acom-transform-note").textContent =
+      "若当前样本使用 Friedel branch，中间代表仍需用 Friedel 对应反射；阶段 ③ 才回到同一个 GT HKL。";
+  } else {
+    document.getElementById("acom-transform-title").innerHTML =
+      "④ 阶段 ①：g<sub>s</sub><sup>ACOM raw</sup> = g<sub>c</sub><sup>S,F-related</sup> R<sup>ACOM raw</sup>";
+    document.getElementById("acom-reflection-map").innerHTML =
+      `晶体对称/Friedel 重标记：GT HKL [${selected.hkl.join(", ")}] ↔ raw ACOM HKL [${acomReflection.hkl.join(", ")}]；不是强行比较同一个 HKL。`;
+    document.getElementById("acom-transform-note").textContent =
+      "原始矩阵保留 ACOM 实际输出；相关 HKL 在原始代表下投到同一探测器峰。";
+  }
 }
 
 function renderReflectionTable(sample) {
+  const modeTitle =
+    orientationMode === "raw"
+      ? "阶段 ①：原始 ACOM 代表"
+      : orientationMode === "symmetry"
+        ? "阶段 ②：仅撤销晶体对称 S"
+        : "阶段 ③：撤销晶体对称 S 和 Friedel F";
   document.getElementById("all-reflections-title").innerHTML =
-    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = ${kMaxAinv} Å⁻¹）· ${orientationMode === "aligned" ? "对称对齐后代表" : "原始 ACOM 代表"}`;
+    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = ${kMaxAinv} Å⁻¹）· ${modeTitle}`;
   document.getElementById("acom-hkl-heading").textContent =
-    orientationMode === "aligned" ? "Aligned ACOM HKL（同 GT）" : "Raw ACOM 对称相关 HKL";
+    orientationMode === "aligned"
+      ? "阶段 ③ ACOM HKL（同 GT）"
+      : orientationMode === "symmetry"
+        ? "阶段 ② Friedel 相关 HKL"
+        : "阶段 ① S/F 相关 HKL";
   document.getElementById("acom-g-heading").innerHTML =
     orientationMode === "aligned"
-      ? "g<sub>c</sub><sup>ACOM aligned</sup>"
-      : "g<sub>c</sub><sup>ACOM related</sup>";
+      ? "g<sub>c</sub><sup>ACOM sym+F</sup>"
+      : orientationMode === "symmetry"
+        ? "g<sub>c</sub><sup>ACOM sym</sup>"
+        : "g<sub>c</sub><sup>ACOM raw related</sup>";
   document.getElementById("acom-q-heading").innerHTML =
     orientationMode === "aligned"
-      ? "g<sub>s</sub><sup>ACOM aligned</sup>"
-      : "g<sub>s</sub><sup>ACOM raw</sup>";
+      ? "g<sub>s</sub><sup>ACOM sym+F</sup>"
+      : orientationMode === "symmetry"
+        ? "g<sub>s</sub><sup>ACOM sym</sup>"
+        : "g<sub>s</sub><sup>ACOM raw</sup>";
   document.getElementById("reflection-rows").innerHTML = sample.observed.map((peak, index) => {
     const acomReflection = selectedAcomReflection(peak);
     const delta = Math.hypot(
@@ -1138,6 +1205,8 @@ function render() {
   document.getElementById("error").textContent = `${sample.orientation_error_deg.toFixed(3)}°`;
   document.getElementById("strict-error").textContent = `${sample.strict_misorientation_deg.toFixed(3)}°`;
   document.getElementById("raw-error").textContent = `${sample.raw_misorientation_deg.toFixed(3)}°`;
+  document.getElementById("symmetry-step-error").textContent =
+    `${sample.symmetry_step_misorientation_deg.toFixed(3)}°`;
   document.getElementById("best-symmetry").textContent =
     sample.best_crystal_symmetry_description.text;
   document.getElementById("friedel-branch").textContent =
@@ -1146,6 +1215,8 @@ function render() {
   document.getElementById("rmse").textContent = `${sample.q_rmse_Ainv.toFixed(4)} Å⁻¹`;
   document.getElementById("summary-gt-matrix").textContent = matrix(sample.standard_matrix);
   document.getElementById("summary-raw-matrix").textContent = matrix(sample.acom_matrix);
+  document.getElementById("summary-symmetry-matrix").textContent =
+    matrix(sample.acom_symmetry_aligned_matrix);
   document.getElementById("summary-aligned-matrix").textContent = matrix(sample.acom_aligned_matrix);
   document.getElementById("friedel-example-summary").innerHTML =
     `<b>本页实例：</b><code>${friedelExample.sample_id}</code> 的 Strict 误差为 ` +
