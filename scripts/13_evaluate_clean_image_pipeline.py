@@ -177,7 +177,9 @@ def make_overlay(
     output: Path,
 ) -> None:
     fig, ax = plt.subplots(figsize=(8, 8), dpi=150)
-    scale = np.log10(np.asarray(image, dtype=float) + 1e-10)
+    scale = np.log10(
+        np.maximum(np.asarray(image, dtype=float), 0.0) + 1e-10
+    )
     ax.imshow(
         scale,
         cmap="gray",
