@@ -340,12 +340,24 @@ def main() -> None:
         )
         grouped.setdefault((str(result["detector"]), dose), []).append(result)
     dose_summary = []
-    for (detector, dose), group in sorted(grouped.items()):
+    ordered_groups = sorted(
+        grouped.items(),
+        key=lambda item: (
+            item[0][0],
+            0 if item[0][1].isdigit() else 1,
+            int(item[0][1]) if item[0][1].isdigit() else item[0][1],
+        ),
+    )
+    for (detector, dose), group in ordered_groups:
         row = {
             "detector": detector,
             "dose_electrons": int(dose) if dose.isdigit() else dose,
             "repeats": len(group),
+            "accepted_repeats": sum(
+                bool(item["acceptance"]["all"]) for item in group
+            ),
         }
+        row["acceptance_fraction"] = row["accepted_repeats"] / len(group)
         for metric in (
             "precision",
             "recall",
