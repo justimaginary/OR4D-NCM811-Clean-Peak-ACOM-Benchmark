@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import map_coordinates, spline_filter
 from scipy.signal import fftconvolve
 from skimage.feature import blob_dog
 
@@ -97,6 +97,7 @@ def detect_dog_rgm_peaks(
         outer_fraction=float(config["rgm_outer_radius_fraction"]),
     )
     rgm_map = fftconvolve(processed, rgm_kernel[::-1, ::-1], mode="same")
+    rgm_spline = spline_filter(rgm_map, order=3)
     offsets = np.arange(
         -float(config["rgm_search_radius_px"]),
         float(config["rgm_search_radius_px"])
@@ -114,7 +115,9 @@ def detect_dog_rgm_peaks(
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
         search_rows = initial_row + dy.ravel()
         search_cols = initial_col + dx.ravel()
-        scores = _sample_cubic(rgm_map, search_rows, search_cols)
+        scores = _sample_cubic(
+            rgm_spline, search_rows, search_cols, prefilter=False
+        )
         best = int(np.argmax(scores))
         row = float(search_rows[best])
         col = float(search_cols[best])

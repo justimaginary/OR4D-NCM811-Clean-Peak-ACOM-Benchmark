@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import map_coordinates, spline_filter
 from scipy.signal import fftconvolve
 from skimage.feature import blob_log
 
@@ -88,7 +88,13 @@ def _sample_bilinear(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> n
     )
 
 
-def _sample_cubic(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+def _sample_cubic(
+    image: np.ndarray,
+    rows: np.ndarray,
+    cols: np.ndarray,
+    *,
+    prefilter: bool = True,
+) -> np.ndarray:
     """Sample a smooth response map without pinning maxima to integer pixels."""
     return map_coordinates(
         image,
@@ -96,7 +102,7 @@ def _sample_cubic(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.n
         order=3,
         mode="constant",
         cval=0.0,
-        prefilter=True,
+        prefilter=prefilter,
     )
 
 
@@ -180,6 +186,7 @@ def detect_autodisk_peaks(
         outer_fraction=float(config["rgm_outer_radius_fraction"]),
     )
     rgm_map = fftconvolve(processed, rgm_kernel[::-1, ::-1], mode="same")
+    rgm_spline = spline_filter(rgm_map, order=3)
     search_radius = float(config["rgm_search_radius_px"])
     search_step = float(config["rgm_search_step_px"])
     offsets = np.arange(-search_radius, search_radius + 0.5 * search_step, search_step)
@@ -200,7 +207,9 @@ def detect_autodisk_peaks(
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
         sample_rows = initial_row + dy.ravel()
         sample_cols = initial_col + dx.ravel()
-        scores = _sample_cubic(rgm_map, sample_rows, sample_cols)
+        scores = _sample_cubic(
+            rgm_spline, sample_rows, sample_cols, prefilter=False
+        )
         best = int(np.argmax(scores))
         row = float(sample_rows[best])
         col = float(sample_cols[best])
