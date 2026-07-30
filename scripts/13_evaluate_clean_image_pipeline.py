@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_counting import add_gaussian_read_noise  # noqa: E402
-from or4d_common import load_config, read_peak_h5  # noqa: E402
+from or4d_common import load_config, read_jsonl, read_peak_h5  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -25,6 +25,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image-file", type=Path, required=True)
     parser.add_argument("--oracle-file", type=Path, required=True)
+    parser.add_argument(
+        "--sample-manifest",
+        type=Path,
+        help=(
+            "Optional orientation JSONL. When study_group is present, report "
+            "disk-recovery metrics separately for each group."
+        ),
+    )
     parser.add_argument("--detected-file", type=Path, action="append")
     parser.add_argument(
         "--detection-report",
@@ -230,6 +238,16 @@ def main() -> None:
     acceptance = config["clean_image"]["acceptance"]
     image_path = args.image_file.resolve()
     oracle = records_by_id(args.oracle_file.resolve())
+    sample_manifest_path = (
+        args.sample_manifest.resolve() if args.sample_manifest else None
+    )
+    group_by_sample_id: dict[str, str] = {}
+    if sample_manifest_path is not None:
+        for record in read_jsonl(sample_manifest_path):
+            if "study_group" in record:
+                group_by_sample_id[str(record["sample_id"])] = str(
+                    record["study_group"]
+                )
     noise_manifest = load_noise_manifest(args.noise_manifest)
     args.overlay_dir.mkdir(parents=True, exist_ok=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -395,6 +413,30 @@ def main() -> None:
                         args.overlay_dir / f"{sample_id}_{detected_path.stem}.png",
                     )
             summary = aggregate(rows, q_pixel)
+            if group_by_sample_id:
+                unknown = sorted(
+                    row["sample_id"]
+                    for row in rows
+                    if row["sample_id"] not in group_by_sample_id
+                )
+                if unknown:
+                    raise ValueError(
+                        "sample manifest has no study_group for detected "
+                        f"samples: {unknown[:5]}"
+                    )
+                group_names = sorted(set(group_by_sample_id.values()))
+                summary["study_group_summary"] = {
+                    group_name: aggregate(
+                        [
+                            row
+                            for row in rows
+                            if group_by_sample_id[row["sample_id"]]
+                            == group_name
+                        ],
+                        q_pixel,
+                    )
+                    for group_name in group_names
+                }
             summary["acceptance"] = {
                 "precision": summary["precision"]
                 >= float(acceptance["precision_min"]),
@@ -515,6 +557,11 @@ def main() -> None:
         "scope": "Clean only",
         "image_file": str(image_path),
         "oracle_file": str(args.oracle_file.resolve()),
+        "sample_manifest": (
+            str(sample_manifest_path)
+            if sample_manifest_path is not None
+            else None
+        ),
         "match_tolerance_px": float(acceptance["match_tolerance_px"]),
         "q_pixel_size_Ainv": q_pixel,
         "detectors": results,
