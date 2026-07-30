@@ -15,6 +15,7 @@ from scipy.optimize import linear_sum_assignment
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from clean_counting import add_gaussian_read_noise  # noqa: E402
 from or4d_common import load_config, read_peak_h5  # noqa: E402
 
 
@@ -29,6 +30,11 @@ def parse_args() -> argparse.Namespace:
         "--detection-report",
         type=Path,
         help="Use every detector output listed by scripts/03_extract_clean_disks.py.",
+    )
+    parser.add_argument(
+        "--noise-manifest",
+        type=Path,
+        help="Required for overlays of independent read-noise levels.",
     )
     parser.add_argument(
         "--output",
@@ -51,6 +57,34 @@ def parse_args() -> argparse.Namespace:
 
 def records_by_id(path: Path) -> dict[str, dict]:
     return {str(row["sample_id"]): row for row in read_peak_h5(path)}
+
+
+def decoded(values: np.ndarray) -> list[str]:
+    return [
+        value.decode() if isinstance(value, bytes) else str(value)
+        for value in values
+    ]
+
+
+def load_noise_manifest(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    with h5py.File(path.resolve(), "r") as h5:
+        return {
+            "path": str(path.resolve()),
+            "sample_id": decoded(h5["sample_id"][:]),
+            "dose_electrons": np.asarray(
+                h5["dose_electrons"][:], dtype=np.int64
+            ),
+            "noise_level_id": decoded(h5["noise_level_id"][:]),
+            "read_noise_sigma": np.asarray(
+                h5["read_noise_sigma_primary_e_rms_per_pixel"][:],
+                dtype=float,
+            ),
+            "read_noise_seed": np.asarray(
+                h5["read_noise_seed"][:], dtype=np.uint64
+            ),
+        }
 
 
 def match_peaks(
@@ -194,6 +228,7 @@ def main() -> None:
     acceptance = config["clean_image"]["acceptance"]
     image_path = args.image_file.resolve()
     oracle = records_by_id(args.oracle_file.resolve())
+    noise_manifest = load_noise_manifest(args.noise_manifest)
     args.overlay_dir.mkdir(parents=True, exist_ok=True)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     results = []
@@ -214,10 +249,17 @@ def main() -> None:
         qx_axis = np.asarray(h5["detector/qx_Ainv"][:], dtype=float)
         qy_axis = np.asarray(h5["detector/qy_Ainv"][:], dtype=float)
         q_pixel = float(np.median(np.diff(qx_axis)))
-        sample_ids = [
-            value.decode() if isinstance(value, bytes) else str(value)
-            for value in h5["sample_id"][:]
-        ]
+        sample_ids = decoded(h5["sample_id"][:])
+        if noise_manifest is not None:
+            if sample_ids != noise_manifest["sample_id"]:
+                raise ValueError(
+                    "noise manifest sample IDs do not match images"
+                )
+            if not np.array_equal(
+                h5["dose_electrons"][:],
+                noise_manifest["dose_electrons"],
+            ):
+                raise ValueError("noise manifest doses do not match images")
         tolerance = float(acceptance["match_tolerance_px"]) * q_pixel
         high_angle = 0.75 * float(config["common"]["k_max_Ainv"])
 
@@ -237,6 +279,10 @@ def main() -> None:
             counted_match = re.fullmatch(
                 r"counted_dose(\d+)_repeat(\d+)", variant_name
             )
+            independent_match = re.fullmatch(
+                r"dose(\d+)_noise_(.+?)(?:_repeat(\d+))?",
+                variant_name,
+            )
             if counted_match:
                 doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
                 dose = int(counted_match.group(1))
@@ -247,7 +293,39 @@ def main() -> None:
                         f"Could not resolve dose {dose} in {image_path}"
                     )
                 image_dataset = h5["images/counts"]
-                image_selector = (int(matching_dose[0]), repeat)
+                image_selector = {
+                    "dose_index": int(matching_dose[0]),
+                    "repeat": repeat,
+                    "noise_level_id": "poisson_only",
+                }
+            elif independent_match:
+                doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
+                dose = int(independent_match.group(1))
+                noise_level_id = independent_match.group(2)
+                repeat_text = independent_match.group(3)
+                matching_dose = np.flatnonzero(doses == dose)
+                if len(matching_dose) != 1:
+                    raise ValueError(
+                        f"Could not resolve dose {dose} in {image_path}"
+                    )
+                if noise_level_id == "noiseless":
+                    image_dataset = h5["images/expected_counts"]
+                    image_selector = {
+                        "dose_index": int(matching_dose[0]),
+                        "repeat": None,
+                        "noise_level_id": noise_level_id,
+                    }
+                else:
+                    if repeat_text is None:
+                        raise ValueError(
+                            f"{variant_name} is missing a repeat index"
+                        )
+                    image_dataset = h5["images/counts"]
+                    image_selector = {
+                        "dose_index": int(matching_dose[0]),
+                        "repeat": int(repeat_text),
+                        "noise_level_id": noise_level_id,
+                    }
             else:
                 image_dataset = h5["expectation/intensity"]
                 image_selector = None
@@ -264,10 +342,46 @@ def main() -> None:
                     image = (
                         image_dataset[index]
                         if image_selector is None
-                        else image_dataset[
-                            index, image_selector[0], image_selector[1]
-                        ]
+                        else (
+                            image_dataset[
+                                index, image_selector["dose_index"]
+                            ]
+                            if image_selector["repeat"] is None
+                            else image_dataset[
+                                index,
+                                image_selector["dose_index"],
+                                image_selector["repeat"],
+                            ]
+                        )
                     )
+                    if (
+                        image_selector is not None
+                        and image_selector["repeat"] is not None
+                        and image_selector["noise_level_id"]
+                        not in ("poisson_only", "noiseless")
+                    ):
+                        if noise_manifest is None:
+                            raise ValueError(
+                                "read-noise overlays require "
+                                "--noise-manifest"
+                            )
+                        level_index = noise_manifest[
+                            "noise_level_id"
+                        ].index(image_selector["noise_level_id"])
+                        sigma = float(
+                            noise_manifest["read_noise_sigma"][level_index]
+                        )
+                        seed = int(
+                            noise_manifest["read_noise_seed"][
+                                index,
+                                image_selector["dose_index"],
+                                level_index,
+                                image_selector["repeat"],
+                            ]
+                        )
+                        image = add_gaussian_read_noise(
+                            image, sigma, np.random.default_rng(seed)
+                        )
                     make_overlay(
                         image,
                         qx_axis,
@@ -304,6 +418,18 @@ def main() -> None:
             metadata = run_metadata.get(str(detected_path), {})
             summary["variant"] = metadata.get("variant", detected_path.stem)
             summary["detector"] = metadata.get("detector", "unknown")
+            summary["dose_electrons"] = metadata.get(
+                "dose_electrons",
+                dose if counted_match or independent_match else None,
+            )
+            summary["noise_level_id"] = metadata.get(
+                "noise_level_id",
+                (
+                    image_selector["noise_level_id"]
+                    if image_selector is not None
+                    else "none"
+                ),
+            )
             summary["runtime"] = {
                 key: metadata[key]
                 for key in (
@@ -330,28 +456,30 @@ def main() -> None:
             ]
             results.append(summary)
 
-    grouped: dict[tuple[str, str], list[dict]] = {}
+    grouped: dict[tuple[str, str, str], list[dict]] = {}
     for result in results:
         variant = str(result["variant"])
-        dose = (
-            variant.split("_repeat", 1)[0].replace("counted_dose", "")
-            if variant.startswith("counted_dose")
-            else variant
-        )
-        grouped.setdefault((str(result["detector"]), dose), []).append(result)
-    dose_summary = []
+        dose_value = result.get("dose_electrons")
+        dose = str(dose_value) if dose_value is not None else variant
+        noise_level_id = str(result.get("noise_level_id", "none"))
+        grouped.setdefault(
+            (str(result["detector"]), dose, noise_level_id), []
+        ).append(result)
+    noise_summary = []
     ordered_groups = sorted(
         grouped.items(),
         key=lambda item: (
             item[0][0],
             0 if item[0][1].isdigit() else 1,
             int(item[0][1]) if item[0][1].isdigit() else item[0][1],
-        ),
+            item[0][2],
+        )
     )
-    for (detector, dose), group in ordered_groups:
+    for (detector, dose, noise_level_id), group in ordered_groups:
         row = {
             "detector": detector,
             "dose_electrons": int(dose) if dose.isdigit() else dose,
+            "noise_level_id": noise_level_id,
             "repeats": len(group),
             "accepted_repeats": sum(
                 bool(item["acceptance"]["all"]) for item in group
@@ -379,7 +507,7 @@ def main() -> None:
         row["runtime_mean_seconds_per_pattern"] = (
             float(np.mean(timings)) if timings else None
         )
-        dose_summary.append(row)
+        noise_summary.append(row)
 
     report = {
         "scope": "Clean only",
@@ -388,7 +516,11 @@ def main() -> None:
         "match_tolerance_px": float(acceptance["match_tolerance_px"]),
         "q_pixel_size_Ainv": q_pixel,
         "detectors": results,
-        "dose_summary": dose_summary,
+        "noise_summary": noise_summary,
+        "dose_summary": noise_summary,
+        "noise_manifest": (
+            noise_manifest["path"] if noise_manifest is not None else None
+        ),
     }
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
     if not args.quiet:
