@@ -456,6 +456,7 @@ def main() -> None:
                         else "not_applicable"
                     ),
                     "coordinate_units": "1/angstrom",
+                    "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
                     "forward_model": forward_model,
                     "central_exclusion_Ainv": central_exclusion,
                     "detector_config": image_cfg[
@@ -502,6 +503,7 @@ def main() -> None:
         "track": args.track,
         "detectors": detectors,
         "compute_backend": args.compute_backend,
+        "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
         "noise_manifest": (
             noise_manifest["path"]
             if noise_manifest is not None
