@@ -288,6 +288,28 @@ def compact_trace(
         row["reciprocal_lattice_matrix_B_Ainv"],
         dtype=float,
     )
+    direct_matrix = np.asarray(
+        row["direct_lattice_matrix_A"],
+        dtype=float,
+    )
+    direct_a, direct_b, direct_c = direct_matrix
+    cross_b_c = np.cross(direct_b, direct_c)
+    cross_c_a = np.cross(direct_c, direct_a)
+    cross_a_b = np.cross(direct_a, direct_b)
+    cell_volume = float(np.dot(direct_a, cross_b_c))
+    reciprocal_from_cross_products = np.stack(
+        [cross_b_c, cross_c_a, cross_a_b],
+        axis=0,
+    ) / cell_volume
+    if not np.allclose(
+        reciprocal_from_cross_products,
+        reciprocal_matrix,
+        atol=1e-10,
+    ):
+        raise ValueError(
+            f"Cross-product reciprocal basis does not match trace B for "
+            f"{row['sample_id']}."
+        )
     alignment = best_friedel_alignment(
         acom_matrix,
         standard_matrix,
@@ -429,7 +451,38 @@ def compact_trace(
             "friedel_matrix": np.asarray(
                 alignment["friedel_matrix"]
             ).tolist(),
+            "direct_matrix": direct_matrix.tolist(),
             "reciprocal_matrix": reciprocal_matrix.tolist(),
+            "reciprocal_construction": {
+                "cross_b_c_A2": cross_b_c.tolist(),
+                "cross_c_a_A2": cross_c_a.tolist(),
+                "cross_a_b_A2": cross_a_b.tolist(),
+                "cell_volume_A3": cell_volume,
+                "reciprocal_from_cross_products_Ainv": (
+                    reciprocal_from_cross_products.tolist()
+                ),
+                "max_abs_difference_Ainv": float(
+                    np.max(
+                        np.abs(
+                            reciprocal_from_cross_products
+                            - reciprocal_matrix
+                        )
+                    )
+                ),
+                "duality_product_A_BT": (
+                    direct_matrix
+                    @ reciprocal_from_cross_products.T
+                ).tolist(),
+                "max_abs_duality_error": float(
+                    np.max(
+                        np.abs(
+                            direct_matrix
+                            @ reciprocal_from_cross_products.T
+                            - np.eye(3)
+                        )
+                    )
+                ),
+            },
             "observed": observed,
             "predicted": predicted,
             "matches": matches,
@@ -534,6 +587,11 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .notation h2 { margin: 0 0 8px; font-size: 17px; }
 .notation-note { margin: 9px 0 0; color: var(--muted-foreground); font-size: 13px; }
 .notation code { color: var(--foreground); }
+.reciprocal-construction { margin: 0 0 24px; padding: 16px; border: 1px solid var(--border); border-radius: 10px; }
+.reciprocal-construction h2 { margin: 0 0 8px; font-size: 17px; }
+.reciprocal-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.reciprocal-grid article { min-width: 0; }
+.reciprocal-grid h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted-foreground); }
 .process-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; margin: 2px 0 20px; }
 .process-grid article { padding-top: 12px; border-top: 3px solid var(--series-1); }
 .process-grid article:last-child { border-top-color: var(--series-2); }
@@ -599,7 +657,7 @@ tbody tr.is-selected { background: #eef4ff; }
   main { padding: 16px; }
   .page-header { display: block; }
   .page-switch { margin-top: 12px; }
-  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid, .representation-grid { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid, .representation-grid, .reciprocal-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -717,6 +775,20 @@ tbody tr.is-selected { background: #eef4ff; }
     </div>
     <p class="notation-note">本页数值数组统一按行显示，因此使用 <code>g_c = h B</code>、<code>g_s = g_c R</code>；与代码中的列向量写法 <code>g_s = Rᵀ g_c</code> 完全等价。GT = 生成数据时的标准答案，ACOM = 算法估计结果。</p>
   </section>
+  <section class="reciprocal-construction">
+    <h2>倒易基矢如何由直接晶格计算 / Reciprocal-basis construction</h2>
+    <p><b>倒易基矢不是把直接晶格矩阵的三个分量分别取倒数。</b>令直接晶格矩阵的三行为 <code>A=[a;b;c]</code>，先计算有向晶胞体积 <code>V=a·(b×c)</code>，再用叉积构造三个倒易基矢。本 benchmark 使用不含 <code>2π</code> 的晶体学定义。</p>
+    <div class="friedel-formula">V = a · (b × c)<br>a* = (b × c) / V<br>b* = (c × a) / V<br>c* = (a × b) / V<br>B = [a*; b*; c*], &nbsp; A B<sup>T</sup> = I</div>
+    <div class="reciprocal-grid">
+      <article><h3>① 直接晶格矩阵 A（Å）</h3><pre id="direct-matrix"></pre></article>
+      <article><h3>② 三个叉积（Å²）</h3><pre id="reciprocal-cross-products"></pre></article>
+      <article><h3>③ 有向晶胞体积 V（Å³）</h3><pre id="cell-volume"></pre></article>
+      <article><h3>④ a*、b*、c*（Å⁻¹）</h3><pre id="reciprocal-vectors"></pre></article>
+      <article><h3>⑤ 由叉积组装的 B（Å⁻¹）</h3><pre id="reciprocal-built"></pre></article>
+      <article><h3>⑥ trace 中实际使用的 B 与核对</h3><pre id="reciprocal-check"></pre></article>
+    </div>
+    <p class="notation-note">只有在非常特殊的正交且轴向对齐情形下，结果才可能看起来像对晶格长度取倒数；对当前六方晶胞，a 与 b 不正交，因此 a* 同时具有 crystal X 和 Y 分量。</p>
+  </section>
   <div class="view-control">
     <strong>ACOM 取向代表</strong>
     <div id="orientation-tabs" class="tabs" aria-label="选择对称对齐后或原始 ACOM 取向矩阵"></div>
@@ -812,6 +884,8 @@ const esc = value => String(value).replace(/[&<>"']/g, character => {
 });
 const vector = values => `[${values.map(value => Number(value).toFixed(4)).join(", ")}]`;
 const matrix = values => values.map(vector).join("\\n");
+const preciseVector = values => `[${values.map(value => Number(value).toFixed(8)).join(", ")}]`;
+const preciseMatrix = values => values.map(preciseVector).join("\\n");
 const qPixelsPerAinv = 165 / kMaxAinv;
 const qX = value => 280 + value * qPixelsPerAinv;
 const qY = value => 200 - value * qPixelsPerAinv;
@@ -1199,6 +1273,7 @@ function renderReflectionTable(sample) {
 function render() {
   const sample = samples[sampleIndex];
   const friedelExample = samples.find(item => item.label === "Friedel branch");
+  const reciprocal = sample.reciprocal_construction;
   renderTabs();
   renderOrientationTabs(sample);
   renderViewTabs();
@@ -1218,6 +1293,26 @@ function render() {
   document.getElementById("summary-symmetry-matrix").textContent =
     matrix(sample.acom_symmetry_aligned_matrix);
   document.getElementById("summary-aligned-matrix").textContent = matrix(sample.acom_aligned_matrix);
+  document.getElementById("direct-matrix").textContent =
+    preciseMatrix(sample.direct_matrix);
+  document.getElementById("reciprocal-cross-products").textContent =
+    `b × c = ${preciseVector(reciprocal.cross_b_c_A2)}\n` +
+    `c × a = ${preciseVector(reciprocal.cross_c_a_A2)}\n` +
+    `a × b = ${preciseVector(reciprocal.cross_a_b_A2)}`;
+  document.getElementById("cell-volume").textContent =
+    `V = a · (b × c)\n  = ${reciprocal.cell_volume_A3.toFixed(8)} Å³`;
+  const builtB = reciprocal.reciprocal_from_cross_products_Ainv;
+  document.getElementById("reciprocal-vectors").textContent =
+    `a* = ${preciseVector(builtB[0])}\n` +
+    `b* = ${preciseVector(builtB[1])}\n` +
+    `c* = ${preciseVector(builtB[2])}`;
+  document.getElementById("reciprocal-built").textContent =
+    preciseMatrix(builtB);
+  document.getElementById("reciprocal-check").textContent =
+    `B_reported =\n${preciseMatrix(sample.reciprocal_matrix)}\n\n` +
+    `max|B_cross − B_reported| = ${reciprocal.max_abs_difference_Ainv.toExponential(3)} Å⁻¹\n\n` +
+    `A Bᵀ =\n${preciseMatrix(reciprocal.duality_product_A_BT)}\n` +
+    `max|A Bᵀ − I| = ${reciprocal.max_abs_duality_error.toExponential(3)}`;
   document.getElementById("friedel-example-summary").innerHTML =
     `<b>本页实例：</b><code>${friedelExample.sample_id}</code> 的 Strict 误差为 ` +
     `${friedelExample.strict_misorientation_deg.toFixed(3)}°，加入 Friedel 等价后为 ` +

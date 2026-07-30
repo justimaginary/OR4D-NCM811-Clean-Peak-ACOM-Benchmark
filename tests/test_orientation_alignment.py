@@ -97,6 +97,18 @@ class OrientationAlignmentTest(unittest.TestCase):
             reflection["q_standard"],
             atol=2e-4,
         )
+        reciprocal = sample["reciprocal_construction"]
+        np.testing.assert_allclose(
+            reciprocal["reciprocal_from_cross_products_Ainv"],
+            sample["reciprocal_matrix"],
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            reciprocal["duality_product_A_BT"],
+            np.eye(3),
+            atol=1e-12,
+        )
+        self.assertGreater(reciprocal["cell_volume_A3"], 0.0)
 
         friedel = next(row for row in samples if row["label"] == "Friedel branch")
         self.assertEqual(friedel["sample_id"], "clean_core_0061")
