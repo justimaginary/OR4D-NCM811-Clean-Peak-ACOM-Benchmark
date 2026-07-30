@@ -130,6 +130,52 @@ class OrientationAlignmentTest(unittest.TestCase):
             atol=1.2e-2,
         )
 
+    def test_v3_visualization_exposes_001_grid_probe_anomaly(self) -> None:
+        samples = VISUALIZATION.load_samples()
+        anomaly = next(
+            row
+            for row in samples
+            if row["sample_id"] == "clean_probe_001"
+        )
+        self.assertEqual(anomaly["label"], "[001] anomaly")
+        self.assertAlmostEqual(
+            anomaly["orientation_error_deg"],
+            72.0064057,
+            places=5,
+        )
+        self.assertEqual(anomaly["num_observed_peaks"], 18)
+        self.assertEqual(anomaly["num_predicted_peaks"], 20)
+        self.assertEqual(anomaly["num_matched_peaks"], 15)
+        self.assertAlmostEqual(anomaly["q_rmse_Ainv"], 0.00840653, places=7)
+        self.assertEqual(anomaly["raw_hkl_equal_fraction"], 0.0)
+
+        probes = VISUALIZATION.grid_probe_results()
+        self.assertEqual(len(probes["rows"]), 40)
+        za001 = [
+            row
+            for row in probes["rows"]
+            if row["probe_axis_id"] == "za_001"
+        ]
+        others = [
+            row
+            for row in probes["rows"]
+            if row["probe_axis_id"] != "za_001"
+        ]
+        self.assertEqual(len(za001), 8)
+        self.assertTrue(all(row["friedel_error_deg"] > 70 for row in za001))
+        self.assertLess(
+            max(row["friedel_error_deg"] for row in others),
+            2.0,
+        )
+        self.assertEqual(
+            next(
+                row
+                for row in probes["axis_groups"]
+                if row["probe_axis_id"] == "za_001"
+            )["acc_at_2deg"],
+            0.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

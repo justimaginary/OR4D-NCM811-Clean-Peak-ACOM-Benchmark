@@ -72,6 +72,9 @@ def representative_samples() -> list[tuple[str, str]]:
     failure = "clean_core_0744"
     if failure not in {sample_id for _, sample_id in chosen}:
         chosen.append(("AutoDisk failure / 新增失败", failure))
+    probe_anomaly = "clean_probe_001"
+    if probe_anomaly not in {sample_id for _, sample_id in chosen}:
+        chosen.append(("[001] probe anomaly / 异常", probe_anomaly))
     return [(sample_id, label) for label, sample_id in chosen]
 
 
@@ -214,8 +217,39 @@ def read_v3_traces(wanted: set[str]) -> dict[str, dict]:
                 "orientation_error_deg": row["acom_result"][
                     "friedel_equivalent_misorientation_deg"
                 ],
+                "strict_orientation_error_deg": row["acom_result"][
+                    "strict_misorientation_deg"
+                ],
+                "zone_axis_plan_index": row["acom_result"][
+                    "zone_axis_plan_index"
+                ],
+                "in_plane_plan_index": row["acom_result"][
+                    "in_plane_plan_index"
+                ],
+                "mirror_match": row["acom_result"]["mirror_match"],
                 "observed_match_fraction": row["comparison_summary"][
                     "observed_match_fraction"
+                ],
+                "predicted_match_fraction": row["comparison_summary"][
+                    "predicted_match_fraction"
+                ],
+                "num_observed_peaks": row["comparison_summary"][
+                    "num_observed_peaks"
+                ],
+                "num_predicted_peaks": row["comparison_summary"][
+                    "num_acom_simulated_peaks"
+                ],
+                "num_matched_peaks": row["comparison_summary"][
+                    "num_q_matched_peaks"
+                ],
+                "raw_hkl_equal_fraction": row["comparison_summary"][
+                    "raw_hkl_equal_fraction_on_q_matches"
+                ],
+                "raw_hkl_equal_or_friedel_fraction": row[
+                    "comparison_summary"
+                ]["raw_hkl_equal_or_friedel_fraction_on_q_matches"],
+                "intensity_mae": row["comparison_summary"][
+                    "intensity_mae_on_q_matches"
                 ],
                 "q_rmse_Ainv": row["comparison_summary"][
                     "q_distance_rmse_Ainv"
@@ -354,6 +388,98 @@ def comparison_index(report: dict) -> dict[str, dict]:
     return {candidate["label"]: candidate for candidate in report["candidates"]}
 
 
+def v3_probe_results() -> dict:
+    details = load_json(DETAILS_V3)
+    evaluation = load_json(EVALUATION_V3)
+    rows = [
+        {
+            "sample_id": row["sample_id"],
+            "probe_axis_id": row["probe_axis_id"],
+            "probe_offset_deg": row["probe_offset_deg"],
+            "num_peaks": row["num_peaks"],
+            "correlation": row["correlation_score"],
+            "zone_axis_plan_index": row["zone_axis_plan_index"],
+            "in_plane_plan_index": row["in_plane_plan_index"],
+            "mirror_match": row["mirror_match"],
+            "strict_error_deg": row["strict_misorientation_deg"],
+            "friedel_error_deg": row[
+                "friedel_equivalent_misorientation_deg"
+            ],
+            "nearest_seed_deg": row[
+                "nearest_discrete_search_seed_misorientation_deg"
+            ],
+            "nearest_zone_axis_node_deg": row[
+                "nearest_zone_axis_node_misorientation_deg"
+            ],
+        }
+        for row in details["samples"]
+        if row["sample_role"] == "acom_grid_probe"
+    ]
+    axis_groups = []
+    for axis in sorted({row["probe_axis_id"] for row in rows}):
+        group = [row for row in rows if row["probe_axis_id"] == axis]
+        errors = np.asarray([row["friedel_error_deg"] for row in group])
+        axis_groups.append(
+            {
+                "probe_axis_id": axis,
+                "num_samples": len(group),
+                "mean_deg": float(errors.mean()),
+                "median_deg": float(np.median(errors)),
+                "max_deg": float(errors.max()),
+                "acc_at_2deg": float(np.mean(errors <= 2.0)),
+                "offset_min_deg": min(row["probe_offset_deg"] for row in group),
+                "offset_max_deg": max(row["probe_offset_deg"] for row in group),
+            }
+        )
+    return {
+        "metrics": evaluation["metrics_by_sample_role"]["acom_grid_probe"],
+        "axis_groups": axis_groups,
+        "rows": rows,
+    }
+
+
+def candidate_metadata(label: str) -> dict:
+    if label.endswith("_expectation"):
+        return {
+            "track": "Clean-E",
+            "dose": None,
+            "repeat": None,
+            "detector": label.removesuffix("_expectation"),
+        }
+    prefix = "counted_dose"
+    dose_text, remainder = label.removeprefix(prefix).split("_repeat", 1)
+    repeat_text, detector = remainder.split("_", 1)
+    return {
+        "track": "Clean-C",
+        "dose": int(dose_text),
+        "repeat": int(repeat_text),
+        "detector": detector,
+    }
+
+
+def acom_candidate_row(candidate: dict) -> dict:
+    metadata = candidate_metadata(candidate["label"])
+    ground_truth = candidate["versus_ground_truth"]
+    oracle = candidate["versus_physical_oracle_acom"]
+    return {
+        "label": candidate["label"],
+        **metadata,
+        "gt_mean_deg": ground_truth["mean_deg"],
+        "gt_median_deg": ground_truth["median_deg"],
+        "gt_p95_deg": ground_truth["p95_deg"],
+        "gt_max_deg": ground_truth["max_deg"],
+        "gt_acc_at_1deg": ground_truth["acc_at_1deg"],
+        "gt_acc_at_2deg": ground_truth["acc_at_2deg"],
+        "gt_acc_at_5deg": ground_truth["acc_at_5deg"],
+        "gt_failures_gt5": ground_truth["catastrophic_gt_5deg"],
+        "oracle_median_deg": oracle["median_deg"],
+        "oracle_p95_deg": oracle["p95_deg"],
+        "oracle_max_deg": oracle["max_deg"],
+        "oracle_acc_at_2deg": oracle["acc_at_2deg"],
+        "new_gt_5deg_failures": candidate["new_gt_5deg_failures"],
+    }
+
+
 def build_data() -> dict:
     representatives = representative_samples()
     wanted = {sample_id for sample_id, _ in representatives}
@@ -421,8 +547,12 @@ def build_data() -> dict:
                 sample_id: {
                     "matrix": row["predicted_orientation_matrix_sample_to_crystal"],
                     "gt_error_deg": row["friedel_equivalent_misorientation_deg"],
+                    "strict_error_deg": row["strict_misorientation_deg"],
                     "correlation": row["correlation_score"],
                     "num_peaks": row["num_peaks"],
+                    "zone_axis_plan_index": row["zone_axis_plan_index"],
+                    "in_plane_plan_index": row["in_plane_plan_index"],
+                    "mirror_match": row["mirror_match"],
                     "delta_oracle_deg": deltas[sample_id][
                         "delta_from_physical_oracle_acom_deg"
                     ],
@@ -502,6 +632,181 @@ def build_data() -> dict:
                 "acc_at_5deg": metrics["accuracy_within_5deg"],
             }
         )
+    v3_probe = v3_probe_results()
+    candidate_results = [
+        acom_candidate_row(candidate)
+        for candidate in [*acom_e["candidates"], *acom_c["candidates"]]
+    ]
+    oracle_gt = acom_e["physical_oracle_versus_ground_truth"]
+    acom_variant_results = [
+        {
+            "label": "physical_oracle",
+            "track": "Physical oracle",
+            "dose": None,
+            "repeat": None,
+            "detector": "—",
+            "gt_mean_deg": oracle_gt["mean_deg"],
+            "gt_median_deg": oracle_gt["median_deg"],
+            "gt_p95_deg": oracle_gt["p95_deg"],
+            "gt_max_deg": oracle_gt["max_deg"],
+            "gt_acc_at_1deg": oracle_gt["acc_at_1deg"],
+            "gt_acc_at_2deg": oracle_gt["acc_at_2deg"],
+            "gt_acc_at_5deg": oracle_gt["acc_at_5deg"],
+            "gt_failures_gt5": oracle_gt["catastrophic_gt_5deg"],
+            "oracle_median_deg": 0.0,
+            "oracle_p95_deg": 0.0,
+            "oracle_max_deg": 0.0,
+            "oracle_acc_at_2deg": 1.0,
+            "new_gt_5deg_failures": [],
+        },
+        *candidate_results,
+    ]
+
+    probe_id = "clean_probe_001"
+    v3_detail = next(
+        row
+        for row in load_json(DETAILS_V3)["samples"]
+        if row["sample_id"] == probe_id
+    )
+    probe_paths = [
+        {
+            "label": "v3_direct_peaks",
+            "track": "v3 direct peaks",
+            "dose": None,
+            "repeat": None,
+            "detector": "none",
+            "num_peaks": v3_detail["num_peaks"],
+            "correlation": v3_detail["correlation_score"],
+            "zone_axis_plan_index": v3_detail["zone_axis_plan_index"],
+            "in_plane_plan_index": v3_detail["in_plane_plan_index"],
+            "mirror_match": v3_detail["mirror_match"],
+            "strict_error_deg": v3_detail["strict_misorientation_deg"],
+            "gt_error_deg": v3_detail[
+                "friedel_equivalent_misorientation_deg"
+            ],
+            "delta_oracle_deg": None,
+            "peak_precision": None,
+            "peak_recall": None,
+            "peak_rmse_px": None,
+        },
+        {
+            "label": "physical_oracle",
+            "track": "Physical oracle peaks",
+            "dose": None,
+            "repeat": None,
+            "detector": "none",
+            "num_peaks": oracle_rows[probe_id]["num_peaks"],
+            "correlation": oracle_rows[probe_id]["correlation_score"],
+            "zone_axis_plan_index": oracle_rows[probe_id][
+                "zone_axis_plan_index"
+            ],
+            "in_plane_plan_index": oracle_rows[probe_id][
+                "in_plane_plan_index"
+            ],
+            "mirror_match": oracle_rows[probe_id]["mirror_match"],
+            "strict_error_deg": oracle_rows[probe_id][
+                "strict_misorientation_deg"
+            ],
+            "gt_error_deg": oracle_rows[probe_id][
+                "friedel_equivalent_misorientation_deg"
+            ],
+            "delta_oracle_deg": 0.0,
+            "peak_precision": 1.0,
+            "peak_recall": 1.0,
+            "peak_rmse_px": 0.0,
+        },
+    ]
+    for result in candidate_results:
+        label = result["label"]
+        detail = variants[label]["details"][probe_id]
+        peak = variants[label]["sample_peak_metrics"][probe_id]
+        probe_paths.append(
+            {
+                "label": label,
+                "track": result["track"],
+                "dose": result["dose"],
+                "repeat": result["repeat"],
+                "detector": result["detector"],
+                "num_peaks": detail["num_peaks"],
+                "correlation": detail["correlation"],
+                "zone_axis_plan_index": detail["zone_axis_plan_index"],
+                "in_plane_plan_index": detail["in_plane_plan_index"],
+                "mirror_match": detail["mirror_match"],
+                "strict_error_deg": detail["strict_error_deg"],
+                "gt_error_deg": detail["gt_error_deg"],
+                "delta_oracle_deg": detail["delta_oracle_deg"],
+                "peak_precision": peak["precision"],
+                "peak_recall": peak["recall"],
+                "peak_rmse_px": peak["rmse_px"],
+            }
+        )
+    probe_trace = v3_traces[probe_id]
+    gt_beam = np.asarray(probe_trace["gt_matrix"], dtype=float)[:, 2]
+    predicted_beam = np.asarray(
+        probe_trace["acom_matrix"],
+        dtype=float,
+    )[:, 2]
+    raw_beam_angle = float(
+        np.degrees(
+            np.arccos(
+                np.clip(
+                    np.dot(gt_beam, predicted_beam)
+                    / np.linalg.norm(gt_beam)
+                    / np.linalg.norm(predicted_beam),
+                    -1.0,
+                    1.0,
+                )
+            )
+        )
+    )
+    counted_probe_errors = [
+        row["gt_error_deg"]
+        for row in probe_paths
+        if row["track"] == "Clean-C"
+    ]
+    probe_001_analysis = {
+        "sample_id": probe_id,
+        "probe_axis_id": v3_detail["probe_axis_id"],
+        "probe_offset_deg": v3_detail["probe_offset_deg"],
+        "nearest_seed_deg": v3_detail[
+            "nearest_discrete_search_seed_misorientation_deg"
+        ],
+        "nearest_zone_axis_node_deg": v3_detail[
+            "nearest_zone_axis_node_misorientation_deg"
+        ],
+        "gt_beam_crystal": gt_beam.tolist(),
+        "predicted_beam_crystal": predicted_beam.tolist(),
+        "raw_beam_angle_deg": raw_beam_angle,
+        "observed_all_l_zero": all(
+            reflection["hkl"][2] == 0
+            for reflection in probe_trace["observed"]
+        ),
+        "num_observed_peaks": probe_trace["num_observed_peaks"],
+        "num_predicted_peaks": probe_trace["num_predicted_peaks"],
+        "num_matched_peaks": probe_trace["num_matched_peaks"],
+        "observed_match_fraction": probe_trace[
+            "observed_match_fraction"
+        ],
+        "q_rmse_Ainv": probe_trace["q_rmse_Ainv"],
+        "raw_hkl_equal_fraction": probe_trace[
+            "raw_hkl_equal_fraction"
+        ],
+        "intensity_mae": probe_trace["intensity_mae"],
+        "v3_gt_error_deg": v3_detail[
+            "friedel_equivalent_misorientation_deg"
+        ],
+        "physical_oracle_gt_error_deg": oracle_rows[probe_id][
+            "friedel_equivalent_misorientation_deg"
+        ],
+        "counted_gt_error_min_deg": min(counted_probe_errors),
+        "counted_gt_error_max_deg": max(counted_probe_errors),
+        "paths": probe_paths,
+        "za001_rows": [
+            row
+            for row in v3_probe["rows"]
+            if row["probe_axis_id"] == "za_001"
+        ],
+    }
     return rounded(
         {
             "generated_from": {
@@ -522,6 +827,9 @@ def build_data() -> dict:
             "parameter_tables": parameter_tables(),
             "v3_sweep": v3_sweep,
             "v3_metrics": load_json(EVALUATION_V3)["metrics"],
+            "v3_probe_results": v3_probe,
+            "acom_variant_results": acom_variant_results,
+            "probe_001_analysis": probe_001_analysis,
             "peak_expectation": peak_e["detectors"],
             "peak_dose_summary": peak_c["dose_summary"],
             "acom_oracle": acom_e["physical_oracle_versus_ground_truth"],
@@ -563,7 +871,8 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
 .input-examples{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.input-example{border:1px solid var(--line);border-radius:12px;padding:12px}.input-example img{display:block;width:100%;aspect-ratio:1;background:#081223;border-radius:9px}.input-example h3{margin:9px 0 3px}.input-example p{margin:0;color:var(--muted);font-size:12px}
 .case-description{margin-top:10px;padding:11px 13px;border-left:4px solid var(--purple);background:#f7f4fc;border-radius:0 8px 8px 0}.control-help{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:10px}.control-help div{padding:10px;border:1px solid var(--line);border-radius:8px;background:#fff}.control-help b{display:block;margin-bottom:3px}.control-help span{font-size:12px;color:var(--muted)}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.input-schema section{border:1px solid var(--line);border-radius:9px;padding:13px}.input-schema h3{margin-bottom:6px}.input-schema code{font-size:12px}.schema-note{padding:10px 12px;background:var(--wash);border-radius:8px;margin-top:10px}
 .peak-table-wrap{max-height:360px;overflow:auto}.formula{font:14px/1.7 ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fb;border-radius:8px;padding:12px}.mini{font-size:12px;color:var(--muted)}details{border:1px solid var(--line);border-radius:10px;padding:11px 13px;margin-top:10px}summary{cursor:pointer;font-weight:670}.hidden{display:none!important}
-@media(max-width:900px){main{padding:24px 16px}.page-header{display:block}.page-switch{margin-top:14px}.cards,.flow,.definitions,.input-examples,.control-help{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic,.input-schema{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
+.result-table-wrap{max-height:520px;overflow:auto;border-top:1px solid var(--line)}.bad-row{background:#fff0ed}.anomaly{border:1px solid #e7c17e;border-left:5px solid #d98b19;background:#fff9ed;border-radius:10px;padding:16px}.anomaly-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.anomaly-grid>div{border:1px solid #ead8b5;background:#fff;border-radius:8px;padding:12px}.compact-cards{display:grid;grid-template-columns:repeat(5,1fr);gap:9px;margin:12px 0}.compact-card{border:1px solid var(--line);border-radius:8px;padding:10px;background:#fff}.compact-card span{display:block;color:var(--muted);font-size:11px}.compact-card b{font-size:18px}
+@media(max-width:900px){main{padding:24px 16px}.page-header{display:block}.page-switch{margin-top:14px}.cards,.flow,.definitions,.input-examples,.control-help,.compact-cards{grid-template-columns:1fr 1fr}.formation{grid-template-columns:1fr 1fr}.formation>div:after{display:none}.summary-grid,.diag,.path-compare,.equation-grid,.transform-grid,.detector-compare,.v3-diagnostic,.input-schema,.anomaly-grid{grid-template-columns:1fr}.matrix-grid{grid-template-columns:1fr}.image-panel{min-width:0}}
 </style>
 </head>
 <body><main>
@@ -647,12 +956,42 @@ python scripts/03_extract_clean_disks.py \
 </div>
 <section class="panel" style="margin-top:14px"><h3>全量指标 / Full-run metrics</h3><div id="overview-table"></div><div class="verdict"><b>结论：</b>电子量增大有效。10⁴ e⁻ 时两种检峰器均明显丢峰；10⁵ e⁻ 已接近 oracle ACOM；10⁶ e⁻ 时 find_Bragg_disks 达到 100% Precision/Recall，且相对 oracle 的 ACOM P95 差异仅 0.0067°。当前正式推荐路径是 <b>10⁶ e⁻ + find_Bragg_disks</b>。</div></section>
 
+<h2>图像输入 ACOM 的全部运行结果 / All image-input ACOM runs</h2>
+<section class="panel">
+ <p>这里展开 <b>33 条已经实际完成的 ACOM 路径</b>：1 条 Physical-Oracle、2 条 Clean-E（两个检峰器）以及 30 条 Clean-C（3 档剂量 × 5 次随机重复 × 2 个检峰器）。每行统计 <b>Clean only 的全部 1081 个样本</b>（17 legacy + 1024 headline + 40 probe）。上面的剂量曲线是这些行的均值；本表保留每次运行，便于检查随机波动和灾难性失败，数值不是网页重新计算出的预测。</p>
+ <div class="control" style="max-width:430px"><label>结果筛选 / Result filter</label><select id="acom-result-filter"><option value="all">全部 33 条 / All runs</option><option value="Physical oracle">Physical oracle</option><option value="Clean-E">Clean-E · 2 detectors</option><option value="Clean-C:10000">Clean-C · 10⁴ e⁻ · 10 runs</option><option value="Clean-C:100000">Clean-C · 10⁵ e⁻ · 10 runs</option><option value="Clean-C:1000000">Clean-C · 10⁶ e⁻ · 10 runs</option></select></div>
+ <div class="result-table-wrap" style="margin-top:12px"><table><thead><tr><th>Track</th><th>Dose</th><th>Repeat</th><th>Detector</th><th>GT median</th><th>GT P95</th><th>GT max</th><th>GT Acc@1°</th><th>GT Acc@2°</th><th>GT Acc@5°</th><th>GT &gt;5°</th><th>vs Oracle median</th><th>vs Oracle P95</th><th>vs Oracle max</th><th>新增 &gt;5°</th></tr></thead><tbody id="acom-result-rows"></tbody></table></div>
+ <p class="mini">GT 指标均使用晶体对称性与 Friedel 等价最小化；“vs Oracle”比较当前图像路径 ACOM 与 Physical-Oracle ACOM。Physical-Oracle 行的后者按定义为 0。</p>
+</section>
+
 <h2>v3 直接峰输入 vs 新图像输入 / Pipeline comparison</h2>
 <div class="path-compare">
  <section class="path v3"><h3>冻结的 v3 基线 / Direct-peak baseline</h3><code>orientation → py4DSTEM 运动学峰 (qx, qy, I) → ACOM → orientation</code><p>公开输入直接是浮点峰列表。它验证取向采样、坐标变换、ACOM 搜索和评测，但没有检验图像形成、电子统计或检峰器。</p><div id="v3-summary"></div></section>
  <section class="path image"><h3>当前完整 Clean / Image-first benchmark</h3><code>orientation → physical CBED image → AutoDisk / find_Bragg_disks → (qx, qy, I) → same ACOM → orientation</code><p>ACOM 入口仍然是同一种 PointList；新增损失只来自物理图像形成、计数观测和自动检峰。两条路径共享同一个 2° orientation plan 和同一套对称性评测。</p><div id="image-summary"></div></section>
 </div>
 <section class="panel" style="margin-top:14px"><h3>v3 角步长基线 / Frozen v3 angular sweep</h3><div id="v3-sweep-table"></div><p class="mini">该表是之前 v3 真实运行的 4°、3°、2° 结果；新图像链路使用同一个 canonical 2° 检测与评价方法，不把不同角步长的方法混在一起。</p></section>
+
+<h2>v3 的 40 个 ACOM grid probe / Orientation-grid diagnostics</h2>
+<section class="panel">
+ <p>这 40 个样本按 5 个已知晶带轴各取 8 个 0.125°–1.000° 小偏移，用来检查 ACOM 搜索网格是否覆盖并正确选择局部取向。它们不计入 1024 个 headline 指标。</p>
+ <div class="compact-cards" id="v3-probe-headline"></div>
+ <div class="table-wrap"><table><thead><tr><th>Axis</th><th>Offsets</th><th>n</th><th>Mean</th><th>Median</th><th>Max</th><th>Acc@2°</th></tr></thead><tbody id="v3-probe-axis-rows"></tbody></table></div>
+ <details><summary>展开全部 40 条 / Show every probe</summary><div class="result-table-wrap"><table><thead><tr><th>Sample</th><th>Axis</th><th>Offset</th><th>Peaks</th><th>Correlation</th><th>Zone idx</th><th>In-plane idx</th><th>Mirror</th><th>Nearest zone node</th><th>Nearest seed</th><th>Strict</th><th>Friedel error</th></tr></thead><tbody id="v3-probe-rows"></tbody></table></div></details>
+</section>
+
+<h2>[001] zone-axis 异常 / Detailed anomaly analysis</h2>
+<section class="anomaly">
+ <p><b>结论先行：</b><code>za_001</code> 的约 72° 失败是 ACOM 模板选择/评分的结构化歧义，不是二维衍射盘检错。它在 v3 直接峰、Physical-Oracle、Clean-E、Clean-C 三档剂量和两个检峰器中持续存在。</p>
+ <div class="compact-cards" id="probe001-headline"></div>
+ <div class="anomaly-grid">
+  <div><b>报告直接观察到的事实 / Measured facts</b><p id="probe001-facts"></p></div>
+  <div><b>机制解释 / Inference</b><p><code>[001]</code> 投影中的输入反射全部为 <code>l=0</code>，六方基面投影具有很强的重复几何。一个倾斜且重新标记 HKL 的模板仍可匹配大部分二维 q 位置；NCM811 较小的 <code>c*</code> 可能进一步增加这类近似模板别名。这里明确标为推断：当前结果证明了错误盆地及跨输入路径复现，但尚未单独消融每个物理因素。</p></div>
+ </div>
+ <p><b>为什么不是网格漏采样：</b>该样本离最近 zone-axis plan node 为 0°、离最近完整离散 seed 为 0.25°，正确候选就在搜索计划内。ACOM 却选择了另一组 plan index，并以 15/18 的观测峰匹配和很小的 q-RMSE 获得高相关分。</p>
+ <p><b>怎么改：</b>下一阶段应保存 top-k 候选和分数 margin；增加 beam / zone-axis 一致性、激发误差或 q<sub>z</sub> 敏感评分；针对高对称投影加入候选重排，并将这 40 个 probe 保留为独立门槛。</p>
+ <details open><summary><code>clean_probe_001</code> 跨全部 34 条路径 / Cross-path evidence</summary><div class="result-table-wrap"><table><thead><tr><th>Track</th><th>Dose</th><th>Repeat</th><th>Detector</th><th>Peak P</th><th>Peak R</th><th>Peak RMSE</th><th>Peaks</th><th>Correlation</th><th>Zone idx</th><th>In-plane idx</th><th>Mirror</th><th>Strict</th><th>GT error</th><th>Δ Oracle</th></tr></thead><tbody id="probe001-path-rows"></tbody></table></div></details>
+ <p class="mini">“34 条”包括 v3 direct peaks、Physical-Oracle peaks、2 条 Clean-E 和 30 条 Clean-C。切换到下方 “[001] 异常”样本，可同时查看输入衍射图、检测盘、v3 直接峰和模板匹配。</p>
+</section>
 
 <h2>单张衍射图检查 / Per-pattern inspection</h2>
 <p class="lead" style="margin-bottom:10px">所有控件都可以修改。第一项用于一次性载入一个示例样本及其初始参数；之后修改图像层、剂量、重复次数或检峰器，下方主图和单样本结果会立即切换到修改后的组合。</p>
@@ -755,7 +1094,8 @@ const CASES=[
  {id:"error_clean_e_auto",label:"错误案例 · Clean-E · AutoDisk 新增 >5° ACOM 失败",sample:"clean_core_0744",track:"expectation",dose:1000000,repeat:0,detector:"autodisk",description:"无噪声 Clean-E 中 AutoDisk 的峰 Precision/Recall 仍为 100%，但亚像素位置与积分强度变化使该样本成为相对 Oracle 新增的 >5° ACOM 失败。"},
  {id:"correct_clean_e_py",label:"正确案例 · Clean-E · find_Bragg_disks",sample:"clean_core_0970",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"理想期望图的正确检峰案例：全部物理 Oracle 盘被恢复，位置误差约为百分之一像素，ACOM 与 Oracle 基本一致。"},
  {id:"median_clean_e",label:"代表案例 · Clean-E · 中位 ACOM 误差",sample:"clean_core_0530",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"按 Physical-Oracle ACOM 对 Ground Truth 的 headline 误差排序选取的中位样本，用于查看典型而非极端结果。"},
- {id:"worst_clean_e",label:"极端案例 · Clean-E · 最差 ACOM 误差",sample:"clean_core_0037",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"headline 中 Ground Truth 取向误差最大的代表样本。用于区分检峰正确与 ACOM 对称性或模板歧义造成的灾难性错误。"}
+ {id:"worst_clean_e",label:"极端案例 · Clean-E · 最差 ACOM 误差",sample:"clean_core_0037",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"headline 中 Ground Truth 取向误差最大的代表样本。用于区分检峰正确与 ACOM 对称性或模板歧义造成的灾难性错误。"},
+ {id:"probe_001_anomaly",label:"[001] 异常 · grid probe",sample:"clean_probe_001",track:"expectation",dose:1000000,repeat:0,detector:"py4dstem",description:"正确搜索节点存在且检峰准确，但 ACOM 选择了约 72° 的错误模板盆地；用于查看 [001] 高对称投影的跨路径系统性歧义。"}
 ];
 let activeCase=CASES[0].id;
 let state={sample:CASES[0].sample,track:CASES[0].track,dose:CASES[0].dose,repeat:CASES[0].repeat,detector:CASES[0].detector,v3:true,oracle:true,detected:true,v3Reflection:0};
@@ -789,9 +1129,42 @@ function initOverview(){
  DATA.peak_expectation.forEach(p=>{let a=DATA.acom_expectation.find(x=>x.label===`${p.detector}_expectation`);rows.unshift(`<tr><td>Clean-E</td><td>∞ / expectation</td><td>${p.detector==="py4dstem"?"find_Bragg_disks":"AutoDisk"}</td><td>${pct(p.precision)}</td><td>${pct(p.recall)}</td><td>${fmt(p.position_rmse_px,3)}</td><td>${pct(a.versus_ground_truth.acc_at_2deg)}</td><td>${fmt(a.versus_oracle.p95_deg,3)}°</td></tr>`)});
  $("overview-table").innerHTML=`<table><thead><tr><th>Track</th><th>Dose</th><th>Detector</th><th>Precision</th><th>Recall</th><th>位置 RMSE (px)</th><th>GT Acc@2°</th><th>vs Oracle P95</th></tr></thead><tbody>${rows.join("")}</tbody></table>`;
  const v3=DATA.v3_metrics,oracle=DATA.acom_oracle,py=DATA.acom_expectation.find(x=>x.label==="py4dstem_expectation");
- $("v3-summary").innerHTML=`<b>2° headline：</b>Median ${fmt(v3.median_misorientation_deg,3)}° · P95 ${fmt(v3.p95_misorientation_deg,3)}° · Acc@2° ${pct(v3.accuracy_within_2deg)} · Acc@5° ${pct(v3.accuracy_within_5deg)}`;
- $("image-summary").innerHTML=`<b>Physical oracle：</b>Acc@2° ${pct(oracle.acc_at_2deg)}；<b>Clean-E + find_Bragg：</b>Acc@2° ${pct(py.versus_ground_truth.acc_at_2deg)} · vs oracle P95 ${fmt(py.versus_oracle.p95_deg,4)}°`;
+ $("v3-summary").innerHTML=`<b>2° headline（仅 1024 headline_core）：</b>Median ${fmt(v3.median_misorientation_deg,3)}° · P95 ${fmt(v3.p95_misorientation_deg,3)}° · Acc@2° ${pct(v3.accuracy_within_2deg)} · Acc@5° ${pct(v3.accuracy_within_5deg)}`;
+ $("image-summary").innerHTML=`<b>Clean only 全部 1081：</b>Physical oracle Acc@2° ${pct(oracle.acc_at_2deg)}；<b>Clean-E + find_Bragg：</b>Acc@2° ${pct(py.versus_ground_truth.acc_at_2deg)} · vs oracle P95 ${fmt(py.versus_oracle.p95_deg,4)}°。两个框的统计范围不同，不应只用这两个聚合数做直接优劣判断；同样本路径差异请看上方完整结果和下方样本诊断。`;
  $("v3-sweep-table").innerHTML=`<table><thead><tr><th>Angle step</th><th>Median</th><th>P95</th><th>Acc@2°</th><th>Acc@5°</th></tr></thead><tbody>${DATA.v3_sweep.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${fmt(r.median_deg,3)}°</td><td>${fmt(r.p95_deg,3)}°</td><td>${pct(r.acc_at_2deg)}</td><td>${pct(r.acc_at_5deg)}</td></tr>`).join("")}</tbody></table>`;
+}
+function detectorName(value){return value==="py4dstem"?"find_Bragg_disks":value==="autodisk"?"AutoDisk":value}
+function renderAcomResults(){
+ const filter=$("acom-result-filter").value;
+ const rows=DATA.acom_variant_results.filter(row=>{
+  if(filter==="all")return true;
+  if(filter==="Physical oracle")return row.track==="Physical oracle";
+  if(filter==="Clean-E")return row.track==="Clean-E";
+  const dose=Number(filter.split(":")[1]);return row.track==="Clean-C"&&row.dose===dose;
+ });
+ $("acom-result-rows").innerHTML=rows.map(row=>`<tr class="${row.gt_failures_gt5>0?"bad-row":""}"><td>${row.track}</td><td>${row.dose==null?"—":row.dose.toLocaleString()+" e⁻"}</td><td>${row.repeat==null?"—":row.repeat}</td><td>${detectorName(row.detector)}</td><td>${fmt(row.gt_median_deg,3)}°</td><td>${fmt(row.gt_p95_deg,3)}°</td><td>${fmt(row.gt_max_deg,3)}°</td><td>${pct(row.gt_acc_at_1deg)}</td><td>${pct(row.gt_acc_at_2deg)}</td><td>${pct(row.gt_acc_at_5deg)}</td><td>${row.gt_failures_gt5}</td><td>${fmt(row.oracle_median_deg,4)}°</td><td>${fmt(row.oracle_p95_deg,4)}°</td><td>${fmt(row.oracle_max_deg,3)}°</td><td>${row.new_gt_5deg_failures.length}</td></tr>`).join("");
+}
+function renderProbeResults(){
+ const probe=DATA.v3_probe_results,m=probe.metrics;
+ $("v3-probe-headline").innerHTML=[
+  ["样本 / Samples",m.num_samples],
+  ["Median",fmt(m.median_misorientation_deg,3)+"°"],
+  ["P95",fmt(m.p95_misorientation_deg,3)+"°"],
+  ["Acc@2°",pct(m.accuracy_within_2deg)],
+  [">5° failures",`${Math.round((1-m.accuracy_within_5deg)*m.num_samples)} / ${m.num_samples}`]
+ ].map(x=>`<div class="compact-card"><span>${x[0]}</span><b>${x[1]}</b></div>`).join("");
+ $("v3-probe-axis-rows").innerHTML=probe.axis_groups.map(row=>`<tr class="${row.probe_axis_id==="za_001"?"bad-row":""}"><td><code>${row.probe_axis_id}</code></td><td>${fmt(row.offset_min_deg,3)}°–${fmt(row.offset_max_deg,3)}°</td><td>${row.num_samples}</td><td>${fmt(row.mean_deg,3)}°</td><td>${fmt(row.median_deg,3)}°</td><td>${fmt(row.max_deg,3)}°</td><td>${pct(row.acc_at_2deg)}</td></tr>`).join("");
+ $("v3-probe-rows").innerHTML=probe.rows.map(row=>`<tr class="${row.friedel_error_deg>5?"bad-row":""}"><td><code>${row.sample_id}</code></td><td>${row.probe_axis_id}</td><td>${fmt(row.probe_offset_deg,3)}°</td><td>${row.num_peaks}</td><td>${fmt(row.correlation,4)}</td><td>${row.zone_axis_plan_index}</td><td>${row.in_plane_plan_index}</td><td>${row.mirror_match?"yes":"no"}</td><td>${fmt(row.nearest_zone_axis_node_deg,3)}°</td><td>${fmt(row.nearest_seed_deg,3)}°</td><td>${fmt(row.strict_error_deg,3)}°</td><td>${fmt(row.friedel_error_deg,3)}°</td></tr>`).join("");
+ const a=DATA.probe_001_analysis;
+ $("probe001-headline").innerHTML=[
+  ["v3 GT error",fmt(a.v3_gt_error_deg,3)+"°"],
+  ["Raw beam angle",fmt(a.raw_beam_angle_deg,3)+"°"],
+  ["Matched peaks",`${a.num_matched_peaks}/${a.num_observed_peaks}`],
+  ["q-RMSE",fmt(a.q_rmse_Ainv,6)+" Å⁻¹"],
+  ["Raw HKL equal",pct(a.raw_hkl_equal_fraction)]
+ ].map(x=>`<div class="compact-card"><span>${x[0]}</span><b>${x[1]}</b></div>`).join("");
+ $("probe001-facts").innerHTML=`8/8 个 <code>za_001</code> probe 的 GT 误差都约为 72.006°；其他四个晶带轴组均在 2° 内。<code>${a.sample_id}</code> 的观测峰全部为 <code>l=0</code>，正确 zone node 距离 ${fmt(a.nearest_zone_axis_node_deg,3)}°、最近 seed 距离 ${fmt(a.nearest_seed_deg,3)}°。ACOM 模板匹配 ${a.num_matched_peaks}/${a.num_observed_peaks} 个观测峰（模板共 ${a.num_predicted_peaks} 个），但原始 HKL 相等率 ${pct(a.raw_hkl_equal_fraction)}。Physical-Oracle 误差 ${fmt(a.physical_oracle_gt_error_deg,3)}°；全部 counted 路径范围 ${fmt(a.counted_gt_error_min_deg,3)}°–${fmt(a.counted_gt_error_max_deg,3)}°。`;
+ $("probe001-path-rows").innerHTML=a.paths.map(row=>`<tr class="${row.gt_error_deg>5?"bad-row":""}"><td>${row.track}</td><td>${row.dose==null?"—":row.dose.toLocaleString()+" e⁻"}</td><td>${row.repeat==null?"—":row.repeat}</td><td>${detectorName(row.detector)}</td><td>${row.peak_precision==null?"—":pct(row.peak_precision)}</td><td>${row.peak_recall==null?"—":pct(row.peak_recall)}</td><td>${row.peak_rmse_px==null?"—":fmt(row.peak_rmse_px,3)+" px"}</td><td>${row.num_peaks}</td><td>${fmt(row.correlation,4)}</td><td>${row.zone_axis_plan_index}</td><td>${row.in_plane_plan_index}</td><td>${row.mirror_match?"yes":"no"}</td><td>${fmt(row.strict_error_deg,3)}°</td><td>${fmt(row.gt_error_deg,3)}°</td><td>${row.delta_oracle_deg==null?"—":fmt(row.delta_oracle_deg,3)+"°"}</td></tr>`).join("");
 }
 function setButton(id,on){$(id).classList.toggle("active",on)}
 function renderV3Plot(s){
@@ -872,13 +1245,13 @@ function markViewAdjusted(){
  showCaseDescription(`<b>${state.sample} · ${imageLabel} · ${detectorLabel}</b>。下方主衍射图、橙色 Detected 标记、单样本指标和“当前 ACOM”矩阵均已使用这组参数。双检峰器并排对比区是例外：它会在同一张图上同时显示 AutoDisk 与 find_Bragg_disks。`,"当前显示 / Now showing");
 }
 function init(){
- initOverview();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
+ initOverview();renderAcomResults();renderProbeResults();$("b-matrix").textContent=matrix(DATA.reciprocal_matrix_B);
  const example=DATA.samples[DATA.sample_order[0]];
  $("example-sample-id").textContent=DATA.sample_order[0];$("example-clean-e").src=example.expectation_image;$("example-clean-c-low").src=example.counted_images["10000:0"];$("example-clean-c-high").src=example.counted_images["1000000:0"];
  $("sample").innerHTML=`<option value="" disabled>选择示例样本并载入初始参数</option>`+CASES.map(item=>`<option value="${item.id}">${item.label} · ${item.sample}</option>`).join("");
  const parameterTable=rows=>`<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r[0]}</td><td><code>${r[1]}</code></td><td>${r[2]}</td></tr>`).join("")}</tbody></table>`;
  $("parameter-table").innerHTML=parameterTable(DATA.parameters);$("v3-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.v3);$("image-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.image);$("acom-parameter-table").innerHTML=parameterTable(DATA.parameter_tables.acom);
- $("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markViewAdjusted();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markViewAdjusted();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markViewAdjusted();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
+ $("acom-result-filter").onchange=renderAcomResults;$("sample").onchange=e=>applyCase(e.target.value);$("dose").onchange=e=>{state.dose=+e.target.value;markViewAdjusted();redraw()};$("repeat").onchange=e=>{state.repeat=+e.target.value;markViewAdjusted();redraw()};$("detector").onchange=e=>{state.detector=e.target.value;markViewAdjusted();redraw()};$("v3-reflection").onchange=e=>{state.v3Reflection=+e.target.value;renderV3Trace(DATA.samples[state.sample])};
  $("track-e").onclick=()=>{state.track="expectation";markViewAdjusted();redraw()};$("track-c").onclick=()=>{state.track="counted";markViewAdjusted();redraw()};$("v3-toggle").onclick=()=>{state.v3=!state.v3;redraw()};$("oracle-toggle").onclick=()=>{state.oracle=!state.oracle;redraw()};$("detected-toggle").onclick=()=>{state.detected=!state.detected;redraw()};applyCase(activeCase);
 }
 init();

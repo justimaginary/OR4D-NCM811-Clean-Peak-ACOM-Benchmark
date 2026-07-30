@@ -59,6 +59,9 @@ def representative_ids() -> list[str]:
     )["sample_id"]
     if friedel_example not in selected:
         selected.append(friedel_example)
+    probe_anomaly = "clean_probe_001"
+    if probe_anomaly not in selected:
+        selected.append(probe_anomaly)
     return selected
 
 
@@ -437,6 +440,35 @@ def compact_trace(
                 "observed_match_fraction"
             ],
             "q_rmse_Ainv": row["comparison_summary"]["q_distance_rmse_Ainv"],
+            "num_observed_peaks": row["comparison_summary"][
+                "num_observed_peaks"
+            ],
+            "num_predicted_peaks": row["comparison_summary"][
+                "num_acom_simulated_peaks"
+            ],
+            "num_matched_peaks": row["comparison_summary"][
+                "num_q_matched_peaks"
+            ],
+            "predicted_match_fraction": row["comparison_summary"][
+                "predicted_match_fraction"
+            ],
+            "raw_hkl_equal_fraction": row["comparison_summary"][
+                "raw_hkl_equal_fraction_on_q_matches"
+            ],
+            "raw_hkl_equal_or_friedel_fraction": row[
+                "comparison_summary"
+            ]["raw_hkl_equal_or_friedel_fraction_on_q_matches"],
+            "intensity_mae": row["comparison_summary"][
+                "intensity_mae_on_q_matches"
+            ],
+            "correlation": row["acom_result"]["correlation_score"],
+            "zone_axis_plan_index": row["acom_result"][
+                "zone_axis_plan_index"
+            ],
+            "in_plane_plan_index": row["acom_result"][
+                "in_plane_plan_index"
+            ],
+            "mirror_match": row["acom_result"]["mirror_match"],
             "standard_matrix": standard_matrix.tolist(),
             "acom_matrix": acom_matrix.tolist(),
             "acom_symmetry_aligned_matrix": (
@@ -496,14 +528,14 @@ def load_samples() -> list[dict]:
     symmetries = proper_point_group_rotations(structure)
     selected_ids = representative_ids()
     base_labels = ("Best", "Median", "P95", "Worst")
-    labels = {
-        sample_id: (
-            base_labels[index]
-            if index < len(base_labels)
-            else "Friedel branch"
-        )
-        for index, sample_id in enumerate(selected_ids)
-    }
+    labels = {}
+    for index, sample_id in enumerate(selected_ids):
+        if index < len(base_labels):
+            labels[sample_id] = base_labels[index]
+        elif sample_id == "clean_probe_001":
+            labels[sample_id] = "[001] anomaly"
+        else:
+            labels[sample_id] = "Friedel branch"
     selected: dict[str, dict] = {}
     with gzip.open(TRACE_PATH, "rt", encoding="utf-8") as handle:
         for line in handle:
@@ -519,6 +551,66 @@ def load_samples() -> list[dict]:
     if missing:
         raise ValueError(f"Coordinate trace is missing representative IDs: {missing}")
     return [selected[sample_id] for sample_id in selected_ids]
+
+
+def grid_probe_results() -> dict:
+    details = json.loads(DETAILS_PATH.read_text(encoding="utf-8"))
+    evaluation = json.loads(
+        EVALUATION_PATHS[2.0].read_text(encoding="utf-8")
+    )
+    rows = [
+        {
+            "sample_id": row["sample_id"],
+            "probe_axis_id": row["probe_axis_id"],
+            "probe_offset_deg": row["probe_offset_deg"],
+            "num_peaks": row["num_peaks"],
+            "correlation": row["correlation_score"],
+            "zone_axis_plan_index": row["zone_axis_plan_index"],
+            "in_plane_plan_index": row["in_plane_plan_index"],
+            "mirror_match": row["mirror_match"],
+            "strict_error_deg": row["strict_misorientation_deg"],
+            "friedel_error_deg": row[
+                "friedel_equivalent_misorientation_deg"
+            ],
+            "nearest_seed_deg": row[
+                "nearest_discrete_search_seed_misorientation_deg"
+            ],
+            "nearest_zone_axis_node_deg": row[
+                "nearest_zone_axis_node_misorientation_deg"
+            ],
+        }
+        for row in details["samples"]
+        if row["sample_role"] == "acom_grid_probe"
+    ]
+    axis_groups = []
+    for axis in sorted({row["probe_axis_id"] for row in rows}):
+        group = [row for row in rows if row["probe_axis_id"] == axis]
+        errors = np.asarray([row["friedel_error_deg"] for row in group])
+        axis_groups.append(
+            {
+                "probe_axis_id": axis,
+                "num_samples": len(group),
+                "mean_deg": float(errors.mean()),
+                "median_deg": float(np.median(errors)),
+                "max_deg": float(errors.max()),
+                "acc_at_2deg": float(np.mean(errors <= 2.0)),
+                "offset_min_deg": min(
+                    row["probe_offset_deg"] for row in group
+                ),
+                "offset_max_deg": max(
+                    row["probe_offset_deg"] for row in group
+                ),
+            }
+        )
+    return rounded(
+        {
+            "metrics": evaluation["metrics_by_sample_role"][
+                "acom_grid_probe"
+            ],
+            "axis_groups": axis_groups,
+            "rows": rows,
+        }
+    )
 
 
 HTML_TEMPLATE = """<!doctype html>
@@ -653,11 +745,21 @@ table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nu
 th, td { padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
 th { color: var(--muted-foreground); font-weight: 600; background: var(--muted); }
 tbody tr.is-selected { background: #eef4ff; }
+.probe-summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin: 12px 0; }
+.probe-card { padding: 11px 12px; border: 1px solid var(--border); border-radius: 8px; }
+.probe-card span { display: block; color: var(--muted-foreground); font-size: 12px; }
+.probe-card strong { display: block; margin-top: 3px; font-size: 18px; }
+.anomaly { margin: 22px 0; padding: 15px 16px; border: 1px solid #e7c17e; border-left: 5px solid #d98b19; border-radius: 9px; background: #fff9ed; }
+.anomaly h2 { margin: 0 0 8px; font-size: 19px; }
+.anomaly-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.anomaly-grid > div { padding: 11px 12px; background: #ffffff; border: 1px solid #ead8b5; border-radius: 8px; }
+.bad-row { background: #fff0ed; }
+.probe-scroll { max-height: 430px; overflow: auto; border-top: 1px solid var(--border); }
 @media (max-width: 720px) {
   main { padding: 16px; }
   .page-header { display: block; }
   .page-switch { margin-top: 12px; }
-  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid, .representation-grid, .reciprocal-grid { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid, .representation-grid, .reciprocal-grid, .probe-summary, .anomaly-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -707,6 +809,23 @@ tbody tr.is-selected { background: #eef4ff; }
       </table>
     </div>
     <p id="overview-caveat" class="overview-caveat"></p>
+  </section>
+  <section class="anomaly" id="probe-anomaly">
+    <h2>[001] zone-axis 异常：40 个 grid probe 揭示的系统性失败</h2>
+    <p>v3 额外运行了 5 组 zone axis × 8 个小角度偏移，共 <b>40 个 <code>acom_grid_probe</code></b>。下表不属于 1024 个 headline 指标；它专门检查 orientation plan 在已知晶带轴附近的行为。</p>
+    <div class="probe-summary" id="probe-headline"></div>
+    <div class="anomaly-grid">
+      <div><b>实际观察 / Observed facts</b><p id="probe-observed"></p></div>
+      <div><b>当前解释 / Interpretation</b><p><code>[001]</code> 投影主要由基面 <code>l=0</code> 反射构成，六方几何重复性很强；ACOM 的稀疏相关评分可让一个倾斜、HKL 重新标号的模板获得相近或更高分。NCM811 的 <code>c*</code> 较小也可能增加这种模板别名。后半句是由现有结果推断出的机制，不是本 benchmark 已直接证明的材料定律。</p></div>
+    </div>
+    <p><b>排除项：</b>正确 zone-axis 节点距 GT 为 0°，最近离散 seed 仅 0.25°，所以不是 orientation plan 没覆盖；同一错误在直接峰、物理 Oracle、Clean-E 与 Clean-C 中都复现，所以也不是 AutoDisk 或 <code>find_Bragg_disks</code> 造成。</p>
+    <p><b>后续修正：</b>保存并评估 top-k 候选及分数间隔；加入 zone-axis / beam-direction 一致性、激发误差或 q<sub>z</sub> 敏感项；单独报告 grid-probe 结果，不能让 1024 个随机取向的 headline 平均值掩盖这一结构化盲点。</p>
+    <h3>5 个晶带轴分组 / Axis-group summary</h3>
+    <div class="table-wrap"><table><thead><tr><th>Axis</th><th>Offsets</th><th>n</th><th>Mean</th><th>Median</th><th>Max</th><th>Acc@2°</th></tr></thead><tbody id="probe-axis-rows"></tbody></table></div>
+    <details open><summary>全部 40 个 probe 结果 / All grid-probe runs</summary>
+      <div class="probe-scroll"><table><thead><tr><th>Sample</th><th>Axis</th><th>Offset</th><th>Peaks</th><th>Correlation</th><th>Zone idx</th><th>In-plane idx</th><th>Mirror</th><th>Nearest zone node</th><th>Nearest seed</th><th>Strict error</th><th>Friedel error</th></tr></thead><tbody id="probe-all-rows"></tbody></table></div>
+    </details>
+    <p>点击下方 <b>[001] anomaly</b> 代表样本可查看 <code>clean_probe_001</code> 的原始/对称/Friedel 取向表示、18 个输入峰、20 个模板峰及一对一匹配。</p>
   </section>
   <div class="controls">
     <strong>代表样本 / Representative samples</strong>
@@ -864,6 +983,7 @@ const reportData = __DATA__;
 const samples = reportData.samples;
 const runtimeParameters = reportData.runtime_parameters;
 const overviewResults = reportData.overview_results;
+const gridProbeResults = reportData.grid_probe_results;
 const kMaxAinv = Number(reportData.k_max_Ainv);
 const tabs = document.getElementById("tabs");
 const viewTabs = document.getElementById("view-tabs");
@@ -1024,6 +1144,40 @@ function renderParameters() {
       `<tr><td>${esc(row[0])}</td><td>${esc(row[1])}</td><td>${esc(row[2])}</td></tr>`
     ).join("");
   });
+}
+
+function renderGridProbes() {
+  const metrics = gridProbeResults.metrics;
+  document.getElementById("probe-headline").innerHTML = [
+    ["Probe 数量", metrics.num_samples],
+    ["Median", `${metrics.median_misorientation_deg.toFixed(3)}°`],
+    ["P95", `${metrics.p95_misorientation_deg.toFixed(3)}°`],
+    ["Acc@2°", `${(metrics.accuracy_within_2deg * 100).toFixed(1)}%`],
+    [">5° failures", `${((1 - metrics.accuracy_within_5deg) * metrics.num_samples).toFixed(0)} / ${metrics.num_samples}`],
+  ].map(item => `<div class="probe-card"><span>${item[0]}</span><strong>${item[1]}</strong></div>`).join("");
+  const anomaly = samples.find(sample => sample.sample_id === "clean_probe_001");
+  document.getElementById("probe-observed").innerHTML =
+    `8 个 <code>za_001</code> 样本（偏离 0.125°–1.000°）全部约为 <b>72.006°</b>；` +
+    `其余 32 个 probe 的最大误差小于 1.1°。代表样本 <code>clean_probe_001</code> ` +
+    `仍匹配 ${anomaly.num_matched_peaks}/${anomaly.num_observed_peaks} 个观测峰，` +
+    `q-RMSE 为 ${anomaly.q_rmse_Ainv.toFixed(6)} Å⁻¹，但匹配峰的原始 HKL 相等率为 ` +
+    `${(anomaly.raw_hkl_equal_fraction * 100).toFixed(1)}%，最终取向误差 ${anomaly.orientation_error_deg.toFixed(3)}°。`;
+  document.getElementById("probe-axis-rows").innerHTML =
+    gridProbeResults.axis_groups.map(row =>
+      `<tr class="${row.probe_axis_id === "za_001" ? "bad-row" : ""}">` +
+      `<td><code>${row.probe_axis_id}</code></td><td>${row.offset_min_deg.toFixed(3)}°–${row.offset_max_deg.toFixed(3)}°</td>` +
+      `<td>${row.num_samples}</td><td>${row.mean_deg.toFixed(3)}°</td><td>${row.median_deg.toFixed(3)}°</td>` +
+      `<td>${row.max_deg.toFixed(3)}°</td><td>${(row.acc_at_2deg * 100).toFixed(1)}%</td></tr>`
+    ).join("");
+  document.getElementById("probe-all-rows").innerHTML =
+    gridProbeResults.rows.map(row =>
+      `<tr class="${row.friedel_error_deg > 5 ? "bad-row" : ""}"><td><code>${row.sample_id}</code></td>` +
+      `<td>${row.probe_axis_id}</td><td>${row.probe_offset_deg.toFixed(3)}°</td><td>${row.num_peaks}</td>` +
+      `<td>${row.correlation.toFixed(4)}</td><td>${row.zone_axis_plan_index}</td><td>${row.in_plane_plan_index}</td>` +
+      `<td>${row.mirror_match ? "yes" : "no"}</td><td>${row.nearest_zone_axis_node_deg.toFixed(3)}°</td>` +
+      `<td>${row.nearest_seed_deg.toFixed(3)}°</td><td>${row.strict_error_deg.toFixed(3)}°</td>` +
+      `<td>${row.friedel_error_deg.toFixed(3)}°</td></tr>`
+    ).join("");
 }
 
 function renderTabs() {
@@ -1334,6 +1488,7 @@ reflection.addEventListener("change", event => {
 });
 renderParameters();
 renderOverview();
+renderGridProbes();
 render();
 </script>
 </body>
@@ -1349,6 +1504,7 @@ def main() -> None:
             "samples": samples,
             "runtime_parameters": runtime_parameters(),
             "overview_results": overview_results(),
+            "grid_probe_results": grid_probe_results(),
             "k_max_Ainv": config["common"]["k_max_Ainv"],
         },
         ensure_ascii=False,
