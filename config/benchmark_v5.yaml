@@ -22,6 +22,9 @@ clean_sampling:
     enabled: false
 
 clean_image:
+  py4dstem_find_bragg_disks:
+    normalize_for_detection: max
+    min_absolute_intensity: 1.0e-8
   dog_rgm:
     dog_min_sigma_px: 2.0
     dog_max_sigma_px: 8.0

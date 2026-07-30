@@ -20,6 +20,21 @@ class Py4DSTEMDiskResult:
     correlation_intensity: np.ndarray
 
 
+def _normalize_detection_images(
+    images: np.ndarray, config: dict[str, Any]
+) -> np.ndarray:
+    mode = str(config.get("normalize_for_detection", "none"))
+    values = np.asarray(images, dtype=np.float32)
+    if mode == "none":
+        return values
+    if mode != "max":
+        raise ValueError(f"unsupported py4DSTEM detection normalization: {mode}")
+    maxima = values.reshape(values.shape[:-2] + (-1,)).max(axis=-1)
+    if np.any(maxima <= 0.0):
+        raise ValueError("cannot max-normalize a non-positive diffraction image")
+    return values / maxima[..., None, None]
+
+
 def _postprocess_py4dstem_peaks(
     raw: np.ndarray,
     peak_data: np.ndarray,
@@ -132,13 +147,15 @@ def detect_py4dstem_bragg_disks(
     if raw.shape != (len(qy_axis), len(qx_axis)):
         raise ValueError("image shape does not match q axes")
 
+    detection_raw = _normalize_detection_images(raw, config)
     peaks = find_Bragg_disks(
-        data=raw,
+        data=detection_raw,
         template=template,
         corrPower=float(config["corr_power"]),
         sigma_cc=float(config["sigma_cc"]),
         subpixel=str(config["subpixel"]),
         upsample_factor=int(config["upsample_factor"]),
+        minAbsoluteIntensity=float(config.get("min_absolute_intensity", 0.0)),
         minRelativeIntensity=float(config["min_relative_intensity"]),
         minPeakSpacing=float(config["min_peak_spacing_px"]),
         edgeBoundary=int(config["edge_boundary_px"]),
@@ -177,7 +194,8 @@ def detect_py4dstem_bragg_disks_batch(
     if raw.shape[1:] != (len(qy_axis), len(qx_axis)):
         raise ValueError("image shape does not match q axes")
     template = np.fft.ifftshift(probe)
-    datacube = DataCube(data=raw[:, None, :, :])
+    detection_raw = _normalize_detection_images(raw, config)
+    datacube = DataCube(data=detection_raw[:, None, :, :])
     vectors = find_Bragg_disks(
         data=datacube,
         template=template,
@@ -185,6 +203,7 @@ def detect_py4dstem_bragg_disks_batch(
         sigma_cc=float(config["sigma_cc"]),
         subpixel=str(config["subpixel"]),
         upsample_factor=int(config["upsample_factor"]),
+        minAbsoluteIntensity=float(config.get("min_absolute_intensity", 0.0)),
         minRelativeIntensity=float(config["min_relative_intensity"]),
         minPeakSpacing=float(config["min_peak_spacing_px"]),
         edgeBoundary=int(config["edge_boundary_px"]),
