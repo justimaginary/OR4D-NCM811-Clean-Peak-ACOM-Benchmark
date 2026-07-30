@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402
+from clean_counting import add_gaussian_read_noise  # noqa: E402
 from or4d_common import load_config, write_peak_h5  # noqa: E402
 from py4dstem_disk_adapter import (  # noqa: E402
     detect_py4dstem_bragg_disks,
@@ -29,7 +30,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image-file", type=Path, required=True)
     parser.add_argument(
-        "--track", choices=("expectation", "counted"), required=True
+        "--track",
+        choices=("expectation", "dose_noiseless", "counted"),
+        required=True,
     )
     parser.add_argument(
         "--detector",
@@ -39,6 +42,16 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dose-index", type=int, action="append")
     parser.add_argument("--repeat", type=int, action="append")
+    parser.add_argument(
+        "--noise-manifest",
+        type=Path,
+        help="Independent detector-noise levels and deterministic seeds.",
+    )
+    parser.add_argument(
+        "--noise-level",
+        action="append",
+        help="Noise level ID from --noise-manifest; repeat to select levels.",
+    )
     parser.add_argument(
         "--compute-backend",
         choices=("cpu", "cuda"),
@@ -56,7 +69,35 @@ def decode_ids(values: np.ndarray) -> list[str]:
     return [value.decode() if isinstance(value, bytes) else str(value) for value in values]
 
 
-def variants(h5: h5py.File, args: argparse.Namespace) -> list[dict]:
+def load_noise_manifest(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    with h5py.File(path.resolve(), "r") as h5:
+        return {
+            "path": str(path.resolve()),
+            "sample_id": decode_ids(h5["sample_id"][:]),
+            "dose_electrons": np.asarray(
+                h5["dose_electrons"][:], dtype=np.int64
+            ),
+            "noise_level_id": decode_ids(h5["noise_level_id"][:]),
+            "poisson_shot_noise_enabled": np.asarray(
+                h5["poisson_shot_noise_enabled"][:], dtype=bool
+            ),
+            "read_noise_sigma": np.asarray(
+                h5["read_noise_sigma_primary_e_rms_per_pixel"][:],
+                dtype=float,
+            ),
+            "read_noise_seed": np.asarray(
+                h5["read_noise_seed"][:], dtype=np.uint64
+            ),
+        }
+
+
+def variants(
+    h5: h5py.File,
+    args: argparse.Namespace,
+    noise_manifest: dict | None,
+) -> list[dict]:
     if args.track == "expectation":
         return [
             {
@@ -65,39 +106,123 @@ def variants(h5: h5py.File, args: argparse.Namespace) -> list[dict]:
                 "dose_electrons": None,
                 "dose_index": None,
                 "repeat": None,
+                "noise_level_id": "none",
+                "read_noise_sigma": 0.0,
             }
         ]
     doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
+    if args.track == "dose_noiseless":
+        dataset = h5["images/expected_counts"]
+        dose_indices = args.dose_index or list(range(len(doses)))
+        return [
+            {
+                "name": f"dose{int(doses[dose_index])}_noise_noiseless",
+                "dataset": dataset,
+                "dose_electrons": int(doses[dose_index]),
+                "dose_index": dose_index,
+                "repeat": None,
+                "noise_level_id": "noiseless",
+                "read_noise_sigma": 0.0,
+            }
+            for dose_index in dose_indices
+        ]
     dataset = h5["images/counts"]
     dose_indices = args.dose_index or list(range(len(doses)))
     repeats = args.repeat or list(range(dataset.shape[2]))
+    if noise_manifest is not None:
+        if decode_ids(h5["sample_id"][:]) != noise_manifest["sample_id"]:
+            raise ValueError("noise manifest sample IDs do not match images")
+        if not np.array_equal(doses, noise_manifest["dose_electrons"]):
+            raise ValueError("noise manifest doses do not match images")
+        available_levels = noise_manifest["noise_level_id"]
+        selected_levels = args.noise_level or [
+            level for level in available_levels if level != "noiseless"
+        ]
+        unknown = sorted(set(selected_levels) - set(available_levels))
+        if unknown:
+            raise ValueError(f"unknown noise levels: {unknown}")
+        if "noiseless" in selected_levels:
+            raise ValueError(
+                "use --track dose_noiseless for the noiseless level"
+            )
+    else:
+        if args.noise_level:
+            raise ValueError("--noise-level requires --noise-manifest")
+        selected_levels = ["poisson_only"]
     result = []
     for dose_index in dose_indices:
         if not 0 <= dose_index < len(doses):
             raise IndexError(f"dose index {dose_index} is out of range")
-        for repeat in repeats:
-            if not 0 <= repeat < dataset.shape[2]:
-                raise IndexError(f"repeat {repeat} is out of range")
-            result.append(
-                {
-                    "name": f"counted_dose{int(doses[dose_index])}_repeat{repeat}",
-                    "dataset": dataset,
-                    "dose_electrons": int(doses[dose_index]),
-                    "dose_index": dose_index,
-                    "repeat": repeat,
-                }
+        for level_id in selected_levels:
+            level_index = (
+                noise_manifest["noise_level_id"].index(level_id)
+                if noise_manifest is not None
+                else None
             )
+            for repeat in repeats:
+                if not 0 <= repeat < dataset.shape[2]:
+                    raise IndexError(f"repeat {repeat} is out of range")
+                result.append(
+                    {
+                        "name": (
+                            (
+                                f"dose{int(doses[dose_index])}_noise_"
+                                f"{level_id}_repeat{repeat}"
+                            )
+                            if noise_manifest is not None
+                            else (
+                                f"counted_dose{int(doses[dose_index])}"
+                                f"_repeat{repeat}"
+                            )
+                        ),
+                        "dataset": dataset,
+                        "dose_electrons": int(doses[dose_index]),
+                        "dose_index": dose_index,
+                        "repeat": repeat,
+                        "noise_level_id": level_id,
+                        "noise_level_index": level_index,
+                        "read_noise_sigma": (
+                            float(noise_manifest["read_noise_sigma"][level_index])
+                            if noise_manifest is not None
+                            else 0.0
+                        ),
+                    }
+                )
     return result
 
 
-def read_image(variant: dict, sample_index: int) -> np.ndarray:
+def read_image(
+    variant: dict,
+    sample_index: int,
+    noise_manifest: dict | None,
+) -> np.ndarray:
     if variant["dose_index"] is None:
         return np.asarray(variant["dataset"][sample_index], dtype=np.float32)
-    return np.asarray(
+    if variant["repeat"] is None:
+        return np.asarray(
+            variant["dataset"][sample_index, variant["dose_index"]],
+            dtype=np.float32,
+        )
+    image = np.asarray(
         variant["dataset"][
             sample_index, variant["dose_index"], variant["repeat"]
         ],
         dtype=np.float32,
+    )
+    if noise_manifest is None or variant["read_noise_sigma"] == 0.0:
+        return image
+    seed = int(
+        noise_manifest["read_noise_seed"][
+            sample_index,
+            variant["dose_index"],
+            variant["noise_level_index"],
+            variant["repeat"],
+        ]
+    )
+    return add_gaussian_read_noise(
+        image,
+        variant["read_noise_sigma"],
+        np.random.default_rng(seed),
     )
 
 
@@ -105,6 +230,7 @@ def main() -> None:
     args = parse_args()
     config = load_config()
     image_cfg = config["clean_image"]
+    noise_manifest = load_noise_manifest(args.noise_manifest)
     detectors = args.detector or ["autodisk", "py4dstem", "dog_rgm"]
     if args.compute_backend == "cuda" and detectors not in (
         ["py4dstem"],
@@ -149,7 +275,7 @@ def main() -> None:
             )
         )
 
-        for variant in variants(h5, args):
+        for variant in variants(h5, args, noise_manifest):
             for detector_name in detectors:
                 samples: list[dict] = []
                 failures: list[dict] = []
@@ -162,7 +288,9 @@ def main() -> None:
                 ):
                     images = np.stack(
                         [
-                            read_image(variant, sample_index)
+                            read_image(
+                                variant, sample_index, noise_manifest
+                            )
                             for sample_index in range(len(sample_ids))
                         ]
                     )
@@ -191,7 +319,9 @@ def main() -> None:
                     )
                     batch_seconds = time.perf_counter() - batch_started
                 for sample_index, sample_id in enumerate(sample_ids):
-                    image = read_image(variant, sample_index)
+                    image = read_image(
+                        variant, sample_index, noise_manifest
+                    )
                     started = time.perf_counter()
                     try:
                         if detector_name == "autodisk":
@@ -316,6 +446,15 @@ def main() -> None:
                     "repeat": variant["repeat"]
                     if variant["repeat"] is not None
                     else "not_applicable",
+                    "noise_level_id": variant["noise_level_id"],
+                    "read_noise_sigma_primary_e_rms_per_pixel": variant[
+                        "read_noise_sigma"
+                    ],
+                    "noise_manifest": (
+                        noise_manifest["path"]
+                        if noise_manifest is not None
+                        else "not_applicable"
+                    ),
                     "coordinate_units": "1/angstrom",
                     "forward_model": forward_model,
                     "central_exclusion_Ainv": central_exclusion,
@@ -340,6 +479,11 @@ def main() -> None:
                         "variant": variant["name"],
                         "detector": detector_name,
                         "compute_backend": args.compute_backend,
+                        "dose_electrons": variant["dose_electrons"],
+                        "noise_level_id": variant["noise_level_id"],
+                        "read_noise_sigma_primary_e_rms_per_pixel": variant[
+                            "read_noise_sigma"
+                        ],
                         "output": str(output),
                         "num_samples": len(samples),
                         "num_failures": len(failures),
@@ -358,6 +502,11 @@ def main() -> None:
         "track": args.track,
         "detectors": detectors,
         "compute_backend": args.compute_backend,
+        "noise_manifest": (
+            noise_manifest["path"]
+            if noise_manifest is not None
+            else None
+        ),
         "runs": report_rows,
     }
     suffix = "_smoke" if "smoke" in source_path.stem else ""
