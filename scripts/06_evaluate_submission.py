@@ -120,7 +120,7 @@ def main() -> None:
     parser.add_argument(
         "--ground-truth-id-prefix",
         default="",
-        help="Explicit prefix added to ground-truth IDs before submission matching.",
+        help="Explicit prefix ensured on ground-truth IDs before submission matching.",
     )
     args = parser.parse_args()
 
@@ -149,7 +149,14 @@ def main() -> None:
     )
     ground_truth: dict[str, dict] = {}
     for ground_truth_id, record in ground_truth_unprefixed.items():
-        sample_id = f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        sample_id = (
+            ground_truth_id
+            if (
+                not args.ground_truth_id_prefix
+                or ground_truth_id.startswith(args.ground_truth_id_prefix)
+            )
+            else f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        )
         normalized = dict(record)
         normalized["sample_id"] = sample_id
         normalized["ground_truth_source_id"] = ground_truth_id
