@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir", type=Path, default=ROOT / "diagnostics"
     )
+    parser.add_argument("--report-output", type=Path)
     return parser.parse_args()
 
 
@@ -238,9 +239,14 @@ def main() -> None:
         "runs": report_rows,
     }
     suffix = "_smoke" if "smoke" in source_path.stem else ""
-    report_path = ROOT / "reports" / (
-        f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
+    report_path = (
+        args.report_output.resolve()
+        if args.report_output is not None
+        else ROOT
+        / "reports"
+        / f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
     )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Detection report: {report_path}")
 

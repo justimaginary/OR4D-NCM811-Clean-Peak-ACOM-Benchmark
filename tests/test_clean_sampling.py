@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_sampling import build_clean_orientation_records  # noqa: E402
+from clean_001_study import build_001_study_records  # noqa: E402
 from or4d_common import (  # noqa: E402
     FRIEDEL_SAMPLE_ROTATION,
     canonicalize_clean_orientation,
@@ -131,6 +132,30 @@ class CleanSamplingTest(unittest.TestCase):
         )
         class_ids = [record["orientation_class_id"] for record in records]
         self.assertEqual(len(class_ids), len(set(class_ids)))
+
+    def test_v5_001_study_is_separate_and_has_expected_groups(self) -> None:
+        config = load_config(ROOT / "config" / "benchmark_v5.yaml")
+        records = build_001_study_records(
+            config,
+            self.structure,
+            proper_point_group_rotations(self.structure),
+        )
+        self.assertEqual(len(records), 512)
+        self.assertEqual(
+            Counter(record["study_group"] for record in records),
+            Counter(
+                {
+                    "near_001": 320,
+                    "transition_001": 96,
+                    "exact_001": 32,
+                    "control_100": 32,
+                    "control_110": 32,
+                }
+            ),
+        )
+        self.assertTrue(
+            all(record["sample_role"] == "study_001" for record in records)
+        )
 
 
 if __name__ == "__main__":

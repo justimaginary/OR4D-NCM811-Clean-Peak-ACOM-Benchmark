@@ -118,6 +118,16 @@ reports/acom_plan_audit_physical_oracle_pi*.json
 reports/acom_clean_details_physical_oracle_s*.json
 reports/acom_plan_audit_physical_oracle_s*.json
 
+# V5 large datasets and full-resolution intermediates live on the server.
+# Small manifests, aggregate/row-level JSON results, HTML and PDF remain tracked.
+public/clean_v5_*.h5
+diagnostics/clean_v5_*.h5
+diagnostics/clean_v5_response_maps/
+diagnostics/clean_v5_refinement_trajectories/
+server_artifacts/
+checkpoints/
+*.partial
+
 # Timing / profiling / debug dumps
 *.prof
 *.profile

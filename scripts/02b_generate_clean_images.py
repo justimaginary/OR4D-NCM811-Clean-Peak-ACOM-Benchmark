@@ -33,14 +33,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--role",
         action="append",
-        choices=("legacy_smoke", "headline_core", "acom_grid_probe"),
+        choices=("legacy_smoke", "headline_core", "acom_grid_probe", "study_001"),
         help="Generate only this sample role; repeat to select multiple roles.",
+    )
+    parser.add_argument(
+        "--orientation-file",
+        type=Path,
+        default=ROOT / "private" / "orientations.jsonl",
+        help="Orientation JSONL; V5 [001] diagnostics use their separate manifest.",
     )
     parser.add_argument("--sample-id", action="append", help="Generate only this sample ID.")
     parser.add_argument("--limit", type=int, help="Limit selected samples for smoke tests.")
     parser.add_argument("--output", type=Path, help="Image HDF5 output path.")
     parser.add_argument("--oracle-output", type=Path, help="Analytic peak HDF5 output path.")
     parser.add_argument("--raw-output", type=Path, help="Raw reflection HDF5 output path.")
+    parser.add_argument("--report-output", type=Path)
     parser.add_argument(
         "--direct-beam-fraction",
         type=float,
@@ -55,7 +62,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def selected_orientations(args: argparse.Namespace) -> tuple[list[dict], bool]:
-    rows = read_jsonl(ROOT / "private" / "orientations.jsonl")
+    rows = read_jsonl(args.orientation_file.resolve())
     subset = bool(args.role or args.sample_id or args.limit is not None)
     if args.role:
         roles = set(args.role)
@@ -127,7 +134,12 @@ def build_reflection_library(config: dict) -> tuple[ReflectionLibrary, object]:
     )
 
 
-def write_raw_reflections(path: Path, rows: list[dict], attrs: dict) -> None:
+def write_raw_reflections(
+    path: Path,
+    rows: list[dict],
+    attrs: dict,
+    reciprocal_basis_Ainv: np.ndarray,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".partial")
     offsets = [0]
@@ -142,14 +154,35 @@ def write_raw_reflections(path: Path, rows: list[dict], attrs: dict) -> None:
         for field, dtype in (
             ("qx_Ainv", np.float32),
             ("qy_Ainv", np.float32),
+            ("qz_Ainv", np.float32),
             ("intensity_raw", np.float32),
             ("intensity_normalized", np.float32),
+            ("structure_factor_real", np.float32),
+            ("structure_factor_imag", np.float32),
+            ("structure_factor_abs", np.float32),
+            ("excitation_error_center_Ainv", np.float32),
         ):
             values = np.concatenate([np.asarray(row[field], dtype=dtype) for row in rows])
             group.create_dataset(field, data=values, compression="gzip")
         hkl = np.concatenate([np.asarray(row["hkl"], dtype=np.int32) for row in rows], axis=0)
         group.create_dataset("hkl", data=hkl, compression="gzip")
+        for field in ("g_crystal_Ainv", "g_sample_Ainv"):
+            values = np.concatenate(
+                [np.asarray(row[field], dtype=np.float32) for row in rows],
+                axis=0,
+            )
+            group.create_dataset(field, data=values, compression="gzip")
         group.create_dataset("offsets", data=np.asarray(offsets, dtype=np.int64))
+        crystallography = h5.create_group("crystallography")
+        crystallography.create_dataset(
+            "reciprocal_basis_B_Ainv",
+            data=np.asarray(reciprocal_basis_Ainv, dtype=np.float64),
+        )
+        crystallography.attrs["basis_convention"] = (
+            "rows are a*, b*, c* in 1/angstrom without 2*pi"
+        )
+        crystallography.attrs["g_crystal_formula"] = "[h,k,l] @ B"
+        crystallography.attrs["g_sample_formula"] = "g_crystal @ R_sample_to_crystal"
         diagnostics = h5.create_group("diagnostics")
         for field in (
             "candidate_reflection_count",
@@ -179,6 +212,15 @@ def main() -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
 
     library, crystal = build_reflection_library(config)
+    structure = Structure.from_file(cif_path(config))
+    reciprocal_basis = np.asarray(
+        structure.lattice.reciprocal_lattice_crystallographic.matrix,
+        dtype=float,
+    )
+    structure_factor_by_hkl = {
+        tuple(int(value) for value in hkl): value
+        for hkl, value in zip(library.hkl, library.structure_factor)
+    }
     ny, nx = (int(value) for value in image_cfg["gpts"])
     compression = str(image_cfg.get("compression", "gzip"))
     compression_opts = int(image_cfg.get("compression_level", 4))
@@ -201,6 +243,60 @@ def main() -> None:
             data=np.asarray(
                 [f"clean_{row['orientation_id']}" for row in orientations],
                 dtype=h5py.string_dtype("utf-8"),
+            ),
+        )
+        orientation_group = h5.create_group("orientation")
+        orientation_group.create_dataset(
+            "canonical_matrix_sample_to_crystal",
+            data=np.asarray(
+                [
+                    row["orientation_matrix_sample_to_crystal"]
+                    for row in orientations
+                ],
+                dtype=np.float64,
+            ),
+        )
+        orientation_group.create_dataset(
+            "raw_matrix_sample_to_crystal",
+            data=np.asarray(
+                [
+                    row.get(
+                        "raw_orientation_matrix_sample_to_crystal",
+                        row["orientation_matrix_sample_to_crystal"],
+                    )
+                    for row in orientations
+                ],
+                dtype=np.float64,
+            ),
+        )
+        orientation_group.create_dataset(
+            "orientation_class_id",
+            data=np.asarray(
+                [
+                    row.get("orientation_class_id", row["orientation_id"])
+                    for row in orientations
+                ],
+                dtype=h5py.string_dtype("utf-8"),
+            ),
+        )
+        orientation_group.create_dataset(
+            "canonical_crystal_symmetry_index",
+            data=np.asarray(
+                [
+                    row.get("canonical_crystal_symmetry_index", -1)
+                    for row in orientations
+                ],
+                dtype=np.int16,
+            ),
+        )
+        orientation_group.create_dataset(
+            "canonical_friedel_branch_index",
+            data=np.asarray(
+                [
+                    row.get("canonical_friedel_branch_index", -1)
+                    for row in orientations
+                ],
+                dtype=np.int8,
             ),
         )
         first = None
@@ -269,6 +365,10 @@ def main() -> None:
                     "intensity_raw": rendered.oracle_intensity_raw,
                     "intensity_normalized": rendered.oracle_intensity_normalized,
                     "hkl": rendered.oracle_hkl,
+                    "g_crystal_Ainv": (
+                        np.asarray(rendered.oracle_hkl, dtype=float)
+                        @ reciprocal_basis
+                    ),
                     "candidate_reflection_count": (
                         rendered.oracle_candidate_reflection_count
                     ),
@@ -277,6 +377,37 @@ def main() -> None:
                     "rejected_low_intensity_count": (
                         rendered.oracle_rejected_low_intensity_count
                     ),
+                }
+            )
+            g_crystal = raw_rows[-1]["g_crystal_Ainv"]
+            g_sample = g_crystal @ matrix
+            structure_factors = np.asarray(
+                [
+                    structure_factor_by_hkl.get(
+                        tuple(int(value) for value in hkl), np.nan + 1j * np.nan
+                    )
+                    for hkl in rendered.oracle_hkl
+                ],
+                dtype=np.complex128,
+            )
+            k0_Ainv = 1.0 / float(library.wavelength_A)
+            qxy_sq = (
+                np.asarray(rendered.oracle_qx_Ainv, dtype=float) ** 2
+                + np.asarray(rendered.oracle_qy_Ainv, dtype=float) ** 2
+            )
+            excitation_error = (
+                np.sqrt(np.maximum(k0_Ainv**2 - qxy_sq, 0.0))
+                - k0_Ainv
+                - g_sample[:, 2]
+            )
+            raw_rows[-1].update(
+                {
+                    "g_sample_Ainv": g_sample,
+                    "qz_Ainv": g_sample[:, 2],
+                    "structure_factor_real": structure_factors.real,
+                    "structure_factor_imag": structure_factors.imag,
+                    "structure_factor_abs": np.abs(structure_factors),
+                    "excitation_error_center_Ainv": excitation_error,
                 }
             )
             elapsed = time.perf_counter() - start
@@ -319,6 +450,13 @@ def main() -> None:
         h5.attrs["thickness_nm"] = float(image_cfg["thickness_nm"])
         h5.attrs["q_max_Ainv"] = float(image_cfg["q_max_Ainv"])
         h5.attrs["generator"] = "scripts/02b_generate_clean_images.py"
+        h5.attrs["source_orientation_file"] = str(
+            args.orientation_file.resolve()
+        )
+        h5.attrs["scattered_reconstruction_formula"] = (
+            "(expectation - direct_beam_fraction * normalized(vacuum_probe)) "
+            "/ (1 - direct_beam_fraction)"
+        )
         h5.attrs["generator_config"] = json.dumps(image_cfg, sort_keys=True)
     temporary_image.replace(image_path)
 
@@ -344,7 +482,9 @@ def main() -> None:
         },
     }
     write_peak_h5(oracle_path, oracle_samples, common_attrs)
-    write_raw_reflections(raw_path, raw_rows, common_attrs)
+    write_raw_reflections(
+        raw_path, raw_rows, common_attrs, reciprocal_basis
+    )
 
     report = {
         "num_samples": len(orientations),
@@ -386,10 +526,13 @@ def main() -> None:
         "" if forward_model == "acom_matched" else "_first_born"
     )
     report_path = (
-        ROOT
+        args.report_output.resolve()
+        if args.report_output is not None
+        else ROOT
         / "reports"
         / f"clean_image_generation{report_model_suffix}{report_suffix}.json"
     )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Images: {image_path}")
     print(f"Physical oracle peaks: {oracle_path}")

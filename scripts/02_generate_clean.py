@@ -100,6 +100,13 @@ def main() -> None:
             "track": "clean",
         }
         for field in (
+            "raw_orientation_matrix_sample_to_crystal",
+            "canonical_quaternion_wxyz",
+            "orientation_class_id",
+            "canonical_crystal_symmetry_index",
+            "canonical_friedel_branch_index",
+            "canonical_friedel_used",
+            "canonicalization_residual_deg",
             "quaternion_wxyz",
             "sequence_candidate_index",
             "sequence_index",
