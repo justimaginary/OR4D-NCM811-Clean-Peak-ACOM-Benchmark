@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,11 @@ def parse_args() -> argparse.Namespace:
         default=ROOT / "diagnostics" / "clean_image_overlays",
     )
     parser.add_argument("--overlay-count", type=int, default=4)
+    parser.add_argument(
+        "--quiet",
+        action="store_true",
+        help="Write the full JSON report without echoing it to stdout.",
+    )
     return parser.parse_args()
 
 
@@ -212,7 +218,6 @@ def main() -> None:
             value.decode() if isinstance(value, bytes) else str(value)
             for value in h5["sample_id"][:]
         ]
-        images = h5["expectation/intensity"]
         tolerance = float(acceptance["match_tolerance_px"]) * q_pixel
         high_angle = 0.75 * float(config["common"]["k_max_Ainv"])
 
@@ -224,6 +229,28 @@ def main() -> None:
                     f"sample IDs differ between image and {detected_path}"
                 )
             rows = []
+            variant_name = str(
+                run_metadata.get(str(detected_path), {}).get(
+                    "variant", detected_path.stem
+                )
+            )
+            counted_match = re.fullmatch(
+                r"counted_dose(\d+)_repeat(\d+)", variant_name
+            )
+            if counted_match:
+                doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
+                dose = int(counted_match.group(1))
+                repeat = int(counted_match.group(2))
+                matching_dose = np.flatnonzero(doses == dose)
+                if len(matching_dose) != 1:
+                    raise ValueError(
+                        f"Could not resolve dose {dose} in {image_path}"
+                    )
+                image_dataset = h5["images/counts"]
+                image_selector = (int(matching_dose[0]), repeat)
+            else:
+                image_dataset = h5["expectation/intensity"]
+                image_selector = None
             for index, sample_id in enumerate(sample_ids):
                 row = match_peaks(
                     oracle[sample_id],
@@ -234,8 +261,15 @@ def main() -> None:
                 row["sample_id"] = sample_id
                 rows.append(row)
                 if index < args.overlay_count:
+                    image = (
+                        image_dataset[index]
+                        if image_selector is None
+                        else image_dataset[
+                            index, image_selector[0], image_selector[1]
+                        ]
+                    )
                     make_overlay(
-                        images[index],
+                        image,
                         qx_axis,
                         qy_axis,
                         oracle[sample_id],
@@ -245,6 +279,27 @@ def main() -> None:
                         args.overlay_dir / f"{sample_id}_{detected_path.stem}.png",
                     )
             summary = aggregate(rows, q_pixel)
+            summary["acceptance"] = {
+                "precision": summary["precision"]
+                >= float(acceptance["precision_min"]),
+                "recall": summary["recall"]
+                >= float(acceptance["recall_min"]),
+                "position_rmse_px": (
+                    summary["position_rmse_px"] is not None
+                    and summary["position_rmse_px"]
+                    <= float(acceptance["position_rmse_px_max"])
+                ),
+                "position_p95_px": (
+                    summary["position_p95_px"] is not None
+                    and summary["position_p95_px"]
+                    <= float(acceptance["position_p95_px_max"])
+                ),
+                "high_angle_recall": summary["high_angle_recall"]
+                >= float(acceptance["high_angle_recall_min"]),
+            }
+            summary["acceptance"]["all"] = all(
+                summary["acceptance"].values()
+            )
             summary["detected_file"] = str(detected_path)
             metadata = run_metadata.get(str(detected_path), {})
             summary["variant"] = metadata.get("variant", detected_path.stem)
@@ -324,7 +379,8 @@ def main() -> None:
         "dose_summary": dose_summary,
     }
     args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps(report, indent=2))
+    if not args.quiet:
+        print(json.dumps(report, indent=2))
     print(f"Evaluation: {args.output.resolve()}")
 
 
