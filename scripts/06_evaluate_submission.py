@@ -117,6 +117,11 @@ def main() -> None:
             "Records may use sample_id or orientation_id."
         ),
     )
+    parser.add_argument(
+        "--ground-truth-id-prefix",
+        default="",
+        help="Explicit prefix added to ground-truth IDs before submission matching.",
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -138,10 +143,17 @@ def main() -> None:
                     f"Missing ground truth for requested track: {path}"
                 )
             ground_truth_records.extend(read_jsonl(path))
-    ground_truth = unique_records_by_id(
+    ground_truth_unprefixed = unique_records_by_id(
         ground_truth_records,
         source="requested ground-truth tracks",
     )
+    ground_truth: dict[str, dict] = {}
+    for ground_truth_id, record in ground_truth_unprefixed.items():
+        sample_id = f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized["ground_truth_source_id"] = ground_truth_id
+        ground_truth[sample_id] = normalized
     if set(predictions) != set(ground_truth):
         missing = sorted(set(ground_truth) - set(predictions))
         extra = sorted(set(predictions) - set(ground_truth))
