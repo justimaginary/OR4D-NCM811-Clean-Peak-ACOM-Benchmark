@@ -125,10 +125,17 @@ def make_point_list(sample: dict) -> py4DSTEM.PointList:
 def unique_records_by_id(records: list[dict], *, source: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for record in records:
-        sample_id = str(record["sample_id"])
+        record_id = record.get("sample_id", record.get("orientation_id"))
+        if record_id is None:
+            raise ValueError(
+                f"Record in {source} has neither sample_id nor orientation_id"
+            )
+        sample_id = str(record_id)
         if sample_id in result:
             raise ValueError(f"Duplicate sample_id in {source}: {sample_id}")
-        result[sample_id] = record
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        result[sample_id] = normalized
     return result
 
 
@@ -199,6 +206,40 @@ def parse_args() -> argparse.Namespace:
         help="Exact prediction JSONL output path.",
     )
     parser.add_argument(
+        "--ground-truth-file",
+        type=Path,
+        default=ROOT / "private" / "clean_ground_truth.jsonl",
+        help=(
+            "Ground-truth JSONL. Records may use sample_id (V3) or "
+            "orientation_id (V5)."
+        ),
+    )
+    parser.add_argument(
+        "--orientation-file",
+        type=Path,
+        help=(
+            "Orientation-manifest file recorded in the provenance hash. "
+            "Defaults to private/orientations.jsonl for V3 or the ground-truth "
+            "file for external datasets."
+        ),
+    )
+    parser.add_argument(
+        "--details-file",
+        type=Path,
+        help="Exact ACOM per-sample details JSON output path.",
+    )
+    parser.add_argument(
+        "--audit-file",
+        type=Path,
+        help="Exact orientation-plan audit JSON output path.",
+    )
+    parser.add_argument(
+        "--cuda",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override config acom.cuda for orientation-plan FFT operations.",
+    )
+    parser.add_argument(
         "--allow-subset",
         action="store_true",
         help="Allow a strict sample-ID subset for legacy smoke runs.",
@@ -243,8 +284,18 @@ def main() -> None:
     output_suffix = f"_{args.output_tag}" if args.output_tag else ""
 
     peak_path = args.peak_file.resolve()
-    gt_path = ROOT / "private" / "clean_ground_truth.jsonl"
-    manifest_path = ROOT / "private" / "orientations.jsonl"
+    gt_path = args.ground_truth_file.resolve()
+    default_gt_path = (ROOT / "private" / "clean_ground_truth.jsonl").resolve()
+    manifest_path = (
+        args.orientation_file.resolve()
+        if args.orientation_file
+        else (
+            (ROOT / "private" / "orientations.jsonl").resolve()
+            if gt_path == default_gt_path
+            else gt_path
+        )
+    )
+    use_cuda = bool(acom["cuda"]) if args.cuda is None else bool(args.cuda)
     samples = read_peak_h5(peak_path)
     ground_truth = unique_records_by_id(
         read_jsonl(gt_path),
@@ -293,7 +344,7 @@ def main() -> None:
         power_intensity=power_intensity_simulated,
         power_intensity_experiment=power_intensity_experiment,
         tol_distance=float(acom["tol_distance_Ainv"]),
-        CUDA=bool(acom["cuda"]),
+        CUDA=use_cuda,
         progress_bar=bool(acom["progress_bar"]),
     )
     plan_seconds = time.perf_counter() - plan_start
@@ -387,7 +438,11 @@ def main() -> None:
         ),
         "samples": audit_rows,
     }
-    audit_path = ROOT / "reports" / f"acom_plan_audit{output_suffix}.json"
+    audit_path = (
+        args.audit_file.resolve()
+        if args.audit_file
+        else ROOT / "reports" / f"acom_plan_audit{output_suffix}.json"
+    )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(
         json.dumps(audit_output, ensure_ascii=False, indent=2),
@@ -493,6 +548,11 @@ def main() -> None:
         "acom_angle_step_in_plane_deg": angle_step_in_plane,
         "acom_power_intensity_experiment": power_intensity_experiment,
         "acom_power_intensity_simulated": power_intensity_simulated,
+        "acom_cuda": use_cuda,
+        "k_max_Ainv": k_max,
+        "source_peak_file": str(peak_path),
+        "ground_truth_file": str(gt_path),
+        "orientation_manifest_file": str(manifest_path),
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
         "headline_sample_role": config["evaluation"]["headline_sample_role"],
@@ -528,7 +588,12 @@ def main() -> None:
         ),
         "samples": details,
     }
-    details_path = ROOT / "reports" / f"acom_clean_details{output_suffix}.json"
+    details_path = (
+        args.details_file.resolve()
+        if args.details_file
+        else ROOT / "reports" / f"acom_clean_details{output_suffix}.json"
+    )
+    details_path.parent.mkdir(parents=True, exist_ok=True)
     details_path.write_text(
         json.dumps(details_output, ensure_ascii=False, indent=2),
         encoding="utf-8",

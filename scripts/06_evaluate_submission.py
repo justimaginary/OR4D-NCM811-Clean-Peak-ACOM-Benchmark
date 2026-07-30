@@ -42,10 +42,18 @@ def summarize(values: np.ndarray, track: str) -> dict:
 def unique_records_by_id(records: list[dict], *, source: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for record in records:
-        sample_id = str(record["sample_id"])
+        record_id = record.get("sample_id", record.get("orientation_id"))
+        if record_id is None:
+            raise ValueError(
+                f"Record in {source} has neither sample_id nor orientation_id"
+            )
+        sample_id = str(record_id)
         if sample_id in result:
             raise ValueError(f"Duplicate sample_id in {source}: {sample_id}")
-        result[sample_id] = record
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized.setdefault("track", "clean")
+        result[sample_id] = normalized
     return result
 
 
@@ -101,6 +109,14 @@ def main() -> None:
         type=Path,
         default=ROOT / "reports" / "evaluation.json",
     )
+    parser.add_argument(
+        "--ground-truth-file",
+        type=Path,
+        help=(
+            "Explicit ground-truth JSONL for an external clean dataset. "
+            "Records may use sample_id or orientation_id."
+        ),
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -110,11 +126,18 @@ def main() -> None:
     )
     tracks = ("clean", "dynamical") if args.track == "all" else (args.track,)
     ground_truth_records: list[dict] = []
-    for track in tracks:
-        path = ROOT / "private" / f"{track}_ground_truth.jsonl"
-        if not path.exists():
-            raise FileNotFoundError(f"Missing ground truth for requested track: {path}")
-        ground_truth_records.extend(read_jsonl(path))
+    if args.ground_truth_file:
+        if args.track != "clean":
+            raise ValueError("--ground-truth-file currently supports --track clean")
+        ground_truth_records.extend(read_jsonl(args.ground_truth_file.resolve()))
+    else:
+        for track in tracks:
+            path = ROOT / "private" / f"{track}_ground_truth.jsonl"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Missing ground truth for requested track: {path}"
+                )
+            ground_truth_records.extend(read_jsonl(path))
     ground_truth = unique_records_by_id(
         ground_truth_records,
         source="requested ground-truth tracks",
