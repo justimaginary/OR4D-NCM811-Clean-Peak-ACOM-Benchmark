@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -13,10 +14,42 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def load_config() -> dict[str, Any]:
-    path = project_root() / "config" / "benchmark.yaml"
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    result = dict(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_config(path: Path | str | None = None) -> dict[str, Any]:
+    """Load the frozen base config and, optionally, a version overlay.
+
+    ``OR4D_CONFIG`` is intentionally a path rather than a version name so every
+    run manifest can record and hash the exact file that changed the defaults.
+    """
+    base_path = project_root() / "config" / "benchmark.yaml"
+    with base_path.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    selected = path or os.environ.get("OR4D_CONFIG")
+    if selected is None:
+        return config
+    overlay_path = Path(selected)
+    if not overlay_path.is_absolute():
+        overlay_path = project_root() / overlay_path
+    if overlay_path.resolve() == base_path.resolve():
+        return config
+    with overlay_path.open("r", encoding="utf-8") as f:
+        overlay = yaml.safe_load(f)
+    if not isinstance(overlay, dict):
+        raise ValueError(f"Config overlay must contain a mapping: {overlay_path}")
+    return _deep_merge(config, overlay)
 
 
 def cif_path(config: dict[str, Any]) -> Path:
@@ -86,6 +119,18 @@ def quaternion_wxyz_to_matrix(quaternion_wxyz: Iterable[float]) -> np.ndarray:
         dtype=float,
     )
     return nearest_rotation(R)
+
+
+def matrix_to_quaternion_wxyz(matrix: np.ndarray) -> np.ndarray:
+    """Convert a proper rotation matrix to a canonical-sign quaternion."""
+    from scipy.spatial.transform import Rotation
+
+    matrix = nearest_rotation(np.asarray(matrix, dtype=float))
+    quaternion = Rotation.from_matrix(matrix).as_quat(scalar_first=True)
+    nonzero = np.flatnonzero(np.abs(quaternion) > 1e-14)
+    if len(nonzero) and quaternion[nonzero[0]] < 0.0:
+        quaternion = -quaternion
+    return quaternion / np.linalg.norm(quaternion)
 
 
 def low_discrepancy_so3_quaternion(index: int, offset: float = 0.0) -> np.ndarray:
@@ -201,6 +246,70 @@ FRIEDEL_SAMPLE_ROTATION = np.diag([-1.0, -1.0, 1.0])
 # negating columns 1 and 2 of the sample-to-crystal matrix, i.e. by
 # right-multiplication with this 180 degree sample-x rotation.
 ACOM_MIRROR_SAMPLE_ROTATION = np.diag([1.0, -1.0, -1.0])
+
+
+def canonicalize_clean_orientation(
+    matrix: np.ndarray,
+    symmetry_rotations: Iterable[np.ndarray],
+    *,
+    decimals: int = 12,
+) -> dict[str, Any]:
+    """Choose one deterministic representative of a Clean orientation class.
+
+    The class contains every ``S @ R @ F`` for proper crystal symmetries ``S``
+    and the two detector-plane Friedel branches ``F``.  The representative is
+    selected by a canonical-sign quaternion key, making construction
+    independent of which equivalent raw matrix was sampled.
+    """
+    raw = nearest_rotation(np.asarray(matrix, dtype=float))
+    symmetries = [
+        nearest_rotation(np.asarray(symmetry, dtype=float))
+        for symmetry in symmetry_rotations
+    ]
+    candidates: list[dict[str, Any]] = []
+    friedel_branches = (np.eye(3), FRIEDEL_SAMPLE_ROTATION)
+    for symmetry_index, proper_symmetry in enumerate(symmetries):
+        for friedel_index, friedel in enumerate(friedel_branches):
+            equivalent = nearest_rotation(proper_symmetry @ raw @ friedel)
+            quaternion = matrix_to_quaternion_wxyz(equivalent)
+            key = tuple(np.round(quaternion, decimals=decimals).tolist())
+            candidates.append(
+                {
+                    "key": key,
+                    "matrix": equivalent,
+                    "quaternion_wxyz": quaternion,
+                    "crystal_symmetry_index": symmetry_index,
+                    "friedel_branch_index": friedel_index,
+                    "friedel_used": bool(friedel_index),
+                }
+            )
+    if not candidates:
+        raise ValueError("At least one proper crystal symmetry is required.")
+    selected = max(candidates, key=lambda item: item["key"])
+    canonical = selected["matrix"]
+    return {
+        "raw_matrix": raw,
+        "canonical_matrix": canonical,
+        "canonical_quaternion_wxyz": selected["quaternion_wxyz"],
+        "orientation_class_key": ",".join(
+            f"{value:.{decimals}f}" for value in selected["key"]
+        ),
+        "crystal_symmetry_index": selected["crystal_symmetry_index"],
+        "friedel_branch_index": selected["friedel_branch_index"],
+        "friedel_used": selected["friedel_used"],
+        "canonicalization_residual_deg": float(
+            rotation_angle_deg(
+                canonical
+                @ (
+                    nearest_rotation(
+                        symmetries[selected["crystal_symmetry_index"]]
+                    )
+                    @ raw
+                    @ friedel_branches[selected["friedel_branch_index"]]
+                ).T
+            )
+        ),
+    }
 
 
 def friedel_aware_misorientation_deg(

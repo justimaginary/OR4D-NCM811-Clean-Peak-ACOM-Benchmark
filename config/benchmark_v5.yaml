@@ -1,0 +1,48 @@
+dataset:
+  id: OR4D-NCM811-CleanImage-v5
+  description: Friedel-canonical Clean image benchmark with 2048 headline orientations.
+  expected_sample_counts:
+    legacy_smoke: 0
+    headline_core: 2048
+    acom_grid_probe: 0
+  expected_num_orientations: 2048
+
+legacy_manual:
+  enabled: false
+
+legacy_so3_sampling:
+  enabled: false
+
+clean_sampling:
+  headline_core:
+    count: 2048
+    orientation_id_prefix: v5_core_
+    canonicalize_friedel: true
+  acom_grid_probes:
+    enabled: false
+
+clean_image:
+  counting:
+    model: poisson_expected_total
+    doses_electrons: [100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000]
+    repeats: 5
+    seed_base: 24052026
+
+v5:
+  schema_version: clean-v5.1
+  config_name: benchmark_v5
+  headline_sample_count: 2048
+  trace_intermediates: true
+  large_artifacts_server_only: true
+  study_001:
+    enabled: true
+    sample_count: 512
+    exact_001_count: 32
+    local_tilt_deg: [0.125, 0.25, 0.5, 1.0, 2.0]
+    local_tilt_azimuth_count: 8
+    local_in_plane_count: 8
+    transition_tilt_deg: [3.0, 4.0, 6.0]
+    transition_azimuth_count: 8
+    transition_in_plane_count: 4
+    control_100_count: 32
+    control_110_count: 32
