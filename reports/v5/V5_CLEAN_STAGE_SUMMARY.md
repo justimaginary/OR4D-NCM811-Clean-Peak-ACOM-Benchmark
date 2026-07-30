@@ -1,8 +1,10 @@
 # V5 Clean benchmark 阶段汇总
 
-生成日期：2026-07-30  
-范围：Clean First-Born 图像、电子计数、独立仪器噪声、衍射盘检测与 `[001]` 专项研究。  
-未运行：ACOM、multislice、任何 dynamical 模拟。
+生成日期：2026-07-30
+
+范围：Clean First-Born 图像、电子计数、独立仪器噪声、衍射盘检测、ACOM 与 `[001]` 专项研究。
+
+未运行：multislice、任何 dynamical 模拟。
 
 ## 1. 已冻结的数据设计
 
@@ -128,11 +130,33 @@ CPU/CUDA 图像像素 RMSE 为 `1.649×10⁻⁹`，8405 个匹配峰的 q-RMSE
 | `[110]` 对照 | 0.9989 | 0.9981 | 0.9383 |
 
 当前证据说明，图像检峰层的困难并不集中在精确 `[001]`，而集中在
-3–6° 过渡区。之前 ACOM 的 `[001]` 异常不能仅归因于精确 `[001]`
-图像上的圆盘检测；等恢复 ACOM 阶段后，需要继续比较取向 plan、晶体
-对称性/Friedel 规范化和过渡区索引歧义。
+3–6° 过渡区。后续 ACOM 已证明：直接物理峰输入也出现约 72° 的系统性
+异常，因此根因不在二维图像渲染或圆盘检测层。
 
-## 7. 可复现性与程序状态
+## 7. ACOM 结果
+
+全部 2048 个 headline 样本已分别完成四条 ACOM 路径：
+
+| 输入 | Acc@2° | P95 |
+|---|---:|---:|
+| 直接 First-Born 物理峰 | 78.86% | 9.167° |
+| Clean-E → AutoDisk | 80.96% | 7.586° |
+| Clean-E → `find_Bragg_disks` | 80.91% | 7.586° |
+| Clean-E → DoG-RGM | 80.81% | 7.662° |
+
+独立 `[001]` 512 样本的四条路径也全部运行，但中位误差均约 71.65–71.72°，
+确认该异常不是图像找盘造成的。
+
+Clean-C 目前使用固定 8 样本、repeat 0 完成九档电子剂量和四档 EMPAD-G2
+读出噪声，共 39 条 ACOM。100 e⁻ 下 AutoDisk、py4DSTEM 分别有 2、1 个
+样本因少于 3 峰而被明确记录为无法索引；其余调用均正常。剂量从 100
+增加到 3000 e⁻ 时 Acc@2° 总体提高，随后受 8 样本离散性影响而波动。
+固定 `10⁴ e⁻` 时，64 帧读出噪声令三种方法的 P95 分别升至
+64.79°、71.23°、85.83°，说明噪声假阳性会触发严重错误分支。
+
+完整结果与方法解释见 `reports/v5/V5_ACOM_RESULTS.md`。
+
+## 8. 可复现性与程序状态
 
 - 服务器 Conda 环境：`or4d-clean`；
 - CPU 线程上限：8，低于单卡任务允许的 16；
@@ -148,7 +172,7 @@ CPU/CUDA 图像像素 RMSE 为 `1.649×10⁻⁹`，8405 个匹配峰的 q-RMSE
 时应取消 `OR4D_CONFIG`；直接把 V5 overlay 注入旧测试会触发测试假设不匹配，
 不是 V5 数据生成或检峰调用失败。
 
-## 8. 已知警告与限制
+## 9. 已知警告与限制
 
 1. pymatgen 持续报告 CIF 名义化学计量与解析占位率不完全一致：
    Ni 比例约 3.02775、Li 比例约 2.9778，其余主要元素约 3。该警告没有
@@ -157,9 +181,10 @@ CPU/CUDA 图像像素 RMSE 为 `1.649×10⁻⁹`，8405 个匹配峰的 q-RMSE
    没有加入背景、漂移、坏点、饱和、增益不均匀或椭圆畸变。
 3. 读出噪声图不全部物化保存。正式保存基础 Poisson 图、噪声参数和确定性
    seed，检测时可逐像素精确重建，避免生成数百 GB 的冗余文件。
-4. 当前完成的是 Clean 图像与检峰 benchmark，不包含 ACOM 端到端取向结果。
+4. 2048 headline 与 `[001]` 已完成 Clean-E ACOM；Clean-C 剂量/噪声
+   ACOM 当前为固定 8 样本诊断，不是 2048 headline 统计。
 
-## 9. 产物位置
+## 10. 产物位置
 
 大型数据仅位于服务器：
 
@@ -181,5 +206,7 @@ CPU/CUDA 图像像素 RMSE 为 `1.649×10⁻⁹`，8405 个匹配峰的 q-RMSE
 - `../v5_smoke/evaluation_dose_ladder_poisson_smoke8.json`
 - `../v5_smoke/evaluation_noise_ladder_dose10000_smoke8.json`
 - `../v5_smoke/noise_reproducibility_smoke8.json`
+- `V5_ACOM_RESULTS.md`
+- `V5_ACOM_COUNTED_SUMMARY.json`
 
-至此暂停在 ACOM 之前。
+至此完成当前 Clean ACOM 阶段；尚未进入 multislice 或 dynamical。
