@@ -25,6 +25,18 @@ clean_image:
   py4dstem_find_bragg_disks:
     normalize_for_detection: max
     min_absolute_intensity: 1.0e-8
+  cuda_xcorr_poly:
+    method: batched_cuda_xcorr_polynomial_subpixel
+    batch_size: 512
+    normalize_for_detection: max
+    sigma_cc: 1.0
+    min_absolute_intensity: 1.0e-8
+    min_relative_intensity: 1.0e-12
+    min_peak_spacing_px: 5
+    edge_boundary_px: 0
+    max_num_peaks: 256
+    integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
   dog_rgm:
     dog_min_sigma_px: 2.0
     dog_max_sigma_px: 8.0

@@ -20,6 +20,7 @@ from py4dstem_disk_adapter import (  # noqa: E402
     detect_py4dstem_bragg_disks_batch,
 )
 from dog_rgm_disk_adapter import detect_dog_rgm_peaks  # noqa: E402
+from cuda_xcorr_disk_adapter import detect_cuda_xcorr_poly_batch  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,7 +34,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--detector",
         action="append",
-        choices=("autodisk", "py4dstem", "dog_rgm"),
+        choices=("autodisk", "py4dstem", "dog_rgm", "cuda_xcorr_poly"),
         help="Detector to run; default runs both.",
     )
     parser.add_argument("--dose-index", type=int, action="append")
@@ -105,11 +106,16 @@ def main() -> None:
     config = load_config()
     image_cfg = config["clean_image"]
     detectors = args.detector or ["autodisk", "py4dstem", "dog_rgm"]
-    if args.compute_backend == "cuda" and detectors != ["py4dstem"]:
+    if args.compute_backend == "cuda" and detectors not in (
+        ["py4dstem"],
+        ["cuda_xcorr_poly"],
+    ):
         raise ValueError(
-            "--compute-backend cuda currently requires exactly "
-            "--detector py4dstem; AutoDisk and DoG-RGM remain CPU methods"
+            "--compute-backend cuda requires exactly one CUDA detector; "
+            "AutoDisk and DoG-RGM remain CPU methods"
         )
+    if "cuda_xcorr_poly" in detectors and args.compute_backend != "cuda":
+        raise ValueError("cuda_xcorr_poly requires --compute-backend cuda")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_path = args.image_file.resolve()
     report_rows: list[dict] = []
@@ -150,7 +156,10 @@ def main() -> None:
                 timings: list[float] = []
                 batch_results = None
                 batch_seconds = None
-                if detector_name == "py4dstem" and args.compute_backend == "cuda":
+                if (
+                    detector_name in ("py4dstem", "cuda_xcorr_poly")
+                    and args.compute_backend == "cuda"
+                ):
                     images = np.stack(
                         [
                             read_image(variant, sample_index)
@@ -158,15 +167,27 @@ def main() -> None:
                         ]
                     )
                     batch_started = time.perf_counter()
-                    batch_results = detect_py4dstem_bragg_disks_batch(
-                        images,
-                        qx_axis,
-                        qy_axis,
-                        vacuum_probe,
-                        image_cfg["py4dstem_find_bragg_disks"],
-                        k_max_Ainv=float(config["common"]["k_max_Ainv"]),
-                        central_exclusion_Ainv=central_exclusion,
-                        cuda=True,
+                    batch_results = (
+                        detect_py4dstem_bragg_disks_batch(
+                            images,
+                            qx_axis,
+                            qy_axis,
+                            vacuum_probe,
+                            image_cfg["py4dstem_find_bragg_disks"],
+                            k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                            central_exclusion_Ainv=central_exclusion,
+                            cuda=True,
+                        )
+                        if detector_name == "py4dstem"
+                        else detect_cuda_xcorr_poly_batch(
+                            images,
+                            qx_axis,
+                            qy_axis,
+                            vacuum_probe,
+                            image_cfg["cuda_xcorr_poly"],
+                            k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                            central_exclusion_Ainv=central_exclusion,
+                        )
                     )
                     batch_seconds = time.perf_counter() - batch_started
                 for sample_index, sample_id in enumerate(sample_ids):
@@ -191,7 +212,7 @@ def main() -> None:
                                 "correlation_score": result.correlation_score,
                                 "rgm_score": result.rgm_score,
                             }
-                        elif detector_name == "py4dstem":
+                        elif detector_name in ("py4dstem", "cuda_xcorr_poly"):
                             result = (
                                 batch_results[sample_index]
                                 if batch_results is not None
@@ -304,7 +325,11 @@ def main() -> None:
                         else (
                             "py4dstem_find_bragg_disks"
                             if detector_name == "py4dstem"
-                            else "dog_rgm"
+                            else (
+                                "dog_rgm"
+                                if detector_name == "dog_rgm"
+                                else "cuda_xcorr_poly"
+                            )
                         )
                     ],
                 }
