@@ -88,6 +88,18 @@ def _sample_bilinear(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> n
     )
 
 
+def _sample_cubic(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> np.ndarray:
+    """Sample a smooth response map without pinning maxima to integer pixels."""
+    return map_coordinates(
+        image,
+        [rows, cols],
+        order=3,
+        mode="constant",
+        cval=0.0,
+        prefilter=True,
+    )
+
+
 def _deduplicate_candidates(
     candidates: list[tuple[float, float, float]], min_spacing_px: float
 ) -> list[tuple[float, float, float]]:
@@ -188,7 +200,7 @@ def detect_autodisk_peaks(
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
         sample_rows = initial_row + dy.ravel()
         sample_cols = initial_col + dx.ravel()
-        scores = _sample_bilinear(rgm_map, sample_rows, sample_cols)
+        scores = _sample_cubic(rgm_map, sample_rows, sample_cols)
         best = int(np.argmax(scores))
         row = float(sample_rows[best])
         col = float(sample_cols[best])

@@ -8,7 +8,7 @@ from scipy.ndimage import map_coordinates
 from scipy.signal import fftconvolve
 from skimage.feature import blob_dog
 
-from autodisk_adapter import _radial_kernel, measure_vacuum_probe
+from autodisk_adapter import _radial_kernel, _sample_cubic, measure_vacuum_probe
 
 
 @dataclass(frozen=True)
@@ -114,7 +114,7 @@ def detect_dog_rgm_peaks(
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
         search_rows = initial_row + dy.ravel()
         search_cols = initial_col + dx.ravel()
-        scores = _sample(rgm_map, search_rows, search_cols)
+        scores = _sample_cubic(rgm_map, search_rows, search_cols)
         best = int(np.argmax(scores))
         row = float(search_rows[best])
         col = float(search_cols[best])
