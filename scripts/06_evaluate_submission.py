@@ -122,6 +122,13 @@ def main() -> None:
         default="",
         help="Explicit prefix ensured on ground-truth IDs before submission matching.",
     )
+    parser.add_argument(
+        "--headline-sample-role",
+        help=(
+            "Sample role used for headline metrics. Defaults to the benchmark "
+            "config; use study_001 for the separate V5 [001] dataset."
+        ),
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -207,13 +214,23 @@ def main() -> None:
 
     strict_values = np.asarray(strict_errors, dtype=float)
     primary_values = np.asarray(primary_errors, dtype=float)
-    headline_role = str(config["evaluation"]["headline_sample_role"])
+    headline_role = str(
+        args.headline_sample_role or config["evaluation"]["headline_sample_role"]
+    )
     if args.track == "clean":
         headline_rows = [
             row for row in per_sample if row.get("sample_role") == headline_role
         ]
     else:
         headline_rows = per_sample
+    if not headline_rows:
+        available_roles = sorted(
+            {str(row.get("sample_role", "unspecified")) for row in per_sample}
+        )
+        raise ValueError(
+            f"No samples have headline role {headline_role!r}; "
+            f"available roles={available_roles}. Use --headline-sample-role."
+        )
     headline_primary = np.asarray(
         [row["misorientation_deg"] for row in headline_rows],
         dtype=float,
