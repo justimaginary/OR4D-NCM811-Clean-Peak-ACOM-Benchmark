@@ -265,7 +265,7 @@ def main() -> None:
         data_root
         / "intermediates"
         / "pyxem_templates"
-        / "ncm811_s2_2deg_kmax1p5.pickle"
+        / "ncm811_s2_2deg_kmax1p5_v2.pickle"
     )
     library, library_metadata = build_template_library(
         cif_path=cif_path(config),

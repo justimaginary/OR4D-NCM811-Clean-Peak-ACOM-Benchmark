@@ -61,6 +61,7 @@ def build_template_library(
 
     metadata_path = cache_path.with_suffix(".json")
     expected = {
+        "cache_schema": 2,
         "cif_path": str(cif_path.resolve()),
         "voltage_kV": float(voltage_kV),
         "q_pixel_size_Ainv": float(q_pixel_size_Ainv),
@@ -74,6 +75,34 @@ def build_template_library(
 
     cache_path.parent.mkdir(parents=True, exist_ok=True)
     phase = Phase.from_cif(str(cif_path))
+    # ``Phase.from_cif`` preserves oxidation-state strings such as ``Ni3+``.
+    # diffsims' Lobato table is keyed by neutral element symbols; leaving the
+    # charged labels in place silently produces an all-zero template library.
+    # Rebuild only the diffpy atom list from pymatgen's element/occupancy data.
+    from diffpy.structure import Atom, Lattice, Structure as DiffpyStructure
+    from pymatgen.core import Structure as PymatgenStructure
+
+    pmg = PymatgenStructure.from_file(str(cif_path))
+    diffpy_structure = DiffpyStructure(
+        lattice=Lattice(
+            pmg.lattice.a,
+            pmg.lattice.b,
+            pmg.lattice.c,
+            pmg.lattice.alpha,
+            pmg.lattice.beta,
+            pmg.lattice.gamma,
+        )
+    )
+    for site in pmg:
+        for species, occupancy in site.species.items():
+            diffpy_structure.append(
+                Atom(
+                    atype=species.symbol,
+                    xyz=np.asarray(site.frac_coords, dtype=float),
+                    occupancy=float(occupancy),
+                )
+            )
+    phase.structure = diffpy_structure
     rotations = get_sample_reduced_fundamental(
         resolution=float(settings["orientation_resolution_deg"]),
         point_group=phase.point_group,
@@ -98,6 +127,19 @@ def build_template_library(
         max_excitation_error=float(settings["max_excitation_error_Ainv"]),
         shape_factor_width=float(settings["max_excitation_error_Ainv"]),
     )
+    phase_key = next(iter(library))
+    spot_counts = np.asarray(
+        [
+            simulation.intensities.size
+            for simulation in library[phase_key]["simulations"]
+        ],
+        dtype=int,
+    )
+    if np.any(spot_counts == 0):
+        raise RuntimeError(
+            "Pyxem template construction produced empty orientations: "
+            f"{int(np.sum(spot_counts == 0))}/{len(spot_counts)}"
+        )
     library.pickle_library(str(cache_path))
     metadata_path.write_text(
         json.dumps(expected, ensure_ascii=False, indent=2), encoding="utf-8"
