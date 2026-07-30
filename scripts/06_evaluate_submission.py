@@ -129,6 +129,14 @@ def main() -> None:
             "config; use study_001 for the separate V5 [001] dataset."
         ),
     )
+    parser.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help=(
+            "Evaluate a strict prediction subset and report missing IDs as "
+            "indexing failures instead of raising an ID-contract error."
+        ),
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -168,9 +176,22 @@ def main() -> None:
         normalized["sample_id"] = sample_id
         normalized["ground_truth_source_id"] = ground_truth_id
         ground_truth[sample_id] = normalized
-    if set(predictions) != set(ground_truth):
-        missing = sorted(set(ground_truth) - set(predictions))
-        extra = sorted(set(predictions) - set(ground_truth))
+    prediction_ids = set(predictions)
+    ground_truth_ids = set(ground_truth)
+    missing = sorted(ground_truth_ids - prediction_ids)
+    extra = sorted(prediction_ids - ground_truth_ids)
+    if args.allow_subset:
+        if extra:
+            raise ValueError(
+                f"Predictions contain IDs absent from ground truth: {extra}"
+            )
+        if not predictions:
+            raise ValueError("Cannot evaluate an empty prediction subset")
+        ground_truth = {
+            sample_id: ground_truth[sample_id]
+            for sample_id in predictions
+        }
+    elif prediction_ids != ground_truth_ids:
         raise ValueError(
             f"Submission IDs do not exactly match the requested ground truth: "
             f"missing={missing}, extra={extra}"
@@ -249,6 +270,13 @@ def main() -> None:
             else "track_dependent_misorientation_deg"
         ),
         "headline_sample_role": headline_role if args.track == "clean" else None,
+        "coverage": {
+            "num_ground_truth_samples": len(ground_truth_ids),
+            "num_predicted_samples": len(predictions),
+            "prediction_coverage": len(predictions) / len(ground_truth_ids),
+            "num_indexing_failures": len(missing),
+            "missing_sample_ids": missing,
+        },
         "metrics": summarize(headline_primary, args.track),
         "metrics_strict": summarize(headline_strict, args.track),
         "metrics_all_samples": summarize(primary_values, args.track),
