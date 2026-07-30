@@ -127,6 +127,8 @@ diagnostics/clean_v5_refinement_trajectories/
 server_artifacts/
 checkpoints/
 *.partial
+pyxem_templates/
+*pyxem_template_library*.pickle
 
 # Timing / profiling / debug dumps
 *.prof
