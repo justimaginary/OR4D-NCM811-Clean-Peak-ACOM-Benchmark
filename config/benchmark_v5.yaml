@@ -61,6 +61,35 @@ clean_image:
     doses_electrons: [100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000]
     repeats: 5
     seed_base: 24052026
+  instrument_noise:
+    model: empad_g2_gaussian_read_noise_after_frame_sum
+    reference_detector: EMPAD-G2
+    reference_beam_energy_keV: 300.0
+    reference_read_noise_keV_rms_per_pixel: 2.6
+    reference_read_noise_primary_e_rms_per_pixel: 0.008666666666666666
+    reference_dqe_zero_frequency: 0.94
+    reference_charge_spread_fwhm_px: 1.34
+    source_doi: 10.1017/S1431927621013701
+    seed_base: 19082026
+    levels:
+      - id: noiseless
+        poisson_shot_noise: false
+        summed_frame_count: 0
+      - id: poisson_only
+        poisson_shot_noise: true
+        summed_frame_count: 0
+      - id: empad_g2_1frame
+        poisson_shot_noise: true
+        summed_frame_count: 1
+      - id: empad_g2_4frames
+        poisson_shot_noise: true
+        summed_frame_count: 4
+      - id: empad_g2_16frames
+        poisson_shot_noise: true
+        summed_frame_count: 16
+      - id: empad_g2_64frames
+        poisson_shot_noise: true
+        summed_frame_count: 64
 
 v5:
   schema_version: clean-v5.1

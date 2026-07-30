@@ -5,6 +5,46 @@ import hashlib
 import numpy as np
 
 
+def noiseless_expected_count_image(
+    expectation: np.ndarray, dose_electrons: int
+) -> np.ndarray:
+    """Scale a normalized expectation image to noiseless expected counts."""
+    probability = np.asarray(expectation, dtype=np.float64)
+    if probability.ndim != 2:
+        raise ValueError("expectation must be a 2D image")
+    if not np.all(np.isfinite(probability)) or np.any(probability < 0.0):
+        raise ValueError("expectation must contain finite non-negative values")
+    if dose_electrons <= 0:
+        raise ValueError("dose_electrons must be positive")
+    total = float(probability.sum())
+    if total <= 0.0:
+        raise ValueError("expectation has zero total intensity")
+    return (
+        probability / total * int(dose_electrons)
+    ).astype(np.float32)
+
+
+def add_gaussian_read_noise(
+    count_image: np.ndarray,
+    sigma_e_per_pixel: float,
+    rng: np.random.Generator,
+) -> np.ndarray:
+    """Add zero-mean read noise in primary-electron-equivalent units."""
+    image = np.asarray(count_image, dtype=np.float32)
+    if image.ndim != 2:
+        raise ValueError("count_image must be a 2D image")
+    if not np.all(np.isfinite(image)) or np.any(image < 0.0):
+        raise ValueError("count_image must contain finite non-negative values")
+    if sigma_e_per_pixel < 0.0:
+        raise ValueError("sigma_e_per_pixel must be non-negative")
+    if sigma_e_per_pixel == 0.0:
+        return image.copy()
+    noise = rng.normal(
+        loc=0.0, scale=float(sigma_e_per_pixel), size=image.shape
+    )
+    return (image + noise).astype(np.float32)
+
+
 def multinomial_count_image(
     expectation: np.ndarray,
     num_electrons: int,
@@ -60,6 +100,23 @@ def deterministic_count_seed(
     payload = (
         f"or4d-clean-v5|{int(seed_base)}|{sample_id}|"
         f"{int(dose_electrons)}|{int(repeat)}"
+    ).encode("utf-8")
+    return int.from_bytes(
+        hashlib.blake2b(payload, digest_size=8).digest(), "little"
+    )
+
+
+def deterministic_read_noise_seed(
+    seed_base: int,
+    sample_id: str,
+    dose_electrons: int,
+    noise_level_id: str,
+    repeat: int,
+) -> int:
+    """Derive a stable read-noise seed for one independent noise level."""
+    payload = (
+        f"or4d-clean-v5-read-noise|{int(seed_base)}|{sample_id}|"
+        f"{int(dose_electrons)}|{noise_level_id}|{int(repeat)}"
     ).encode("utf-8")
     return int.from_bytes(
         hashlib.blake2b(payload, digest_size=8).digest(), "little"
