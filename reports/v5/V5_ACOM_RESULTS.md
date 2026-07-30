@@ -81,6 +81,49 @@ near `[001]`, not random peak-location noise. This dataset should be analyzed
 by `study_group`, tilt, azimuth and in-plane angle before changing ACOM
 parameters.
 
+## Clean-C counted smoke: dose and instrument noise
+
+The current counted study uses the same fixed 8 orientations and repeat 0.
+These results diagnose trends and call behavior; they are not 2,048-orientation
+headline statistics.
+
+Acc@2° across the independent Poisson dose ladder is:
+
+| Dose (e⁻/pattern) | AutoDisk | `find_Bragg_disks` | DoG-RGM |
+|---:|---:|---:|---:|
+| 100 | 33.3% (6/8 indexed) | 42.9% (7/8 indexed) | 37.5% (8/8 indexed) |
+| 300 | 50.0% | 62.5% | 50.0% |
+| 1,000 | 62.5% | 62.5% | 62.5% |
+| 3,000 | 75.0% | 75.0% | 75.0% |
+| 10,000 | 75.0% | 75.0% | 87.5% |
+| 30,000 | 75.0% | 75.0% | 75.0% |
+| 100,000 | 75.0% | 75.0% | 75.0% |
+| 300,000 | 87.5% | 75.0% | 87.5% |
+| 1,000,000 | 75.0% | 75.0% | 75.0% |
+
+Increasing dose clearly improves the low-dose regime, but the 8-sample metric
+is quantized in 12.5 percentage-point steps and is not monotonic after
+saturation. At 100 e⁻, patterns with fewer than three detected peaks are
+reported as `insufficient_detected_peaks`; they are not assigned fabricated
+orientations. Evaluation reports both accuracy on indexed patterns and total
+prediction coverage.
+
+At fixed `10⁴ e⁻`, the P95 misorientation after adding independent EMPAD-G2
+readout noise is:
+
+| Readout-noise exposure | AutoDisk | `find_Bragg_disks` | DoG-RGM |
+|---:|---:|---:|---:|
+| No added readout noise | 7.12° | 7.12° | 3.54° |
+| 1 frame | 8.26° | 8.28° | 8.05° |
+| 4 frames | 8.05° | 8.26° | 64.92° |
+| 16 frames | 14.46° | 61.22° | 64.78° |
+| 64 frames | 64.79° | 71.23° | 85.83° |
+
+The degradation is not caused by ACOM call failure: all twelve noise
+conditions indexed 8/8 patterns. The detectors return many noise-induced
+peaks, which can move ACOM to a wrong orientation branch. Peak count alone is
+therefore an invalid quality criterion under readout noise.
+
 ## Reproducibility and saved outputs
 
 The complete suite can be rerun with:
@@ -109,6 +152,10 @@ For every method and study, the repository retains:
 
 The source HDF5 images and peak intermediates remain only under the server data
 root and are reproducible from the tracked code and manifests.
+
+The 39 counted/noise runs are retained under
+`reports/v5/acom_counted_smoke/`; their compact aggregate is
+`reports/v5/V5_ACOM_COUNTED_SUMMARY.json`.
 
 ## Other orientation-indexing methods
 
