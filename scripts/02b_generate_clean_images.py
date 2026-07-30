@@ -522,6 +522,7 @@ def main() -> None:
         h5.attrs["semiangle_mrad"] = float(image_cfg["convergence_semiangle_mrad"])
         h5.attrs["thickness_nm"] = float(image_cfg["thickness_nm"])
         h5.attrs["q_max_Ainv"] = float(image_cfg["q_max_Ainv"])
+        h5.attrs["k_max_Ainv"] = float(config["common"]["k_max_Ainv"])
         h5.attrs["generator"] = "scripts/02b_generate_clean_images.py"
         h5.attrs["source_orientation_file"] = str(
             args.orientation_file.resolve()
@@ -539,6 +540,7 @@ def main() -> None:
         "forward_model": forward_model,
         "input_fields": ["qx", "qy", "intensity"],
         "coordinate_units": "1/angstrom",
+        "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
         "source_image_file": str(image_path.relative_to(ROOT)) if image_path.is_relative_to(ROOT) else str(image_path),
         "intensity_model": (
             "disk integration from the final coherent scattered expectation image"
@@ -564,6 +566,8 @@ def main() -> None:
         "num_samples": len(orientations),
         "forward_model": forward_model,
         "compute_backend": args.compute_backend,
+        "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
+        "detector_q_max_Ainv": float(image_cfg["q_max_Ainv"]),
         "cuda_batch_size": (
             cuda_batch_size if args.compute_backend == "cuda" else None
         ),
