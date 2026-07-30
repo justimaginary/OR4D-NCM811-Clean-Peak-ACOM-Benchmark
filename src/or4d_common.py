@@ -227,6 +227,50 @@ def friedel_aware_misorientation_deg(
     )
 
 
+def best_friedel_alignment(
+    R_predicted: np.ndarray,
+    R_ground_truth: np.ndarray,
+    symmetry_rotations: Iterable[np.ndarray],
+) -> dict[str, Any]:
+    """Return the representative used by the Clean symmetry-aware metric.
+
+    The evaluator compares ``R_predicted`` against every equivalent
+    ``S @ R_ground_truth @ F``.  For visualization, the inverse operations
+    must instead be applied to the prediction so it can be drawn in the same
+    representative as the ground truth:
+
+    ``R_aligned = S.T @ R_predicted @ F.T``.
+    """
+    predicted = nearest_rotation(np.asarray(R_predicted, dtype=float))
+    ground_truth = nearest_rotation(np.asarray(R_ground_truth, dtype=float))
+    candidates: list[tuple[float, np.ndarray, np.ndarray]] = []
+    for symmetry in symmetry_rotations:
+        proper_symmetry = nearest_rotation(np.asarray(symmetry, dtype=float))
+        for friedel in (np.eye(3), FRIEDEL_SAMPLE_ROTATION):
+            equivalent_ground_truth = proper_symmetry @ ground_truth @ friedel
+            error = rotation_angle_deg(
+                predicted @ equivalent_ground_truth.T
+            )
+            candidates.append((error, proper_symmetry, friedel))
+    if not candidates:
+        raise ValueError("At least one crystal symmetry rotation is required.")
+
+    error, symmetry, friedel = min(candidates, key=lambda item: item[0])
+    aligned = nearest_rotation(symmetry.T @ predicted @ friedel.T)
+    return {
+        "aligned_matrix": aligned,
+        "crystal_symmetry": symmetry,
+        "friedel_matrix": friedel,
+        "friedel_used": bool(
+            np.allclose(friedel, FRIEDEL_SAMPLE_ROTATION, atol=1e-10)
+        ),
+        "equivalent_misorientation_deg": float(error),
+        "raw_misorientation_deg": float(
+            rotation_angle_deg(predicted @ ground_truth.T)
+        ),
+    }
+
+
 def write_jsonl(path: Path, records: Iterable[dict[str, Any]]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:

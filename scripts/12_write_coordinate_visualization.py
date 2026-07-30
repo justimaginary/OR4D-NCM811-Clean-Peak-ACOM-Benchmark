@@ -3,10 +3,21 @@ from __future__ import annotations
 
 import gzip
 import json
+import sys
 from collections import Counter
 from pathlib import Path
 
+import numpy as np
+from pymatgen.core import Structure
+
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "src"))
+
+from or4d_common import (  # noqa: E402
+    best_friedel_alignment,
+    proper_point_group_rotations,
+)
+
 CONFIG_PATH = ROOT / "config" / "benchmark.yaml"
 TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
 DETAILS_PATH = ROOT / "reports" / "acom_clean_details.json"
@@ -30,7 +41,25 @@ def representative_ids() -> list[str]:
         key=lambda row: row["friedel_equivalent_misorientation_deg"],
     )
     positions = (0, len(rows) // 2, int(0.95 * (len(rows) - 1)), len(rows) - 1)
-    return [rows[position]["sample_id"] for position in positions]
+    selected = [rows[position]["sample_id"] for position in positions]
+    friedel_candidates = [
+        row
+        for row in rows
+        if (
+            row["strict_misorientation_deg"]
+            - row["friedel_equivalent_misorientation_deg"]
+        )
+        > 10.0
+    ]
+    if not friedel_candidates:
+        raise ValueError("No clear Friedel-branch example was found.")
+    friedel_example = min(
+        friedel_candidates,
+        key=lambda row: row["friedel_equivalent_misorientation_deg"],
+    )["sample_id"]
+    if friedel_example not in selected:
+        selected.append(friedel_example)
+    return selected
 
 
 def rounded(value: object) -> object:
@@ -202,7 +231,88 @@ def overview_results() -> dict:
     }
 
 
-def compact_trace(row: dict, label: str) -> dict:
+def symmetry_description(matrix: np.ndarray) -> dict:
+    matrix = np.asarray(matrix, dtype=float)
+    cosine = float(np.clip((np.trace(matrix) - 1.0) / 2.0, -1.0, 1.0))
+    angle = float(np.degrees(np.arccos(cosine)))
+    if angle < 1e-8:
+        axis = np.array([0.0, 0.0, 1.0])
+        signed_angle = 0.0
+    elif abs(np.sin(np.deg2rad(angle))) > 1e-7:
+        axis = np.array(
+            [
+                matrix[2, 1] - matrix[1, 2],
+                matrix[0, 2] - matrix[2, 0],
+                matrix[1, 0] - matrix[0, 1],
+            ]
+        )
+        axis /= np.linalg.norm(axis)
+        signed_angle = angle
+    else:
+        eigenvalues, eigenvectors = np.linalg.eig(matrix)
+        axis = np.real(eigenvectors[:, np.argmin(np.abs(eigenvalues - 1.0))])
+        axis /= np.linalg.norm(axis)
+        signed_angle = angle
+    dominant = int(np.argmax(np.abs(axis)))
+    if axis[dominant] < 0:
+        axis = -axis
+        signed_angle = -signed_angle
+    if np.allclose(axis, [0.0, 0.0, 1.0], atol=1e-5):
+        text = f"绕 crystal Z 轴 {signed_angle:.3f}°"
+    else:
+        text = (
+            f"绕 crystal axis [{axis[0]:.3f}, {axis[1]:.3f}, "
+            f"{axis[2]:.3f}] 旋转 {signed_angle:.3f}°"
+        )
+    return {
+        "axis": axis.tolist(),
+        "angle_deg": signed_angle,
+        "text": text,
+    }
+
+
+def compact_trace(
+    row: dict,
+    label: str,
+    symmetries: list[np.ndarray],
+) -> dict:
+    standard_matrix = np.asarray(
+        row["standard_orientation_matrix_sample_to_crystal"],
+        dtype=float,
+    )
+    acom_matrix = np.asarray(
+        row["acom_orientation_matrix_sample_to_crystal"],
+        dtype=float,
+    )
+    reciprocal_matrix = np.asarray(
+        row["reciprocal_lattice_matrix_B_Ainv"],
+        dtype=float,
+    )
+    alignment = best_friedel_alignment(
+        acom_matrix,
+        standard_matrix,
+        symmetries,
+    )
+    reported_error = float(
+        row["acom_result"]["friedel_equivalent_misorientation_deg"]
+    )
+    if not np.isclose(
+        alignment["equivalent_misorientation_deg"],
+        reported_error,
+        atol=1e-6,
+    ):
+        raise ValueError(
+            f"Visualization alignment does not match evaluation for "
+            f"{row['sample_id']}: computed "
+            f"{alignment['equivalent_misorientation_deg']}, "
+            f"reported {reported_error}"
+        )
+    symmetry = np.asarray(alignment["crystal_symmetry"], dtype=float)
+    aligned_matrix = np.asarray(alignment["aligned_matrix"], dtype=float)
+    hkl_transform = reciprocal_matrix @ symmetry.T @ np.linalg.inv(
+        reciprocal_matrix
+    )
+    friedel_sign = -1 if alignment["friedel_used"] else 1
     observed_ranked = sorted(
         enumerate(row["standard_observed_reflections"]),
         key=lambda item: item[1]["reported_intensity_normalized"],
@@ -231,10 +341,29 @@ def compact_trace(row: dict, label: str) -> dict:
             "intensity": reflection["reported_intensity_normalized"],
             "g_crystal": reflection["g_crystal_cartesian_Ainv"],
             "q_standard": reflection["standard_g_sample_Ainv"],
-            "q_acom_same_hkl": reflection["acom_same_hkl_g_sample_Ainv"],
+            "q_acom_same_hkl_raw": reflection[
+                "acom_same_hkl_g_sample_Ainv"
+            ],
         }
         for _, reflection in observed_ranked
     ]
+    for reflection in observed:
+        hkl = np.asarray(reflection["hkl"], dtype=float)
+        related_float = friedel_sign * (hkl @ hkl_transform)
+        related_hkl = np.rint(related_float).astype(int)
+        if not np.allclose(related_float, related_hkl, atol=1e-5):
+            raise ValueError(
+                f"Symmetry-related HKL is not integral for "
+                f"{row['sample_id']}: {related_float.tolist()}"
+            )
+        g_crystal = np.asarray(reflection["g_crystal"], dtype=float)
+        related_g = related_hkl @ reciprocal_matrix
+        reflection["acom_related_hkl"] = related_hkl.tolist()
+        reflection["acom_related_g_crystal"] = related_g.tolist()
+        reflection["q_acom_related_raw"] = (related_g @ acom_matrix).tolist()
+        reflection["q_acom_aligned_same_hkl"] = (
+            g_crystal @ aligned_matrix
+        ).tolist()
     predicted = [
         {
             "hkl": reflection["hkl"],
@@ -261,18 +390,27 @@ def compact_trace(row: dict, label: str) -> dict:
         {
             "sample_id": row["sample_id"],
             "label": label,
-            "orientation_error_deg": row["acom_result"][
-                "friedel_equivalent_misorientation_deg"
+            "orientation_error_deg": reported_error,
+            "strict_misorientation_deg": row["acom_result"][
+                "strict_misorientation_deg"
             ],
+            "raw_misorientation_deg": alignment["raw_misorientation_deg"],
             "observed_match_fraction": row["comparison_summary"][
                 "observed_match_fraction"
             ],
             "q_rmse_Ainv": row["comparison_summary"]["q_distance_rmse_Ainv"],
-            "standard_matrix": row[
-                "standard_orientation_matrix_sample_to_crystal"
-            ],
-            "acom_matrix": row["acom_orientation_matrix_sample_to_crystal"],
-            "reciprocal_matrix": row["reciprocal_lattice_matrix_B_Ainv"],
+            "standard_matrix": standard_matrix.tolist(),
+            "acom_matrix": acom_matrix.tolist(),
+            "acom_aligned_matrix": aligned_matrix.tolist(),
+            "best_crystal_symmetry": symmetry.tolist(),
+            "best_crystal_symmetry_description": symmetry_description(
+                symmetry
+            ),
+            "friedel_used": alignment["friedel_used"],
+            "friedel_matrix": np.asarray(
+                alignment["friedel_matrix"]
+            ).tolist(),
+            "reciprocal_matrix": reciprocal_matrix.tolist(),
             "observed": observed,
             "predicted": predicted,
             "matches": matches,
@@ -281,15 +419,30 @@ def compact_trace(row: dict, label: str) -> dict:
 
 
 def load_samples() -> list[dict]:
+    config = parse_config()
+    structure = Structure.from_file(ROOT / config["dataset"]["cif_path"])
+    symmetries = proper_point_group_rotations(structure)
     selected_ids = representative_ids()
-    labels = dict(zip(selected_ids, ("Best", "Median", "P95", "Worst")))
+    base_labels = ("Best", "Median", "P95", "Worst")
+    labels = {
+        sample_id: (
+            base_labels[index]
+            if index < len(base_labels)
+            else "Friedel branch"
+        )
+        for index, sample_id in enumerate(selected_ids)
+    }
     selected: dict[str, dict] = {}
     with gzip.open(TRACE_PATH, "rt", encoding="utf-8") as handle:
         for line in handle:
             row = json.loads(line)
             sample_id = row["sample_id"]
             if sample_id in labels:
-                selected[sample_id] = compact_trace(row, labels[sample_id])
+                selected[sample_id] = compact_trace(
+                    row,
+                    labels[sample_id],
+                    symmetries,
+                )
     missing = sorted(set(selected_ids) - set(selected))
     if missing:
         raise ValueError(f"Coordinate trace is missing representative IDs: {missing}")
@@ -405,6 +558,14 @@ svg { display: block; width: 100%; height: auto; color: var(--foreground); }
 .operator { align-self: center; color: var(--muted-foreground); font-size: 22px; }
 .matrix-wrap { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 14px; }
 .matrix-equation { display: grid; grid-template-columns: minmax(260px, 1fr) auto minmax(220px, .8fr); gap: 10px; align-items: center; }
+.representation-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 12px 0 18px; }
+.representation-grid article { min-width: 0; }
+.representation-grid h3 { margin: 0 0 6px; font-size: 13px; color: var(--muted-foreground); }
+.representation-note { margin: 8px 0 14px; padding: 10px 12px; border-left: 4px solid var(--series-3); background: #f7f4fc; font-size: 13px; }
+.friedel-explanation { margin: 14px 0 20px; border: 1px solid var(--border); border-radius: 9px; padding: 12px 14px; }
+.friedel-explanation summary { cursor: pointer; font-weight: 600; }
+.friedel-explanation p { margin: 10px 0 0; line-height: 1.6; }
+.friedel-formula { margin-top: 10px; padding: 10px 12px; background: var(--muted); border-radius: 7px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
 pre {
   margin: 0; padding: 10px; border: 1px solid var(--border); border-radius: 7px;
   background: var(--muted); overflow-x: auto; font-size: 13px; line-height: 1.45;
@@ -419,7 +580,7 @@ tbody tr.is-selected { background: #eef4ff; }
   main { padding: 16px; }
   .page-header { display: block; }
   .page-switch { margin-top: 12px; }
-  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid { grid-template-columns: 1fr; }
+  .plots, .matrix-wrap, .metrics, .overview-metrics, .overview-charts, .equation-grid, .matrix-equation, .process-grid, .parameter-grid, .representation-grid { grid-template-columns: 1fr; }
   .operator { display: none; }
 }
 @media print {
@@ -475,10 +636,21 @@ tbody tr.is-selected { background: #eef4ff; }
     <div id="tabs" class="tabs"></div>
   </div>
   <div class="metrics">
-    <div class="metric"><span>取向误差：R<sup>ACOM</sup> 对 R<sup>GT</sup></span><strong id="error"></strong></div>
+    <div class="metric"><span>Friedel 等价误差 / Primary</span><strong id="error"></strong></div>
+    <div class="metric"><span>仅晶体对称误差 / Strict</span><strong id="strict-error"></strong></div>
+    <div class="metric"><span>原始代表矩阵差 / Raw</span><strong id="raw-error"></strong></div>
+    <div class="metric"><span>最佳晶体对称操作</span><strong id="best-symmetry"></strong></div>
+    <div class="metric"><span>Friedel branch</span><strong id="friedel-branch"></strong></div>
     <div class="metric"><span>探测器观测峰匹配率</span><strong id="match"></strong></div>
     <div class="metric"><span>探测器峰匹配 q-RMSE（二维）</span><strong id="rmse"></strong></div>
   </div>
+  <details class="friedel-explanation" open>
+    <summary>Friedel branch 做了什么，为什么需要它？ / What and why</summary>
+    <p><b>它处理理想运动学衍射中的 Friedel 二义性。</b>本 Clean benchmark 的峰集同时包含 <code>q</code> 与 <code>−q</code> 的 Friedel 对，因此把样品坐标的 x、y 方向同时反转、保持电子束 z 方向不变，得到的二维峰位置集合不变。仅凭这种理想峰集，算法不能区分这两个取向代表。</p>
+    <div class="friedel-formula">F = diag(−1, −1, 1)<br>R<sub>equiv</sub> = S R<sub>GT</sub> F<br>R<sub>ACOM aligned</sub> = S<sub>best</sub><sup>T</sup> R<sub>ACOM raw</sub> F<sub>best</sub><sup>T</sup></div>
+    <p>评测会同时检查 <code>F = I</code> 和 <code>F = diag(−1,−1,1)</code>，只采用误差更小的分支。“Strict”只搜索晶体点群操作 <code>S</code>；“Friedel-equivalent”再加入 <code>F</code>。该操作<b>不会修改 ACOM 原始输出、不会移动检测峰，也不会制造更好的结果</b>，只是把观测上不可区分的代表放到同一个坐标表示中比较。它也不同于晶体三重旋转：晶体对称在左侧作用，Friedel branch 在样品坐标右侧作用。</p>
+    <p id="friedel-example-summary"></p>
+  </details>
   <section class="process-grid" aria-label="Benchmark 构建与 ACOM 预测流程">
     <article>
       <h2>过程 A｜构建原始 Benchmark（GT）</h2>
@@ -526,6 +698,16 @@ tbody tr.is-selected { background: #eef4ff; }
     <p class="notation-note">本页数值数组统一按行显示，因此使用 <code>g_c = h B</code>、<code>g_s = g_c R</code>；与代码中的列向量写法 <code>g_s = Rᵀ g_c</code> 完全等价。GT = 生成数据时的标准答案，ACOM = 算法估计结果。</p>
   </section>
   <div class="view-control">
+    <strong>ACOM 取向代表</strong>
+    <div id="orientation-tabs" class="tabs" aria-label="选择对称对齐后或原始 ACOM 取向矩阵"></div>
+  </div>
+  <div id="representation-note" class="representation-note"></div>
+  <section class="representation-grid" aria-label="GT、原始 ACOM 与对齐后 ACOM 矩阵">
+    <article><h3>R<sup>GT</sup> / Ground Truth</h3><pre id="summary-gt-matrix"></pre></article>
+    <article><h3>R<sup>ACOM raw</sup> / 原始输出</h3><pre id="summary-raw-matrix"></pre></article>
+    <article><h3>R<sup>ACOM aligned</sup> / 对称对齐后</h3><pre id="summary-aligned-matrix"></pre></article>
+  </section>
+  <div class="view-control">
     <strong>图层显示</strong>
     <div id="view-tabs" class="tabs" aria-label="选择 GT、ACOM 或叠加显示"></div>
   </div>
@@ -568,16 +750,17 @@ tbody tr.is-selected { background: #eef4ff; }
       <p class="equation-note">右侧三项依次为 [qₓ, qᵧ, q<sub>z</sub>]；探测器只使用前两项。</p>
     </section>
     <section>
-      <h3>④ 诊断：g<sub>s</sub><sup>ACOM|same h</sup> = g<sub>c</sub> R<sup>ACOM</sup></h3>
+      <h3 id="acom-transform-title"></h3>
+      <p id="acom-reflection-map" class="equation-note"></p>
       <div class="matrix-equation"><pre id="acom-matrix"></pre><div class="operator">→</div><pre id="acom-q"></pre></div>
-      <p class="equation-note">固定同一个 GT HKL 后的坐标差；仅用于解释误差，不是 ACOM 的输入，也不等同于 ACOM 最近邻匹配峰。</p>
+      <p id="acom-transform-note" class="equation-note"></p>
     </section>
   </div>
   <section class="all-reflections">
     <h2 id="all-reflections-title"></h2>
     <div class="table-wrap">
       <table>
-        <thead><tr><th>#</th><th>GT HKL</th><th>I<sup>GT</sup></th><th>g<sub>c</sub> (Å⁻¹)</th><th>g<sub>s</sub><sup>GT</sup> = [qₓ,qᵧ,qz] (Å⁻¹)</th><th>g<sub>s</sub><sup>ACOM|same h</sup> (Å⁻¹)</th><th>‖Δg<sub>s</sub>‖₂ (Å⁻¹)</th></tr></thead>
+        <thead><tr><th>#</th><th>GT HKL</th><th id="acom-hkl-heading">ACOM HKL</th><th>I<sup>GT</sup></th><th>g<sub>c</sub><sup>GT</sup> (Å⁻¹)</th><th id="acom-g-heading">g<sub>c</sub><sup>ACOM</sup></th><th>g<sub>s</sub><sup>GT</sup> = [qₓ,qᵧ,qz]</th><th id="acom-q-heading">g<sub>s</sub><sup>ACOM</sup></th><th>‖Δg<sub>s</sub>‖₂</th></tr></thead>
         <tbody id="reflection-rows"></tbody>
       </table>
     </div>
@@ -591,12 +774,14 @@ const overviewResults = reportData.overview_results;
 const kMaxAinv = Number(reportData.k_max_Ainv);
 const tabs = document.getElementById("tabs");
 const viewTabs = document.getElementById("view-tabs");
+const orientationTabs = document.getElementById("orientation-tabs");
 const detector = document.getElementById("detector");
 const axes = document.getElementById("axes");
 const reflection = document.getElementById("reflection");
 let sampleIndex = 1;
 let reflectionIndex = 0;
 let displayMode = "overlay";
+let orientationMode = "aligned";
 const esc = value => String(value).replace(/[&<>"']/g, character => {
   if (character === "&") return "&amp;";
   if (character === "<") return "&lt;";
@@ -610,6 +795,19 @@ const qPixelsPerAinv = 165 / kMaxAinv;
 const qX = value => 280 + value * qPixelsPerAinv;
 const qY = value => 200 - value * qPixelsPerAinv;
 const axisScale = value => value * 125;
+const selectedAcomMatrix = sample =>
+  orientationMode === "aligned" ? sample.acom_aligned_matrix : sample.acom_matrix;
+const selectedAcomReflection = peak => orientationMode === "aligned"
+  ? {
+      hkl: peak.hkl,
+      gCrystal: peak.g_crystal,
+      q: peak.q_acom_aligned_same_hkl,
+    }
+  : {
+      hkl: peak.acom_related_hkl,
+      gCrystal: peak.acom_related_g_crystal,
+      q: peak.q_acom_related_raw,
+    };
 
 function renderOverview() {
   const runs = overviewResults.runs;
@@ -755,7 +953,30 @@ function renderViewTabs() {
     `${showACOM ? '<i class="cross">×</i>ACOM 预测峰' : ''}`;
   document.getElementById("axes-legend").innerHTML =
     `${showGT ? '<i class="line"></i>R<sup>GT</sup>' : ''}` +
-    `${showACOM ? '<i class="line acom"></i>R<sup>ACOM</sup>' : ''}`;
+    `${showACOM ? `<i class="line acom"></i>R<sup>ACOM ${orientationMode}</sup>` : ''}`;
+}
+
+function renderOrientationTabs(sample) {
+  const modes = [
+    ["aligned", "对称对齐后（默认）"],
+    ["raw", "原始 ACOM 输出"],
+  ];
+  orientationTabs.innerHTML = "";
+  modes.forEach(([mode, label]) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.setAttribute("aria-pressed", mode === orientationMode ? "true" : "false");
+    button.textContent = label;
+    button.addEventListener("click", () => {
+      orientationMode = mode;
+      render();
+    });
+    orientationTabs.appendChild(button);
+  });
+  document.getElementById("representation-note").innerHTML =
+    orientationMode === "aligned"
+      ? `<strong>当前绘图使用对称/Friedel 对齐后代表。</strong> R<sup>ACOM aligned</sup> = S<sub>best</sub><sup>T</sup> R<sup>ACOM raw</sup> F<sub>best</sub><sup>T</sup>；它与上方 Friedel 等价误差使用同一个最佳分支。当前 F<sub>best</sub> = ${sample.friedel_used ? "diag(-1,-1,1)（已使用）" : "I（未使用）"}。`
+      : `<strong>当前绘图使用原始 ACOM 输出。</strong> 坐标轴可能因晶体对称等价操作而与 GT 相差很大；这时应同时查看原始代表矩阵差、对称相关 HKL 和对称等价误差。`;
 }
 
 function renderDetector(sample) {
@@ -809,7 +1030,7 @@ function renderAxes(sample) {
     <text x="${centerX + 10}" y="34" fill="var(--muted-foreground)">crystal Y</text>`;
   [
     {matrix: sample.standard_matrix, key: "gt"},
-    {matrix: sample.acom_matrix, key: "acom"},
+    {matrix: selectedAcomMatrix(sample), key: "acom"},
   ].filter(item => displayMode === "overlay" || displayMode === item.key).forEach(item => {
     const matrix = item.matrix;
     const matrixIndex = item.key === "gt" ? 0 : 1;
@@ -846,48 +1067,92 @@ function renderAxes(sample) {
     displayMode === "gt"
       ? "仅显示 R<sup>GT</sup>；紫色为所选 GT 反射的 g<sub>c</sub> 方向"
       : displayMode === "acom"
-        ? "仅显示 R<sup>ACOM</sup>；虚线表示算法估计的样品坐标轴"
-        : "叠加 R<sup>GT</sup>（实线）与 R<sup>ACOM</sup>（虚线）；紫色为所选 GT 反射的 g<sub>c</sub> 方向";
+        ? `仅显示 R<sup>ACOM ${orientationMode}</sup>；虚线表示算法估计的样品坐标轴`
+        : `叠加 R<sup>GT</sup>（实线）与 R<sup>ACOM ${orientationMode}</sup>（虚线）；紫色为所选 GT 反射的 g<sub>c</sub> 方向`;
 }
 
 function renderTransform(sample) {
   const selected = sample.observed[reflectionIndex];
+  const acomReflection = selectedAcomReflection(selected);
+  const acomMatrix = selectedAcomMatrix(sample);
   document.getElementById("hkl-vector").textContent = `[${selected.hkl.join(", ")}]`;
   document.getElementById("reciprocal-matrix").textContent = matrix(sample.reciprocal_matrix);
   document.getElementById("g-vector").textContent = vector(selected.g_crystal);
   document.getElementById("standard-matrix").textContent = matrix(sample.standard_matrix);
-  document.getElementById("acom-matrix").textContent = matrix(sample.acom_matrix);
+  document.getElementById("acom-matrix").textContent = matrix(acomMatrix);
   document.getElementById("standard-q").textContent = vector(selected.q_standard);
-  document.getElementById("acom-q").textContent = vector(selected.q_acom_same_hkl);
+  document.getElementById("acom-q").textContent = vector(acomReflection.q);
+  document.getElementById("acom-transform-title").innerHTML =
+    orientationMode === "aligned"
+      ? "④ 对齐后：g<sub>s</sub><sup>ACOM aligned</sup> = g<sub>c</sub><sup>GT</sup> R<sup>ACOM aligned</sup>"
+      : "④ 原始代表：g<sub>s</sub><sup>ACOM raw</sup> = g<sub>c</sub><sup>related</sup> R<sup>ACOM raw</sup>";
+  document.getElementById("acom-reflection-map").innerHTML =
+    orientationMode === "aligned"
+      ? `对齐后使用同一个 GT HKL [${selected.hkl.join(", ")}]。`
+      : `晶体对称重标记：GT HKL [${selected.hkl.join(", ")}] ↔ raw ACOM HKL [${acomReflection.hkl.join(", ")}]；不是强行比较同一个 HKL。`;
+  document.getElementById("acom-transform-note").textContent =
+    orientationMode === "aligned"
+      ? "该矩阵和坐标与对称等价误差使用同一个最佳晶体对称/Friedel 分支。"
+      : "原始矩阵保留 ACOM 实际输出；对称相关 HKL 在原始代表下投到同一探测器峰。";
 }
 
 function renderReflectionTable(sample) {
   document.getElementById("all-reflections-title").innerHTML =
-    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = ${kMaxAinv} Å⁻¹）`;
+    `当前 GT 图样中的 ${sample.observed.length} 个有效反射（Kmax = ${kMaxAinv} Å⁻¹）· ${orientationMode === "aligned" ? "对称对齐后代表" : "原始 ACOM 代表"}`;
+  document.getElementById("acom-hkl-heading").textContent =
+    orientationMode === "aligned" ? "Aligned ACOM HKL（同 GT）" : "Raw ACOM 对称相关 HKL";
+  document.getElementById("acom-g-heading").innerHTML =
+    orientationMode === "aligned"
+      ? "g<sub>c</sub><sup>ACOM aligned</sup>"
+      : "g<sub>c</sub><sup>ACOM related</sup>";
+  document.getElementById("acom-q-heading").innerHTML =
+    orientationMode === "aligned"
+      ? "g<sub>s</sub><sup>ACOM aligned</sup>"
+      : "g<sub>s</sub><sup>ACOM raw</sup>";
   document.getElementById("reflection-rows").innerHTML = sample.observed.map((peak, index) => {
+    const acomReflection = selectedAcomReflection(peak);
     const delta = Math.hypot(
-      peak.q_standard[0] - peak.q_acom_same_hkl[0],
-      peak.q_standard[1] - peak.q_acom_same_hkl[1],
-      peak.q_standard[2] - peak.q_acom_same_hkl[2]
+      peak.q_standard[0] - acomReflection.q[0],
+      peak.q_standard[1] - acomReflection.q[1],
+      peak.q_standard[2] - acomReflection.q[2]
     );
     return `<tr class="${index === reflectionIndex ? "is-selected" : ""}">` +
       `<td>${index + 1}</td>` +
       `<td>[${esc(peak.hkl.join(", "))}]</td>` +
+      `<td>[${esc(acomReflection.hkl.join(", "))}]</td>` +
       `<td>${peak.intensity.toFixed(4)}</td>` +
       `<td>${esc(vector(peak.g_crystal))}</td>` +
+      `<td>${esc(vector(acomReflection.gCrystal))}</td>` +
       `<td>${esc(vector(peak.q_standard))}</td>` +
-      `<td>${esc(vector(peak.q_acom_same_hkl))}</td>` +
+      `<td>${esc(vector(acomReflection.q))}</td>` +
       `<td>${delta.toFixed(5)}</td></tr>`;
   }).join("");
 }
 
 function render() {
   const sample = samples[sampleIndex];
+  const friedelExample = samples.find(item => item.label === "Friedel branch");
   renderTabs();
+  renderOrientationTabs(sample);
   renderViewTabs();
   document.getElementById("error").textContent = `${sample.orientation_error_deg.toFixed(3)}°`;
+  document.getElementById("strict-error").textContent = `${sample.strict_misorientation_deg.toFixed(3)}°`;
+  document.getElementById("raw-error").textContent = `${sample.raw_misorientation_deg.toFixed(3)}°`;
+  document.getElementById("best-symmetry").textContent =
+    sample.best_crystal_symmetry_description.text;
+  document.getElementById("friedel-branch").textContent =
+    sample.friedel_used ? "使用 / used" : "未使用 / identity";
   document.getElementById("match").textContent = `${(sample.observed_match_fraction * 100).toFixed(1)}%`;
   document.getElementById("rmse").textContent = `${sample.q_rmse_Ainv.toFixed(4)} Å⁻¹`;
+  document.getElementById("summary-gt-matrix").textContent = matrix(sample.standard_matrix);
+  document.getElementById("summary-raw-matrix").textContent = matrix(sample.acom_matrix);
+  document.getElementById("summary-aligned-matrix").textContent = matrix(sample.acom_aligned_matrix);
+  document.getElementById("friedel-example-summary").innerHTML =
+    `<b>本页实例：</b><code>${friedelExample.sample_id}</code> 的 Strict 误差为 ` +
+    `${friedelExample.strict_misorientation_deg.toFixed(3)}°，加入 Friedel 等价后为 ` +
+    `${friedelExample.orientation_error_deg.toFixed(3)}°，最佳分支明确使用 ` +
+    `<code>F = diag(−1,−1,1)</code>。点击上方“Friedel branch”样本即可查看原始矩阵、` +
+    `对齐后矩阵及 Friedel/晶体对称相关 HKL。`;
   reflection.innerHTML = sample.observed.map((peak, index) =>
     `<option value="${index}" ${index === reflectionIndex ? "selected" : ""}>GT HKL [${esc(peak.hkl.join(", "))}] · I=${peak.intensity.toFixed(3)}</option>`
   ).join("");
