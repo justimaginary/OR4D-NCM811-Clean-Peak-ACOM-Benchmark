@@ -1,0 +1,40 @@
+{
+  "num_samples": 512,
+  "forward_model": "coherent_first_born",
+  "compute_backend": "cpu",
+  "k_max_Ainv": 1.5,
+  "detector_q_max_Ainv": 1.6,
+  "cuda_batch_size": null,
+  "roles": [
+    "study_001"
+  ],
+  "image_path": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_001_first_born_expectation_512.h5",
+  "physical_oracle_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_001_first_born_oracle_512.h5",
+  "raw_reflections_path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_001_first_born_trace_512.h5",
+  "image_shape": [
+    512,
+    512
+  ],
+  "mean_amortized_seconds_per_pattern": 0.25066935747895513,
+  "total_amortized_pattern_seconds": 128.34271102922503,
+  "mean_render_seconds_per_pattern": 0.25000078485732047,
+  "total_render_seconds": 128.00040184694808,
+  "mean_postprocess_seconds_per_pattern": 0.0006685726216346666,
+  "total_postprocess_seconds": 0.3423091822769493,
+  "generation_wall_seconds": 130.48099723400082,
+  "cuda_batches": [],
+  "oracle_diagnostics": {
+    "candidate_reflections": 354928,
+    "merged_disks_before_threshold": 60436,
+    "retained_disks": 34547,
+    "rejected_edge": 0,
+    "rejected_low_intensity": 25889
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  }
+}

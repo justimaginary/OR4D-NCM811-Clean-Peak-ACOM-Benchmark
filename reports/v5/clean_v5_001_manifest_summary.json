@@ -1,0 +1,13 @@
+{
+  "dataset_id": "OR4D-NCM811-CleanImage-v5",
+  "sample_count": 512,
+  "groups": {
+    "exact_001": 32,
+    "near_001": 320,
+    "transition_001": 96,
+    "control_100": 32,
+    "control_110": 32
+  },
+  "output": "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_001_orientations.jsonl",
+  "headline_included": false
+}

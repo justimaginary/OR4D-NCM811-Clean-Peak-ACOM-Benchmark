@@ -1,0 +1,65 @@
+{
+  "count_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_counted_2048.h5",
+  "output": "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_instrument_noise_2048.h5",
+  "samples": 2048,
+  "doses_electrons": [
+    100,
+    300,
+    1000,
+    3000,
+    10000,
+    30000,
+    100000,
+    300000,
+    1000000
+  ],
+  "repeats": 5,
+  "noise_model": "empad_g2_gaussian_read_noise_after_frame_sum",
+  "reference_detector": "EMPAD-G2",
+  "source_doi": "10.1017/S1431927621013701",
+  "levels": [
+    {
+      "id": "noiseless",
+      "poisson_shot_noise": false,
+      "summed_frame_count": 0,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.0
+    },
+    {
+      "id": "poisson_only",
+      "poisson_shot_noise": true,
+      "summed_frame_count": 0,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.0
+    },
+    {
+      "id": "empad_g2_1frame",
+      "poisson_shot_noise": true,
+      "summed_frame_count": 1,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.008666666666666666
+    },
+    {
+      "id": "empad_g2_4frames",
+      "poisson_shot_noise": true,
+      "summed_frame_count": 4,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.017333333333333333
+    },
+    {
+      "id": "empad_g2_16frames",
+      "poisson_shot_noise": true,
+      "summed_frame_count": 16,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.034666666666666665
+    },
+    {
+      "id": "empad_g2_64frames",
+      "poisson_shot_noise": true,
+      "summed_frame_count": 64,
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.06933333333333333
+    }
+  ],
+  "seed_shape": [
+    2048,
+    9,
+    6,
+    5
+  ],
+  "git_commit": "aba9d4168d7d13016ded14c2e48c1cb9ed37778d"
+}

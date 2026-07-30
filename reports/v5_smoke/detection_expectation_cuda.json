@@ -1,0 +1,23 @@
+{
+  "source_image_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_expectation_smoke.h5",
+  "track": "expectation",
+  "detectors": [
+    "py4dstem"
+  ],
+  "compute_backend": "cuda",
+  "runs": [
+    {
+      "variant": "expectation",
+      "detector": "py4dstem",
+      "compute_backend": "cuda",
+      "output": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/detected_expectation_smoke_cuda/clean_expectation_py4dstem_peaks_smoke.h5",
+      "num_samples": 64,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 4.588522110483609,
+      "mean_seconds": 0.07169565797630639,
+      "p95_seconds": 0.07169664674511296,
+      "throughput_patterns_per_second": 13.947846051297482
+    }
+  ]
+}

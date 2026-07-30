@@ -1,0 +1,27 @@
+{
+  "expectation_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_cpu_smoke8.h5",
+  "output": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_dose_noiseless_smoke8.h5",
+  "samples": 8,
+  "shape": [
+    8,
+    9,
+    512,
+    512
+  ],
+  "doses_electrons": [
+    100,
+    300,
+    1000,
+    3000,
+    10000,
+    30000,
+    100000,
+    300000,
+    1000000
+  ],
+  "noise_model": "none",
+  "total_seconds": 0.6988320399541408,
+  "git_commit": "fab8b0c7c60326661a1cc465805bb80a31844c73",
+  "source_sha256": "ec4f434b0d046fc0bd06cd0a13713635845a24a88285a7e300e40224945b054d",
+  "output_sha256": "930459f90cd5deb5fd87c37f95d62e21e4a8cc90c1404072562fd01a47894666"
+}

@@ -1,0 +1,14 @@
+name: or4d-clean
+channels:
+  - defaults
+dependencies:
+  - numpy[version='<2']
+  - scipy
+  - scikit-image
+  - pip
+  - h5py
+  - pymatgen
+  - python=3.11
+  - pyyaml
+  - matplotlib
+prefix: /home/xietianhong/miniconda3/envs/or4d-clean

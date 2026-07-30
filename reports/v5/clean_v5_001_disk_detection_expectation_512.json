@@ -1,0 +1,62 @@
+{
+  "source_image_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_001_first_born_expectation_512.h5",
+  "track": "expectation",
+  "detectors": [
+    "autodisk",
+    "py4dstem",
+    "dog_rgm"
+  ],
+  "compute_backend": "cpu",
+  "k_max_Ainv": 1.5,
+  "noise_manifest": null,
+  "runs": [
+    {
+      "variant": "expectation",
+      "detector": "autodisk",
+      "compute_backend": "cpu",
+      "dose_electrons": null,
+      "noise_level_id": "none",
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.0,
+      "output": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/detected_001_expectation_512/clean_expectation_autodisk_peaks_first_born.h5",
+      "num_samples": 512,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 89.15609891468193,
+      "mean_seconds": 0.17413300569273815,
+      "p95_seconds": 0.1776590941939503,
+      "throughput_patterns_per_second": 5.742736685798233
+    },
+    {
+      "variant": "expectation",
+      "detector": "py4dstem",
+      "compute_backend": "cpu",
+      "dose_electrons": null,
+      "noise_level_id": "none",
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.0,
+      "output": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/detected_001_expectation_512/clean_expectation_py4dstem_peaks_first_born.h5",
+      "num_samples": 512,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 65.1359174742829,
+      "mean_seconds": 0.1272185888169588,
+      "p95_seconds": 0.2817393663106486,
+      "throughput_patterns_per_second": 7.860486500434248
+    },
+    {
+      "variant": "expectation",
+      "detector": "dog_rgm",
+      "compute_backend": "cpu",
+      "dose_electrons": null,
+      "noise_level_id": "none",
+      "read_noise_sigma_primary_e_rms_per_pixel": 0.0,
+      "output": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/detected_001_expectation_512/clean_expectation_dog_rgm_peaks_first_born.h5",
+      "num_samples": 512,
+      "num_failures": 0,
+      "failures": [],
+      "total_seconds": 53.83703801629599,
+      "mean_seconds": 0.10515046487557811,
+      "p95_seconds": 0.10734432897879742,
+      "throughput_patterns_per_second": 9.510181445068024
+    }
+  ]
+}
