@@ -782,19 +782,20 @@ def render_kinematic_cbed_batch_cuda(
         * thickness_amplitude
     )
     component_intensity = cp.sum(cp.abs(component) ** 2, axis=(1, 2))
-    scattered_amplitude = cp.zeros(
-        (len(matrices), high_ny, high_nx), dtype=cp.complex64
+    scattered_real = cp.zeros(
+        (len(matrices), high_ny, high_nx), dtype=cp.float32
     )
+    scattered_imag = cp.zeros_like(scattered_real)
     flat_indices = (
         batch_index[:, None, None] * (high_ny * high_nx)
         + rows_full * high_nx
         + cols_full
     )
-    cp.add.at(
-        scattered_amplitude.ravel(),
-        flat_indices[valid],
-        component[valid],
-    )
+    valid_indices = flat_indices[valid]
+    valid_component = component[valid]
+    cp.add.at(scattered_real.ravel(), valid_indices, valid_component.real)
+    cp.add.at(scattered_imag.ravel(), valid_indices, valid_component.imag)
+    scattered_amplitude = scattered_real + 1j * scattered_imag
     scattered = cp.abs(scattered_amplitude) ** 2
     scattered = scattered.reshape(
         len(matrices), ny, oversampling, nx, oversampling
@@ -812,6 +813,8 @@ def render_kinematic_cbed_batch_cuda(
         gpu_matrices,
         g_sample,
         scattered_amplitude,
+        scattered_real,
+        scattered_imag,
         scattered,
         component,
         thickness_amplitude,
