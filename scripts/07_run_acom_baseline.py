@@ -215,6 +215,14 @@ def parse_args() -> argparse.Namespace:
         ),
     )
     parser.add_argument(
+        "--ground-truth-id-prefix",
+        default="",
+        help=(
+            "Explicit prefix added to ground-truth IDs before matching peak IDs "
+            "(V5 image/peak files use 'clean_' before orientation_id)."
+        ),
+    )
+    parser.add_argument(
         "--orientation-file",
         type=Path,
         help=(
@@ -297,10 +305,17 @@ def main() -> None:
     )
     use_cuda = bool(acom["cuda"]) if args.cuda is None else bool(args.cuda)
     samples = read_peak_h5(peak_path)
-    ground_truth = unique_records_by_id(
+    ground_truth_unprefixed = unique_records_by_id(
         read_jsonl(gt_path),
         source=str(gt_path),
     )
+    ground_truth: dict[str, dict] = {}
+    for ground_truth_id, record in ground_truth_unprefixed.items():
+        sample_id = f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized["ground_truth_source_id"] = ground_truth_id
+        ground_truth[sample_id] = normalized
     sample_ids = [str(sample["sample_id"]) for sample in samples]
     if len(sample_ids) != len(set(sample_ids)):
         raise ValueError("public/clean_peaks.h5 contains duplicate sample IDs")
@@ -552,6 +567,7 @@ def main() -> None:
         "k_max_Ainv": k_max,
         "source_peak_file": str(peak_path),
         "ground_truth_file": str(gt_path),
+        "ground_truth_id_prefix": args.ground_truth_id_prefix,
         "orientation_manifest_file": str(manifest_path),
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
