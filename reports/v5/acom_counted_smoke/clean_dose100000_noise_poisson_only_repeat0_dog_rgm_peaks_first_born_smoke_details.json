@@ -1,0 +1,377 @@
+{
+  "dataset_id": "OR4D-NCM811-CleanPeak-acom-v3",
+  "output_tag": "clean_dose100000_noise_poisson_only_repeat0_dog_rgm_peaks_first_born_smoke",
+  "acom_angle_step_zone_axis_deg": 2.0,
+  "acom_angle_step_in_plane_deg": 2.0,
+  "acom_power_intensity_experiment": 0.25,
+  "acom_power_intensity_simulated": 0.25,
+  "acom_cuda": true,
+  "k_max_Ainv": 1.5,
+  "source_peak_file": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/detected_dose_ladder_poisson_smoke8/clean_dose100000_noise_poisson_only_repeat0_dog_rgm_peaks_first_born_smoke.h5",
+  "ground_truth_file": "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_orientations.jsonl",
+  "ground_truth_id_prefix": "clean_",
+  "orientation_manifest_file": "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_orientations.jsonl",
+  "insufficient_peaks_policy": "skip",
+  "num_input_samples": 8,
+  "num_matched_samples": 8,
+  "num_indexing_failures": 0,
+  "indexing_failures": [],
+  "source_git_revision": "a613c202658c3f8e252602a867e6218c439aa481",
+  "primary_metric": "friedel_equivalent_misorientation_deg",
+  "headline_sample_role": "headline_core",
+  "sample_counts_by_role": {
+    "headline_core": 8
+  },
+  "runtime": {
+    "plan_build_seconds": 1.2121176000218838,
+    "matching": {
+      "total_seconds": 0.09710570680908859,
+      "mean_seconds": 0.012138213351136073,
+      "p50_seconds": 0.011721140006557107,
+      "p90_seconds": 0.013400593982078135,
+      "p99_seconds": 0.014316519452258944,
+      "throughput_samples_per_second": 82.38444745300224
+    }
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18",
+    "pymatgen": "2024.7.18",
+    "h5py": "3.16.0"
+  },
+  "system": {
+    "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.39",
+    "processor": "x86_64"
+  },
+  "sha256": {
+    "config": "c898559f5b7cd770485dc0222bc4448e860a797ef28d610c47df708f31ecec91",
+    "cif": "60f28f9d4ace01baeab707d22c8de267ce0c7759c3574598fb1abe84e4fef94f",
+    "orientation_manifest": "54145770b6bfa251621077bdea2e8357853da3c21e3341475f7745a03a57d492",
+    "source_peaks": "7fc1ae285e29d7040fb0a0841871812d2d04eafb6567d6b23bba10c0384597d8",
+    "ground_truth": "54145770b6bfa251621077bdea2e8357853da3c21e3341475f7745a03a57d492"
+  },
+  "matched_model_limitation": "Clean inputs and ACOM templates use the same CIF and py4DSTEM kinematical model; this measures self-consistency, not real-data or cross-simulator generalization.",
+  "samples": [
+    {
+      "sample_id": "clean_v5_core_0000",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 64,
+      "correlation_score": 2.6445163625808736,
+      "zone_axis_plan_index": 1075,
+      "in_plane_plan_index": 70,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        66.66666666666667,
+        90.0,
+        73.25062302459878
+      ],
+      "prediction_seconds": 0.014418288948945701,
+      "strict_misorientation_deg": 7.6304808378769575,
+      "friedel_equivalent_misorientation_deg": 7.6304808378769575,
+      "misorientation_deg": 7.6304808378769575,
+      "nearest_discrete_search_seed_misorientation_deg": 0.4788027885740197,
+      "nearest_zone_axis_node_misorientation_deg": 0.4171417748390787,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.11414458628097912,
+          0.3792758817646823,
+          0.9182161068802742
+        ],
+        [
+          -0.264616894431357,
+          -0.8792603244295008,
+          0.3960797660391565
+        ],
+        [
+          0.9575744945455934,
+          -0.2881858556483155,
+          2.6280261807158024e-16
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0001",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 70,
+      "correlation_score": 2.2953491560305332,
+      "zone_axis_plan_index": 565,
+      "in_plane_plan_index": 116,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        112.72727272727273,
+        65.99999999999999,
+        298.7475434049325
+      ],
+      "prediction_seconds": 0.011362497927621007,
+      "strict_misorientation_deg": 65.9140199529944,
+      "friedel_equivalent_misorientation_deg": 1.3038762328947577,
+      "misorientation_deg": 1.3038762328947577,
+      "nearest_discrete_search_seed_misorientation_deg": 0.7278428774906751,
+      "nearest_zone_axis_node_misorientation_deg": 0.4649641058105343,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.1431032726979824,
+          -0.5191584542196355,
+          -0.8426125757163878
+        ],
+        [
+          -0.581380098226119,
+          -0.7330946944035023,
+          0.35294383465931733
+        ],
+        [
+          -0.8009485843234352,
+          0.43937076421823273,
+          -0.4067366430758004
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0002",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 52,
+      "correlation_score": 2.981838401054967,
+      "zone_axis_plan_index": 137,
+      "in_plane_plan_index": 119,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        116.25,
+        32.000000000000014,
+        300.91057806507695
+      ],
+      "prediction_seconds": 0.011117253918200731,
+      "strict_misorientation_deg": 86.59325328604902,
+      "friedel_equivalent_misorientation_deg": 1.9709745918306576,
+      "misorientation_deg": 1.9709745918306576,
+      "nearest_discrete_search_seed_misorientation_deg": 1.1402712486157753,
+      "nearest_zone_axis_node_misorientation_deg": 0.9179144841144743,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.4253609604903239,
+          -0.7701859153313022,
+          -0.4752701433038197
+        ],
+        [
+          -0.7825324269587677,
+          -0.5768104396321141,
+          0.2343772972995211
+        ],
+        [
+          -0.45465487355660267,
+          0.27221934640412887,
+          -0.8480480961564258
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0003",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 140,
+      "correlation_score": 3.3117748588644598,
+      "zone_axis_plan_index": 297,
+      "in_plane_plan_index": 148,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        65.21739130434784,
+        46.00000000000001,
+        230.60967452028117
+      ],
+      "prediction_seconds": 0.012284899014048278,
+      "strict_misorientation_deg": 98.03587491350952,
+      "friedel_equivalent_misorientation_deg": 1.4798998079791361,
+      "misorientation_deg": 1.4798998079791361,
+      "nearest_discrete_search_seed_misorientation_deg": 0.8417350236428065,
+      "nearest_zone_axis_node_misorientation_deg": 0.6133570169078238,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.2214085773132628,
+          -0.7241885446675306,
+          0.6530920254178894
+        ],
+        [
+          0.8011956090462895,
+          0.516880103465142,
+          0.30153035450317356
+        ],
+        [
+          -0.5559351022709956,
+          0.4564930562606492,
+          0.6946583704589973
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0004",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 96,
+      "correlation_score": 2.677021458056938,
+      "zone_axis_plan_index": 43,
+      "in_plane_plan_index": 76,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        67.5,
+        16.0,
+        264.7381644713709
+      ],
+      "prediction_seconds": 0.01161896693520248,
+      "strict_misorientation_deg": 8.591807946559928,
+      "friedel_equivalent_misorientation_deg": 8.591807946559928,
+      "misorientation_deg": 8.591807946559928,
+      "nearest_discrete_search_seed_misorientation_deg": 0.7196146773461045,
+      "nearest_zone_axis_node_misorientation_deg": 0.624534272497111,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.849252727722899,
+          0.46251515984756975,
+          -0.25465571143485627
+        ],
+        [
+          0.4510352845885312,
+          -0.8862509528913063,
+          -0.10548184941208713
+        ],
+        [
+          -0.2744758213602036,
+          -0.02527796294064435,
+          -0.9612616959383189
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0005",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 87,
+      "correlation_score": 2.0861072388011808,
+      "zone_axis_plan_index": 436,
+      "in_plane_plan_index": 45,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        117.93103448275862,
+        58.00000000000001,
+        152.615195723121
+      ],
+      "prediction_seconds": 0.011516047990880907,
+      "strict_misorientation_deg": 84.55102752266774,
+      "friedel_equivalent_misorientation_deg": 1.7257056607249364,
+      "misorientation_deg": 1.7257056607249364,
+      "nearest_discrete_search_seed_misorientation_deg": 0.9568604420998498,
+      "nearest_zone_axis_node_misorientation_deg": 0.8566316713781517,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.20056666304968918,
+          0.6311746242393791,
+          -0.7492607072237213
+        ],
+        [
+          0.898675114931286,
+          0.18598137486880845,
+          0.3972328863590572
+        ],
+        [
+          0.3900718542478452,
+          -0.753013626648407,
+          -0.529919264233205
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0006",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 99,
+      "correlation_score": 2.4349667924113194,
+      "zone_axis_plan_index": 775,
+      "in_plane_plan_index": 80,
+      "mirror_match": false,
+      "euler_angles_deg": [
+        66.31578947368422,
+        75.99999999999999,
+        94.0590544254801
+      ],
+      "prediction_seconds": 0.011823313077911735,
+      "strict_misorientation_deg": 54.68991300780427,
+      "friedel_equivalent_misorientation_deg": 0.11901499806766343,
+      "misorientation_deg": 0.11901499806766343,
+      "nearest_discrete_search_seed_misorientation_deg": 0.41941754158412337,
+      "nearest_zone_axis_node_misorientation_deg": 0.11559405053899328,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          -0.24942375711766474,
+          0.3850057985608483,
+          0.8885709450909545
+        ],
+        [
+          -0.03211249031257514,
+          -0.9203549945517181,
+          0.38976335380539784
+        ],
+        [
+          0.9678618586096019,
+          0.06868201422665492,
+          0.24192189559966767
+        ]
+      ]
+    },
+    {
+      "sample_id": "clean_v5_core_0007",
+      "sampling_type": "sobol_so3",
+      "sample_role": "headline_core",
+      "probe_axis_id": null,
+      "probe_offset_deg": null,
+      "num_peaks": 189,
+      "correlation_score": 2.9436645218306423,
+      "zone_axis_plan_index": 658,
+      "in_plane_plan_index": 107,
+      "mirror_match": true,
+      "euler_angles_deg": [
+        72.0,
+        70.0,
+        321.6405501423752
+      ],
+      "prediction_seconds": 0.01296443899627775,
+      "strict_misorientation_deg": 54.230698453770486,
+      "friedel_equivalent_misorientation_deg": 0.9421638939765122,
+      "misorientation_deg": 0.9421638939765122,
+      "nearest_discrete_search_seed_misorientation_deg": 1.025793442127213,
+      "nearest_zone_axis_node_misorientation_deg": 0.9408777728383833,
+      "predicted_orientation_matrix_sample_to_crystal": [
+        [
+          0.44417716780625693,
+          -0.06328934344496254,
+          -0.8937007903129087
+        ],
+        [
+          -0.6801641791627825,
+          -0.673094027926446,
+          -0.2903809893115785
+        ],
+        [
+          -0.5831666425503355,
+          0.7368438698775055,
+          -0.34202014332566877
+        ]
+      ]
+    }
+  ]
+}
