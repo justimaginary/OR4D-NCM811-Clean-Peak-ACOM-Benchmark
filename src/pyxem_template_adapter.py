@@ -176,7 +176,11 @@ def match_prepared_batch(
         intensity_transform_function=quarter_power_nonnegative,
         normalize_images=True,
         normalize_templates=True,
-        chunks=(1, min(32, prepared.shape[0]), None, None),
+        # Each caller batch is already bounded in memory.  ``None`` preserves
+        # the single navigation chunk after Pyxem promotes a 1-D navigation
+        # axis to [1, N]; explicitly splitting N triggers a Pyxem/Dask chunk
+        # shape mismatch for batches larger than 32.
+        chunks=None,
         parallel_workers=1 if target == "gpu" else 8,
         target=target,
         scheduler="threads",
