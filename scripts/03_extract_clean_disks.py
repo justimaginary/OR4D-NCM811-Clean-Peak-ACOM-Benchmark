@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402
 from or4d_common import load_config, write_peak_h5  # noqa: E402
 from py4dstem_disk_adapter import detect_py4dstem_bragg_disks  # noqa: E402
+from dog_rgm_disk_adapter import detect_dog_rgm_peaks  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,7 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--detector",
         action="append",
-        choices=("autodisk", "py4dstem"),
+        choices=("autodisk", "py4dstem", "dog_rgm"),
         help="Detector to run; default runs both.",
     )
     parser.add_argument("--dose-index", type=int, action="append")
@@ -94,7 +95,7 @@ def main() -> None:
     args = parse_args()
     config = load_config()
     image_cfg = config["clean_image"]
-    detectors = args.detector or ["autodisk", "py4dstem"]
+    detectors = args.detector or ["autodisk", "py4dstem", "dog_rgm"]
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_path = args.image_file.resolve()
     report_rows: list[dict] = []
@@ -147,7 +148,15 @@ def main() -> None:
                                 k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                                 central_exclusion_Ainv=central_exclusion,
                             )
-                        else:
+                            peak_diagnostics = {
+                                "initial_row_px": result.initial_row_px,
+                                "initial_col_px": result.initial_col_px,
+                                "refined_row_px": result.refined_row_px,
+                                "refined_col_px": result.refined_col_px,
+                                "correlation_score": result.correlation_score,
+                                "rgm_score": result.rgm_score,
+                            }
+                        elif detector_name == "py4dstem":
                             result = detect_py4dstem_bragg_disks(
                                 image,
                                 qx_axis,
@@ -157,11 +166,41 @@ def main() -> None:
                                 k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                                 central_exclusion_Ainv=central_exclusion,
                             )
+                            peak_diagnostics = {
+                                "refined_row_px": result.row_px,
+                                "refined_col_px": result.col_px,
+                                "correlation_score": result.correlation_intensity,
+                            }
+                        else:
+                            result = detect_dog_rgm_peaks(
+                                image,
+                                qx_axis,
+                                qy_axis,
+                                vacuum_probe,
+                                image_cfg["dog_rgm"],
+                                k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                                central_exclusion_Ainv=central_exclusion,
+                            )
+                            peak_diagnostics = {
+                                "initial_row_px": result.initial_row_px,
+                                "initial_col_px": result.initial_col_px,
+                                "refined_row_px": result.refined_row_px,
+                                "refined_col_px": result.refined_col_px,
+                                "dog_score": result.dog_score,
+                                "rgm_score": result.rgm_score,
+                            }
                         sample = {
                             "sample_id": sample_id,
                             "qx": result.qx_Ainv,
                             "qy": result.qy_Ainv,
                             "intensity": result.intensity,
+                            "peak_diagnostics": peak_diagnostics,
+                            "sample_metadata": {
+                                "detection_status": "ok",
+                                "failure_type": "",
+                                "failure_message": "",
+                                "runtime_seconds": 0.0,
+                            },
                         }
                     except Exception as error:
                         failures.append(
@@ -176,8 +215,16 @@ def main() -> None:
                             "qx": np.empty(0, dtype=np.float32),
                             "qy": np.empty(0, dtype=np.float32),
                             "intensity": np.empty(0, dtype=np.float32),
+                            "peak_diagnostics": {},
+                            "sample_metadata": {
+                                "detection_status": "failed",
+                                "failure_type": type(error).__name__,
+                                "failure_message": str(error),
+                                "runtime_seconds": 0.0,
+                            },
                         }
                     elapsed = time.perf_counter() - started
+                    sample["sample_metadata"]["runtime_seconds"] = elapsed
                     timings.append(elapsed)
                     samples.append(sample)
                     print(
@@ -210,7 +257,11 @@ def main() -> None:
                     "detector_config": image_cfg[
                         "autodisk"
                         if detector_name == "autodisk"
-                        else "py4dstem_find_bragg_disks"
+                        else (
+                            "py4dstem_find_bragg_disks"
+                            if detector_name == "py4dstem"
+                            else "dog_rgm"
+                        )
                     ],
                 }
                 write_peak_h5(output, samples, attrs)

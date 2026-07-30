@@ -409,6 +409,23 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
     qy_parts: list[np.ndarray] = []
     intensity_parts: list[np.ndarray] = []
     sample_ids: list[str] = []
+    peak_diagnostic_keys = sorted(
+        {
+            key
+            for sample in samples
+            for key in sample.get("peak_diagnostics", {})
+        }
+    )
+    peak_diagnostic_parts: dict[str, list[np.ndarray]] = {
+        key: [] for key in peak_diagnostic_keys
+    }
+    sample_metadata_keys = sorted(
+        {
+            key
+            for sample in samples
+            for key in sample.get("sample_metadata", {})
+        }
+    )
 
     for sample in samples:
         sample_ids.append(str(sample["sample_id"]))
@@ -420,6 +437,18 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
         qx_parts.append(qx)
         qy_parts.append(qy)
         intensity_parts.append(intensity)
+        for key in peak_diagnostic_keys:
+            values = sample.get("peak_diagnostics", {}).get(key)
+            if values is None:
+                array = np.full(len(qx), np.nan, dtype=np.float32)
+            else:
+                array = np.asarray(values, dtype=np.float32)
+                if len(array) != len(qx):
+                    raise ValueError(
+                        f"Peak diagnostic {key} length mismatch for "
+                        f"{sample['sample_id']}"
+                    )
+            peak_diagnostic_parts[key].append(array)
         offsets.append(offsets[-1] + len(qx))
 
     qx_all = np.concatenate(qx_parts) if qx_parts else np.empty(0, dtype=np.float32)
@@ -437,6 +466,30 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
         peaks.create_dataset("qy", data=qy_all, compression="gzip")
         peaks.create_dataset("intensity", data=i_all, compression="gzip")
         peaks.create_dataset("offsets", data=np.asarray(offsets, dtype=np.int64))
+        if peak_diagnostic_keys:
+            diagnostics = peaks.create_group("diagnostics")
+            for key in peak_diagnostic_keys:
+                values = np.concatenate(peak_diagnostic_parts[key])
+                diagnostics.create_dataset(key, data=values, compression="gzip")
+        if sample_metadata_keys:
+            metadata = h5.create_group("sample_diagnostics")
+            for key in sample_metadata_keys:
+                values = [
+                    sample.get("sample_metadata", {}).get(key, "")
+                    for sample in samples
+                ]
+                if any(isinstance(value, str) for value in values):
+                    metadata.create_dataset(
+                        key,
+                        data=np.asarray(
+                            [str(value) for value in values],
+                            dtype=h5py.string_dtype("utf-8"),
+                        ),
+                    )
+                else:
+                    metadata.create_dataset(
+                        key, data=np.asarray(values, dtype=np.float64)
+                    )
         for key, value in attrs.items():
             if isinstance(value, (dict, list, tuple)):
                 h5.attrs[key] = json.dumps(value, ensure_ascii=False)
