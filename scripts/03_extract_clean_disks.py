@@ -15,7 +15,10 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402
 from or4d_common import load_config, write_peak_h5  # noqa: E402
-from py4dstem_disk_adapter import detect_py4dstem_bragg_disks  # noqa: E402
+from py4dstem_disk_adapter import (  # noqa: E402
+    detect_py4dstem_bragg_disks,
+    detect_py4dstem_bragg_disks_batch,
+)
 from dog_rgm_disk_adapter import detect_dog_rgm_peaks  # noqa: E402
 
 
@@ -35,6 +38,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dose-index", type=int, action="append")
     parser.add_argument("--repeat", type=int, action="append")
+    parser.add_argument(
+        "--compute-backend",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="CUDA uses py4DSTEM's batched GPU implementation and requires --detector py4dstem.",
+    )
     parser.add_argument(
         "--output-dir", type=Path, default=ROOT / "diagnostics"
     )
@@ -96,6 +105,11 @@ def main() -> None:
     config = load_config()
     image_cfg = config["clean_image"]
     detectors = args.detector or ["autodisk", "py4dstem", "dog_rgm"]
+    if args.compute_backend == "cuda" and detectors != ["py4dstem"]:
+        raise ValueError(
+            "--compute-backend cuda currently requires exactly "
+            "--detector py4dstem; AutoDisk and DoG-RGM remain CPU methods"
+        )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_path = args.image_file.resolve()
     report_rows: list[dict] = []
@@ -134,6 +148,27 @@ def main() -> None:
                 samples: list[dict] = []
                 failures: list[dict] = []
                 timings: list[float] = []
+                batch_results = None
+                batch_seconds = None
+                if detector_name == "py4dstem" and args.compute_backend == "cuda":
+                    images = np.stack(
+                        [
+                            read_image(variant, sample_index)
+                            for sample_index in range(len(sample_ids))
+                        ]
+                    )
+                    batch_started = time.perf_counter()
+                    batch_results = detect_py4dstem_bragg_disks_batch(
+                        images,
+                        qx_axis,
+                        qy_axis,
+                        vacuum_probe,
+                        image_cfg["py4dstem_find_bragg_disks"],
+                        k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                        central_exclusion_Ainv=central_exclusion,
+                        cuda=True,
+                    )
+                    batch_seconds = time.perf_counter() - batch_started
                 for sample_index, sample_id in enumerate(sample_ids):
                     image = read_image(variant, sample_index)
                     started = time.perf_counter()
@@ -157,14 +192,20 @@ def main() -> None:
                                 "rgm_score": result.rgm_score,
                             }
                         elif detector_name == "py4dstem":
-                            result = detect_py4dstem_bragg_disks(
-                                image,
-                                qx_axis,
-                                qy_axis,
-                                vacuum_probe,
-                                image_cfg["py4dstem_find_bragg_disks"],
-                                k_max_Ainv=float(config["common"]["k_max_Ainv"]),
-                                central_exclusion_Ainv=central_exclusion,
+                            result = (
+                                batch_results[sample_index]
+                                if batch_results is not None
+                                else detect_py4dstem_bragg_disks(
+                                    image,
+                                    qx_axis,
+                                    qy_axis,
+                                    vacuum_probe,
+                                    image_cfg["py4dstem_find_bragg_disks"],
+                                    k_max_Ainv=float(
+                                        config["common"]["k_max_Ainv"]
+                                    ),
+                                    central_exclusion_Ainv=central_exclusion,
+                                )
                             )
                             peak_diagnostics = {
                                 "refined_row_px": result.row_px,
@@ -224,6 +265,8 @@ def main() -> None:
                             },
                         }
                     elapsed = time.perf_counter() - started
+                    if batch_seconds is not None:
+                        elapsed += batch_seconds / len(sample_ids)
                     sample["sample_metadata"]["runtime_seconds"] = elapsed
                     timings.append(elapsed)
                     samples.append(sample)
@@ -244,6 +287,7 @@ def main() -> None:
                 attrs = {
                     "track": f"clean_{variant['name']}",
                     "detector": detector_name,
+                    "compute_backend": args.compute_backend,
                     "source_image_file": str(source_path),
                     "dose_electrons": variant["dose_electrons"]
                     if variant["dose_electrons"] is not None
@@ -270,6 +314,7 @@ def main() -> None:
                     {
                         "variant": variant["name"],
                         "detector": detector_name,
+                        "compute_backend": args.compute_backend,
                         "output": str(output),
                         "num_samples": len(samples),
                         "num_failures": len(failures),
@@ -287,6 +332,7 @@ def main() -> None:
         "source_image_file": str(source_path),
         "track": args.track,
         "detectors": detectors,
+        "compute_backend": args.compute_backend,
         "runs": report_rows,
     }
     suffix = "_smoke" if "smoke" in source_path.stem else ""
