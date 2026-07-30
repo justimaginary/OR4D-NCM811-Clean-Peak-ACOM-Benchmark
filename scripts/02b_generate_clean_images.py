@@ -22,6 +22,7 @@ from kinematic_cbed import (  # noqa: E402
     ReflectionLibrary,
     render_acom_matched_cbed,
     render_kinematic_cbed,
+    render_kinematic_cbed_batch_cuda,
 )
 from or4d_common import cif_path, load_config, read_jsonl, write_peak_h5  # noqa: E402
 
@@ -58,6 +59,13 @@ def parse_args() -> argparse.Namespace:
         choices=("acom_matched", "coherent_first_born"),
         help="Override clean_image.forward_model.",
     )
+    parser.add_argument(
+        "--compute-backend",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="CUDA is available only for coherent_first_born.",
+    )
+    parser.add_argument("--batch-size", type=int)
     return parser.parse_args()
 
 
@@ -204,6 +212,10 @@ def main() -> None:
     config = load_config()
     image_cfg = config["clean_image"]
     forward_model = str(args.forward_model or image_cfg["forward_model"])
+    if args.compute_backend == "cuda" and forward_model != "coherent_first_born":
+        raise ValueError(
+            "--compute-backend cuda requires --forward-model coherent_first_born"
+        )
     orientations, subset = selected_orientations(args)
     image_path, oracle_path, raw_path = resolved_outputs(
         args, subset, forward_model
@@ -300,13 +312,43 @@ def main() -> None:
             ),
         )
         first = None
+        rendered_batches: dict[int, object] = {}
+        cuda_batch_size = int(
+            args.batch_size
+            or image_cfg.get("cuda_first_born", {}).get("batch_size", 16)
+        )
         for index, orientation in enumerate(orientations):
+            if args.compute_backend == "cuda" and index % cuda_batch_size == 0:
+                batch_start = index
+                batch_stop = min(
+                    batch_start + cuda_batch_size, len(orientations)
+                )
+                batch_matrices = np.asarray(
+                    [
+                        row["orientation_matrix_sample_to_crystal"]
+                        for row in orientations[batch_start:batch_stop]
+                    ],
+                    dtype=float,
+                )
+                batch_rendered = render_kinematic_cbed_batch_cuda(
+                    library,
+                    batch_matrices,
+                    image_cfg,
+                    k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                    direct_beam_fraction=args.direct_beam_fraction,
+                )
+                rendered_batches = {
+                    batch_start + offset: value
+                    for offset, value in enumerate(batch_rendered)
+                }
             start = time.perf_counter()
             sample_id = f"clean_{orientation['orientation_id']}"
             matrix = np.asarray(
                 orientation["orientation_matrix_sample_to_crystal"], dtype=float
             )
-            if forward_model == "acom_matched":
+            if args.compute_backend == "cuda":
+                rendered = rendered_batches[index]
+            elif forward_model == "acom_matched":
                 point_list = crystal.generate_diffraction_pattern(
                     orientation_matrix=matrix,
                     sigma_excitation_error=float(
@@ -421,11 +463,13 @@ def main() -> None:
                 f"seconds={elapsed:.3f}"
             )
             h5.flush()
+            rendered_batches.pop(index, None)
 
         assert first is not None
         h5.attrs["dataset_id"] = config["dataset"]["id"]
         h5.attrs["track"] = "clean_expectation"
         h5.attrs["forward_model"] = forward_model
+        h5.attrs["compute_backend"] = args.compute_backend
         h5.attrs["input_type"] = "diffraction_image"
         h5.attrs["intensity_model"] = (
             "py4DSTEM ACOM-matched kinematical support/intensity with coherent finite disks"

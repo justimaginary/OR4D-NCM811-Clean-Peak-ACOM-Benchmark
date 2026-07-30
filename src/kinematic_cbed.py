@@ -589,3 +589,313 @@ def render_kinematic_cbed(
         oracle_rejected_edge_count=rejected_edge,
         oracle_rejected_low_intensity_count=rejected_low_intensity,
     )
+
+
+def render_kinematic_cbed_batch_cuda(
+    library: ReflectionLibrary,
+    orientation_matrices_sample_to_crystal: np.ndarray,
+    config: dict[str, Any],
+    *,
+    k_max_Ainv: float,
+    direct_beam_fraction: float | None = None,
+) -> list[RenderedPattern]:
+    """Render a bounded batch of coherent First-Born patterns with CuPy.
+
+    Crystal metadata and ragged oracle construction remain on the CPU. The
+    expensive oversampled complex-wave accumulation, detector PSF and
+    downsampling are performed as one CUDA batch.
+    """
+    try:
+        import cupy as cp
+        from cupyx.scipy.ndimage import gaussian_filter as cupy_gaussian_filter
+    except ImportError as error:
+        raise RuntimeError(
+            "CUDA First-Born rendering requires CuPy in the active environment"
+        ) from error
+
+    matrices = np.asarray(
+        orientation_matrices_sample_to_crystal, dtype=np.float64
+    )
+    if matrices.ndim != 3 or matrices.shape[1:] != (3, 3):
+        raise ValueError("orientation matrices must have shape [N, 3, 3]")
+    if not np.allclose(
+        np.swapaxes(matrices, 1, 2) @ matrices,
+        np.eye(3)[None, :, :],
+        atol=1e-7,
+    ):
+        raise ValueError("orientation matrices are not orthonormal")
+    if not np.allclose(np.linalg.det(matrices), 1.0, atol=1e-7):
+        raise ValueError("orientation matrix determinant is not +1")
+    fraction = float(
+        config["canonical_direct_beam_fraction"]
+        if direct_beam_fraction is None
+        else direct_beam_fraction
+    )
+    if not 0.0 < fraction < 1.0:
+        raise ValueError("direct_beam_fraction must lie strictly between 0 and 1")
+
+    ny, nx = (int(value) for value in config["gpts"])
+    oversampling = int(config["oversampling"])
+    q_max = float(config["q_max_Ainv"])
+    center_offset_y, center_offset_x = (
+        float(value) for value in config.get("beam_center_offset_px", (0.0, 0.0))
+    )
+    center_y = (ny - 1) / 2.0 + center_offset_y
+    center_x = (nx - 1) / 2.0 + center_offset_x
+    q_pixel = 2.0 * q_max / max(nx, ny)
+    qx_axis = (np.arange(nx, dtype=float) - center_x) * q_pixel
+    qy_axis = (center_y - np.arange(ny, dtype=float)) * q_pixel
+    high_ny, high_nx = ny * oversampling, nx * oversampling
+    high_center_y = (high_ny - 1) / 2.0 + center_offset_y * oversampling
+    high_center_x = (high_nx - 1) / 2.0 + center_offset_x * oversampling
+    high_q_pixel = q_pixel / oversampling
+
+    wavelength_A = float(library.wavelength_A)
+    k0_Ainv = 1.0 / wavelength_A
+    disk_radius_Ainv = (
+        float(config["convergence_semiangle_mrad"]) * 1e-3 / wavelength_A
+    )
+    disk_radius_px = disk_radius_Ainv / q_pixel
+    thickness_A = float(config["thickness_nm"]) * 10.0
+    soft_edge = float(config["aperture_soft_edge_fraction"])
+    patch_half = int(np.ceil(disk_radius_Ainv / high_q_pixel)) + 2
+    patch_offsets = cp.arange(
+        -patch_half, patch_half + 2, dtype=cp.int32
+    )
+
+    # The direct/vacuum probe is orientation-independent.
+    direct_high = np.zeros((high_ny, high_nx), dtype=np.float32)
+    c0 = max(0, int(np.floor(high_center_x)) - patch_half)
+    c1 = min(high_nx, int(np.floor(high_center_x)) + patch_half + 2)
+    r0 = max(0, int(np.floor(high_center_y)) - patch_half)
+    r1 = min(high_ny, int(np.floor(high_center_y)) + patch_half + 2)
+    direct_cols = np.arange(c0, c1, dtype=float)[None, :]
+    direct_rows = np.arange(r0, r1, dtype=float)[:, None]
+    direct_qx = (direct_cols - high_center_x) * high_q_pixel
+    direct_qy = (high_center_y - direct_rows) * high_q_pixel
+    direct_aperture = _soft_circular_aperture_amplitude(
+        np.hypot(direct_qx, direct_qy), disk_radius_Ainv, soft_edge
+    )
+    direct_high[r0:r1, c0:c1] = direct_aperture.astype(np.float32) ** 2
+    direct = _downsample_mean(direct_high, oversampling)
+    psf_sigma = float(config.get("detector_psf_sigma_px", 0.0))
+    if psf_sigma > 0.0:
+        direct = gaussian_filter(direct, sigma=psf_sigma, mode="constant")
+    direct_probability = _normalize_probability(direct, "direct expectation")
+    vacuum_probe = direct / direct.max()
+
+    g_crystal = cp.asarray(library.g_crystal_Ainv, dtype=cp.float32)
+    structure_factor = cp.asarray(
+        library.structure_factor, dtype=cp.complex64
+    )
+    gpu_matrices = cp.asarray(matrices, dtype=cp.float32)
+    g_sample = cp.einsum("rj,bjk->brk", g_crystal, gpu_matrices)
+    projected_radius = cp.linalg.norm(g_sample[:, :, :2], axis=2)
+    finite_sf = cp.isfinite(structure_factor.real) & cp.isfinite(
+        structure_factor.imag
+    )
+    candidates = (
+        (cp.linalg.norm(g_sample, axis=2) >= 1e-10)
+        & finite_sf[None, :]
+        & (cp.abs(structure_factor)[None, :] > 0.0)
+        & (projected_radius > disk_radius_Ainv)
+        & (projected_radius <= float(k_max_Ainv) + 1e-12)
+    )
+    batch_index, reflection_index = cp.nonzero(candidates)
+    if not len(batch_index):
+        raise RuntimeError("CUDA First-Born batch contains no candidate reflection")
+    selected_g = g_sample[batch_index, reflection_index]
+    gx, gy, gz = selected_g[:, 0], selected_g[:, 1], selected_g[:, 2]
+    col_center = high_center_x + gx / high_q_pixel
+    row_center = high_center_y - gy / high_q_pixel
+    base_col = cp.floor(col_center).astype(cp.int32)
+    base_row = cp.floor(row_center).astype(cp.int32)
+    rows = base_row[:, None, None] + patch_offsets[None, :, None]
+    cols = base_col[:, None, None] + patch_offsets[None, None, :]
+    rows_full = cp.broadcast_to(
+        rows, (len(rows), len(patch_offsets), len(patch_offsets))
+    )
+    cols_full = cp.broadcast_to(
+        cols, (len(cols), len(patch_offsets), len(patch_offsets))
+    )
+    valid = (
+        (rows_full >= 0)
+        & (rows_full < high_ny)
+        & (cols_full >= 0)
+        & (cols_full < high_nx)
+    )
+    qx = (cols_full.astype(cp.float32) - high_center_x) * high_q_pixel
+    qy = (high_center_y - rows_full.astype(cp.float32)) * high_q_pixel
+    kappa_x = qx - gx[:, None, None]
+    kappa_y = qy - gy[:, None, None]
+    kappa_radius = cp.hypot(kappa_x, kappa_y)
+    inner = disk_radius_Ainv * (1.0 - soft_edge)
+    aperture = cp.where(
+        kappa_radius <= inner,
+        1.0,
+        cp.where(
+            kappa_radius < disk_radius_Ainv,
+            0.5
+            * (
+                1.0
+                + cp.cos(
+                    cp.pi
+                    * (kappa_radius - inner)
+                    / (disk_radius_Ainv - inner)
+                )
+            ),
+            0.0,
+        ),
+    ).astype(cp.float32)
+    aperture *= valid
+
+    defocus = float(config.get("defocus_A", 0.0))
+    astigmatism = float(config.get("astigmatism_A", 0.0))
+    astigmatism_angle = np.deg2rad(
+        float(config.get("astigmatism_angle_deg", 0.0))
+    )
+    theta = cp.arctan2(kappa_y, kappa_x)
+    effective_defocus = defocus + astigmatism * cp.cos(
+        2.0 * (theta - astigmatism_angle)
+    )
+    probe_phase = cp.exp(
+        -1j
+        * cp.pi
+        * wavelength_A
+        * effective_defocus
+        * (kappa_x**2 + kappa_y**2)
+    ).astype(cp.complex64)
+    kz_incident = cp.sqrt(
+        cp.maximum(k0_Ainv**2 - kappa_x**2 - kappa_y**2, 0.0)
+    )
+    kz_outgoing = cp.sqrt(cp.maximum(k0_Ainv**2 - qx**2 - qy**2, 0.0))
+    delta_kz = kz_outgoing - kz_incident - gz[:, None, None]
+    thickness_amplitude = (
+        thickness_A
+        * cp.sinc(thickness_A * delta_kz)
+        * cp.exp(1j * cp.pi * thickness_A * delta_kz)
+    ).astype(cp.complex64)
+    component = (
+        structure_factor[reflection_index, None, None]
+        * aperture
+        * probe_phase
+        * thickness_amplitude
+    )
+    component_intensity = cp.sum(cp.abs(component) ** 2, axis=(1, 2))
+    scattered_amplitude = cp.zeros(
+        (len(matrices), high_ny, high_nx), dtype=cp.complex64
+    )
+    flat_indices = (
+        batch_index[:, None, None] * (high_ny * high_nx)
+        + rows_full * high_nx
+        + cols_full
+    )
+    cp.add.at(
+        scattered_amplitude.ravel(),
+        flat_indices[valid],
+        component[valid],
+    )
+    scattered = cp.abs(scattered_amplitude) ** 2
+    scattered = scattered.reshape(
+        len(matrices), ny, oversampling, nx, oversampling
+    ).mean(axis=(2, 4))
+    if psf_sigma > 0.0:
+        scattered = cupy_gaussian_filter(
+            scattered, sigma=(0.0, psf_sigma, psf_sigma), mode="constant"
+        )
+    scattered_cpu = cp.asnumpy(scattered)
+    candidate_batch_cpu = cp.asnumpy(batch_index)
+    candidate_reflection_cpu = cp.asnumpy(reflection_index)
+    candidate_g_cpu = cp.asnumpy(selected_g)
+    component_intensity_cpu = cp.asnumpy(component_intensity)
+    del (
+        gpu_matrices,
+        g_sample,
+        scattered_amplitude,
+        scattered,
+        component,
+        thickness_amplitude,
+    )
+    cp.get_default_memory_pool().free_all_blocks()
+
+    results: list[RenderedPattern] = []
+    hkl_all = np.asarray(library.hkl, dtype=np.int32)
+    for index in range(len(matrices)):
+        selected = candidate_batch_cpu == index
+        positive = selected & (component_intensity_cpu > 0.0)
+        qxy = candidate_g_cpu[positive, :2]
+        component_values = component_intensity_cpu[positive]
+        reflection_hkl = hkl_all[candidate_reflection_cpu[positive]]
+        if not len(qxy):
+            raise RuntimeError(
+                f"CUDA First-Born sample {index} contains no positive reflection"
+            )
+        scattered_probability = _normalize_probability(
+            scattered_cpu[index], "scattered expectation"
+        )
+        expectation = (
+            fraction * direct_probability
+            + (1.0 - fraction) * scattered_probability
+        )
+        expectation /= expectation.sum()
+        candidate_count = len(qxy)
+        merged_qxy, _, merged_hkl = _merge_oracle_disks(
+            qxy,
+            component_values,
+            reflection_hkl,
+            tolerance_Ainv=float(config["oracle_merge_distance_px"])
+            * q_pixel,
+        )
+        merged_count = len(merged_qxy)
+        merged_qxy, merged_intensity, merged_hkl, rejected_edge = (
+            _integrate_image_matched_oracle(
+                scattered_cpu[index],
+                merged_qxy,
+                merged_hkl,
+                qx_axis,
+                qy_axis,
+                integration_radius_px=(
+                    float(config["oracle_integration_radius_fraction"])
+                    * disk_radius_px
+                ),
+                require_full_disk=bool(config["oracle_require_full_disk"]),
+            )
+        )
+        relative = merged_intensity / merged_intensity.max()
+        keep = relative >= float(
+            config["physical_oracle_min_relative_intensity"]
+        )
+        rejected_low = int(np.count_nonzero(~keep))
+        merged_qxy = merged_qxy[keep]
+        merged_intensity = merged_intensity[keep]
+        merged_hkl = merged_hkl[keep]
+        relative = relative[keep]
+        order = np.lexsort(
+            (
+                merged_qxy[:, 1],
+                merged_qxy[:, 0],
+                np.linalg.norm(merged_qxy, axis=1),
+            )
+        )
+        results.append(
+            RenderedPattern(
+                expectation=expectation.astype(np.float32),
+                direct_expectation=direct_probability.astype(np.float32),
+                scattered_expectation=scattered_probability.astype(np.float32),
+                vacuum_probe=vacuum_probe.astype(np.float32),
+                qx_axis_Ainv=qx_axis.astype(np.float32),
+                qy_axis_Ainv=qy_axis.astype(np.float32),
+                beam_center_px=(float(center_y), float(center_x)),
+                disk_radius_px=float(disk_radius_px),
+                oracle_qx_Ainv=merged_qxy[order, 0].astype(np.float32),
+                oracle_qy_Ainv=merged_qxy[order, 1].astype(np.float32),
+                oracle_intensity_raw=merged_intensity[order].astype(np.float32),
+                oracle_intensity_normalized=relative[order].astype(np.float32),
+                oracle_hkl=merged_hkl[order],
+                oracle_candidate_reflection_count=candidate_count,
+                oracle_merged_disk_count=merged_count,
+                oracle_rejected_edge_count=rejected_edge,
+                oracle_rejected_low_intensity_count=rejected_low,
+            )
+        )
+    return results

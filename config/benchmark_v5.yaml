@@ -22,6 +22,10 @@ clean_sampling:
     enabled: false
 
 clean_image:
+  forward_model: coherent_first_born
+  cuda_first_born:
+    batch_size: 16
+    complex_dtype: complex64
   py4dstem_find_bragg_disks:
     normalize_for_detection: max
     min_absolute_intensity: 1.0e-8
