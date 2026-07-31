@@ -124,6 +124,7 @@ public/clean_v5_*.h5
 diagnostics/clean_v5_*.h5
 diagnostics/clean_v5_response_maps/
 diagnostics/clean_v5_refinement_trajectories/
+reports/v5/full_results/
 server_artifacts/
 checkpoints/
 *.partial
