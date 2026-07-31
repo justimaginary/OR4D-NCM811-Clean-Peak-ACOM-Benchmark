@@ -173,6 +173,93 @@ def runtime_summary(seconds: list[float]) -> dict:
     }
 
 
+def match_topk_distinct_zone_axes(
+    crystal,
+    point_list,
+    *,
+    n_best: int,
+    min_number_peaks: int,
+    inversion_symmetry: bool,
+    min_zone_separation_deg: float,
+) -> dict[str, np.ndarray]:
+    """Return ranked ACOM hypotheses from the unchanged input peak list.
+
+    ``Crystal.match_single_pattern(num_matches_return > 1)`` removes peaks
+    explained by each preceding match.  Those outputs are a multi-orientation
+    decomposition, not classification Top-K candidates.  For benchmark Top-K,
+    run the native matcher repeatedly on the same peaks and mask only the
+    previously selected zone-axis neighbourhood in the orientation plan.
+
+    py4DSTEM reduces every zone-axis row to its best in-plane angle and
+    normal/Friedel branch, so these are explicitly *zone-axis-distinct*
+    candidates.  Rank 1 is byte-for-byte the normal native single match.
+    """
+    if n_best < 1:
+        raise ValueError("n_best must be positive")
+    if min_zone_separation_deg <= 0:
+        raise ValueError("min_zone_separation_deg must be positive")
+
+    orientation_ref = crystal.orientation_ref
+    orientation_vecs = np.asarray(crystal.orientation_vecs, dtype=float)
+    excluded = np.zeros(orientation_vecs.shape[0], dtype=bool)
+    restored_rows: list[tuple[np.ndarray, object]] = []
+    matrices: list[np.ndarray] = []
+    correlations: list[float] = []
+    indices: list[np.ndarray] = []
+    mirrors: list[bool] = []
+    angles: list[np.ndarray] = []
+    cosine_limit = float(np.cos(np.deg2rad(min_zone_separation_deg)))
+
+    try:
+        for _ in range(n_best):
+            orientation = crystal.match_single_pattern(
+                bragg_peaks=point_list,
+                num_matches_return=1,
+                min_number_peaks=min_number_peaks,
+                inversion_symmetry=inversion_symmetry,
+                plot_polar=False,
+                plot_corr=False,
+                verbose=False,
+            )
+            correlation = float(np.asarray(orientation.corr)[0])
+            if not np.isfinite(correlation) or correlation <= 0:
+                raise RuntimeError("ACOM exhausted positive Top-K hypotheses")
+            zone_index = int(np.asarray(orientation.inds)[0, 0])
+            matrices.append(np.asarray(orientation.matrix, dtype=float)[0])
+            correlations.append(correlation)
+            indices.append(np.asarray(orientation.inds, dtype=np.int32)[0])
+            mirrors.append(bool(np.asarray(orientation.mirror)[0]))
+            angles.append(np.asarray(orientation.angles, dtype=float)[0])
+
+            cosine = orientation_vecs @ orientation_vecs[zone_index]
+            new_mask = (cosine > cosine_limit) & ~excluded
+            new_indices = np.flatnonzero(new_mask)
+            if new_indices.size == 0:
+                raise RuntimeError(
+                    f"ACOM Top-K failed to exclude zone index {zone_index}"
+                )
+            saved = orientation_ref[new_indices, :, :].copy()
+            restored_rows.append((new_indices, saved))
+            orientation_ref[new_indices, :, :] = 0
+            excluded[new_indices] = True
+    finally:
+        for row_indices, saved in restored_rows:
+            orientation_ref[row_indices, :, :] = saved
+
+    correlations_array = np.asarray(correlations, dtype=float)
+    if np.any(np.diff(correlations_array) > 1e-8):
+        raise RuntimeError(
+            "ACOM Top-K correlations are not monotonically non-increasing"
+        )
+    return {
+        "matrix": np.stack(matrices, axis=0),
+        "correlation": correlations_array,
+        "indices": np.stack(indices, axis=0),
+        "mirror": np.asarray(mirrors, dtype=bool),
+        "angles": np.stack(angles, axis=0),
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -311,6 +398,11 @@ def main() -> None:
             "The V5 candidate contract requires acom.num_matches_return=5, "
             f"got {num_matches_return}"
         )
+    topk_min_zone_separation_deg = float(
+        acom.get("topk_min_zone_separation_deg", 0.01)
+    )
+    if topk_min_zone_separation_deg <= 0:
+        raise ValueError("acom.topk_min_zone_separation_deg must be positive")
     if args.output_tag and not args.output_tag.replace("_", "").isalnum():
         raise ValueError(
             "output tag may contain only letters, numbers, and underscores"
@@ -546,21 +638,20 @@ def main() -> None:
     for sample_index, sample in enumerate(matched_samples):
         point_list = make_point_list(sample)
         start = time.perf_counter()
-        orientation = crystal.match_single_pattern(
-            bragg_peaks=point_list,
-            num_matches_return=num_matches_return,
+        candidates = match_topk_distinct_zone_axes(
+            crystal,
+            point_list,
+            n_best=num_matches_return,
             min_number_peaks=min_number_peaks,
             inversion_symmetry=inversion_symmetry,
-            plot_polar=False,
-            plot_corr=False,
-            verbose=False,
+            min_zone_separation_deg=topk_min_zone_separation_deg,
         )
         seconds = time.perf_counter() - start
         prediction_seconds.append(seconds)
 
         sample_id = sample["sample_id"]
         gt = ground_truth[sample_id]
-        matrices = np.asarray(orientation.matrix, dtype=float)
+        matrices = np.asarray(candidates["matrix"], dtype=float)
         if matrices.shape != (num_matches_return, 3, 3):
             raise RuntimeError(
                 f"{sample_id} returned candidate shape {matrices.shape}; "
@@ -569,11 +660,11 @@ def main() -> None:
         matrices = np.stack(
             [nearest_rotation(matrix) for matrix in matrices], axis=0
         )
-        correlations = np.asarray(orientation.corr, dtype=float)
-        indices = np.asarray(orientation.inds, dtype=np.int32)
-        mirrors = np.asarray(orientation.mirror, dtype=bool)
+        correlations = np.asarray(candidates["correlation"], dtype=float)
+        indices = np.asarray(candidates["indices"], dtype=np.int32)
+        mirrors = np.asarray(candidates["mirror"], dtype=bool)
         angles_deg = np.degrees(
-            np.asarray(orientation.angles, dtype=float)
+            np.asarray(candidates["angles"], dtype=float)
         )
         if (
             correlations.shape != (num_matches_return,)
@@ -739,6 +830,12 @@ def main() -> None:
         "num_matched_samples": len(matched_samples),
         "num_indexing_failures": len(insufficient_peak_rows),
         "num_matches_return": num_matches_return,
+        "candidate_definition": (
+            "Ranked zone-axis-distinct ACOM hypotheses. Every rank is matched "
+            "against the unchanged full peak list; only previously selected "
+            "zone-axis neighbourhoods are masked."
+        ),
+        "topk_min_zone_separation_deg": topk_min_zone_separation_deg,
         "candidate_file": str(candidates_path),
         "top_k_metrics": top_k_metrics,
         "indexing_failures": insufficient_peak_rows,

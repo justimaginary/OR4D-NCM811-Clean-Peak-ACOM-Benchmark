@@ -28,6 +28,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--candidate-dir", type=Path, required=True)
     parser.add_argument("--log-dir", type=Path, required=True)
     parser.add_argument("--max-workers", type=int, default=8)
+    parser.add_argument(
+        "--cuda-visible-device",
+        help=(
+            "One already-verified empty physical GPU ID. Omit for CPU. "
+            "The runner exposes only this device to every child."
+        ),
+    )
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
     parser.add_argument("--resume", action="store_true")
     return parser.parse_args()
 
@@ -40,6 +49,7 @@ def run_one(
     candidate_dir: Path,
     log_dir: Path,
     resume: bool,
+    cuda_visible_device: str | None,
 ) -> dict:
     match = NAME.fullmatch(peak_file.name)
     if match is None:
@@ -63,7 +73,7 @@ def run_one(
             "outputs": {key: str(value) for key, value in outputs.items()},
         }
     env = os.environ.copy()
-    env["CUDA_VISIBLE_DEVICES"] = ""
+    env["CUDA_VISIBLE_DEVICES"] = cuda_visible_device or ""
     env["OR4D_CONFIG"] = "config/benchmark_v5.yaml"
     for variable in (
         "OMP_NUM_THREADS",
@@ -98,7 +108,7 @@ def run_one(
                 str(outputs["audit"]),
                 "--candidates-file",
                 str(outputs["candidates"]),
-                "--no-cuda",
+                "--cuda" if cuda_visible_device is not None else "--no-cuda",
                 "--insufficient-peaks-policy",
                 "skip",
             ],
@@ -146,6 +156,12 @@ def main() -> None:
     args = parse_args()
     if not 1 <= args.max_workers <= 16:
         raise ValueError("--max-workers must be between 1 and 16")
+    if args.shard_count < 1:
+        raise ValueError("--shard-count must be positive")
+    if not 0 <= args.shard_index < args.shard_count:
+        raise ValueError("--shard-index must be in [0, shard-count)")
+    if args.cuda_visible_device is not None and not args.cuda_visible_device.isdigit():
+        raise ValueError("--cuda-visible-device must be one physical GPU index")
     peak_dir = args.peak_dir.resolve()
     ground_truth = args.ground_truth_file.resolve()
     peak_files = sorted(peak_dir.glob("*.h5"))
@@ -154,6 +170,13 @@ def main() -> None:
     unknown = [path.name for path in peak_files if NAME.fullmatch(path.name) is None]
     if unknown:
         raise ValueError(f"unrecognized peak files: {unknown}")
+    peak_files = [
+        path
+        for index, path in enumerate(peak_files)
+        if index % args.shard_count == args.shard_index
+    ]
+    if not peak_files:
+        raise ValueError("selected shard contains no peak files")
 
     records: list[dict] = []
     with concurrent.futures.ThreadPoolExecutor(
@@ -168,6 +191,7 @@ def main() -> None:
                 candidate_dir=args.candidate_dir.resolve(),
                 log_dir=args.log_dir.resolve(),
                 resume=args.resume,
+                cuda_visible_device=args.cuda_visible_device,
             ): peak_file
             for peak_file in peak_files
         }
@@ -194,9 +218,14 @@ def main() -> None:
         "num_completed": sum(row["status"] != "failed" for row in records),
         "num_failed": sum(row["status"] == "failed" for row in records),
         "max_workers": args.max_workers,
+        "cuda_visible_device": args.cuda_visible_device,
+        "shard_count": args.shard_count,
+        "shard_index": args.shard_index,
         "runs": records,
     }
-    manifest_path = args.output_dir.resolve() / "run_manifest.json"
+    manifest_path = args.output_dir.resolve() / (
+        f"run_manifest_shard{args.shard_index}of{args.shard_count}.json"
+    )
     manifest_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2),
         encoding="utf-8",
