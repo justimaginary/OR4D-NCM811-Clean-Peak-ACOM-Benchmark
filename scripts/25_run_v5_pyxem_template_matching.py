@@ -38,6 +38,17 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--target", choices=("cpu", "gpu"), default="gpu")
     parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument(
+        "--gpu-already-reserved",
+        action="store_true",
+        help=(
+            "The visible GPU was verified empty once immediately before a "
+            "bounded multi-process shard launch. Never use this to join an "
+            "unrelated or another user's GPU job."
+        ),
+    )
     parser.add_argument(
         "--max-samples",
         type=int,
@@ -51,13 +62,15 @@ def decode(values: np.ndarray) -> list[str]:
     return [value.decode() if isinstance(value, bytes) else str(value) for value in values]
 
 
-def require_one_empty_gpu() -> str:
+def require_one_empty_gpu(*, already_reserved: bool) -> str:
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if not visible.isdigit():
         raise RuntimeError(
             "GPU matching requires CUDA_VISIBLE_DEVICES to contain exactly one "
             "physical GPU index"
         )
+    if already_reserved:
+        return visible
     rows = subprocess.check_output(
         [
             "nvidia-smi",
@@ -242,7 +255,17 @@ def main() -> None:
     batch_size = int(args.batch_size or settings["batch_size"])
     if batch_size <= 0:
         raise ValueError("batch size must be positive")
-    physical_gpu = require_one_empty_gpu() if args.target == "gpu" else None
+    if args.shard_count < 1:
+        raise ValueError("--shard-count must be positive")
+    if not 0 <= args.shard_index < args.shard_count:
+        raise ValueError("--shard-index must be in [0, shard-count)")
+    if args.gpu_already_reserved and args.target != "gpu":
+        raise ValueError("--gpu-already-reserved requires --target gpu")
+    physical_gpu = (
+        require_one_empty_gpu(already_reserved=args.gpu_already_reserved)
+        if args.target == "gpu"
+        else None
+    )
     data_root = args.data_root.resolve()
     expectation_path = (
         data_root / "datasets" / "clean_v5_first_born_expectation_2048.h5"
@@ -294,6 +317,8 @@ def main() -> None:
         output.attrs["pyxem_version"] = "0.21.0"
         output.attrs["target"] = args.target
         output.attrs["physical_gpu_index"] = physical_gpu or ""
+        output.attrs["shard_count"] = args.shard_count
+        output.attrs["shard_index"] = args.shard_index
         output.attrs["settings_json"] = json.dumps(settings, sort_keys=True)
         output.attrs["template_metadata_json"] = json.dumps(
             library_metadata, sort_keys=True
@@ -307,7 +332,13 @@ def main() -> None:
         elif decode(output["sample_id"][:]) != sample_ids:
             raise ValueError("resume output sample IDs differ")
 
-        if args.track in {"expectation", "all"}:
+        # Canonical global condition order: Clean-E first, followed by every
+        # Clean-C noiseless and counted condition.  Shards own disjoint
+        # ordinals and therefore never duplicate scientific conditions.
+        condition_ordinal = 0
+        owns_expectation = condition_ordinal % args.shard_count == args.shard_index
+        condition_ordinal += 1
+        if args.track in {"expectation", "all"} and owns_expectation:
             group = create_result_group(
                 output, "clean_e", (), sample_count, n_best
             )
@@ -376,8 +407,15 @@ def main() -> None:
                 )
                 for dose_index, dose in enumerate(doses):
                     condition = (dose_index,)
-                    if not args.resume or not bool(
-                        noiseless_group["condition_complete"][condition]
+                    owns_condition = (
+                        condition_ordinal % args.shard_count == args.shard_index
+                    )
+                    condition_ordinal += 1
+                    if owns_condition and (
+                        not args.resume
+                        or not bool(
+                            noiseless_group["condition_complete"][condition]
+                        )
                     ):
                         print(f"Clean-C noiseless dose={dose}", flush=True)
                         run_condition(
@@ -404,6 +442,13 @@ def main() -> None:
                     ):
                         for repeat in range(repeats):
                             condition = (dose_index, compact_level, repeat)
+                            owns_condition = (
+                                condition_ordinal % args.shard_count
+                                == args.shard_index
+                            )
+                            condition_ordinal += 1
+                            if not owns_condition:
+                                continue
                             if args.resume and bool(
                                 counted_group["condition_complete"][condition]
                             ):
