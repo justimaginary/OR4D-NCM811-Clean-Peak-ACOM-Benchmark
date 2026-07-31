@@ -24,6 +24,11 @@ from or4d_common import (  # noqa: E402
     write_jsonl,
 )
 from topk_evaluation import summarize_topk_errors  # noqa: E402
+from v5_results import (  # noqa: E402
+    aggregate_group_keys,
+    aggregate_topk_error_blocks,
+    group_label,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -188,6 +193,9 @@ def main() -> None:
         ground_truth_by_id[f"clean_{identifier}"] = matrix
     summaries: list[dict[str, object]] = []
     clean_e_details: list[dict[str, object]] = []
+    aggregate_blocks: dict[
+        tuple[str, str], list[tuple[np.ndarray, int]]
+    ] = {}
     with h5py.File(args.result_file, "r") as result:
         sample_ids = decode(result["sample_id"][:])
         ground_truth = np.stack(
@@ -238,6 +246,10 @@ def main() -> None:
                     group["condition_seconds"][completion_index]
                 )
                 summaries.append(row)
+                for group_key in aggregate_group_keys(label):
+                    aggregate_blocks.setdefault(group_key, []).append(
+                        (friedel_error, len(sample_ids))
+                    )
                 if group_name == "clean_e":
                     corr = np.asarray(correlations[:], dtype=float)
                     mirror = np.asarray(mirrored[:], dtype=bool)
@@ -282,6 +294,14 @@ def main() -> None:
             "and the detector-plane Friedel branch."
         ),
         "conditions": summaries,
+        "aggregates": [
+            {
+                **group_label(group_by, key),
+                "num_conditions": len(blocks),
+                "top_k": aggregate_topk_error_blocks(blocks),
+            }
+            for (group_by, key), blocks in sorted(aggregate_blocks.items())
+        ],
     }
     args.summary_output.parent.mkdir(parents=True, exist_ok=True)
     args.summary_output.write_text(
