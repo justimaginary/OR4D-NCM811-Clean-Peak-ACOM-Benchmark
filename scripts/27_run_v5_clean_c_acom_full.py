@@ -25,6 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--peak-dir", type=Path, required=True)
     parser.add_argument("--ground-truth-file", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--candidate-dir", type=Path, required=True)
     parser.add_argument("--log-dir", type=Path, required=True)
     parser.add_argument("--max-workers", type=int, default=8)
     parser.add_argument("--resume", action="store_true")
@@ -36,6 +37,7 @@ def run_one(
     *,
     ground_truth: Path,
     output_dir: Path,
+    candidate_dir: Path,
     log_dir: Path,
     resume: bool,
 ) -> dict:
@@ -50,6 +52,7 @@ def run_one(
         "details": output_dir / f"{stem}_details.json",
         "audit": output_dir / f"{stem}_audit.json",
         "evaluation": output_dir / f"{stem}_evaluation.json",
+        "candidates": candidate_dir / f"{stem}_candidates.h5",
     }
     if resume and all(path.is_file() for path in outputs.values()):
         return {
@@ -70,6 +73,7 @@ def run_one(
     ):
         env[variable] = "1"
     output_dir.mkdir(parents=True, exist_ok=True)
+    candidate_dir.mkdir(parents=True, exist_ok=True)
     log_dir.mkdir(parents=True, exist_ok=True)
     log_path = log_dir / f"{stem}.log"
     started = time.perf_counter()
@@ -92,6 +96,8 @@ def run_one(
                 str(outputs["details"]),
                 "--audit-file",
                 str(outputs["audit"]),
+                "--candidates-file",
+                str(outputs["candidates"]),
                 "--no-cuda",
                 "--insufficient-peaks-policy",
                 "skip",
@@ -159,6 +165,7 @@ def main() -> None:
                 peak_file,
                 ground_truth=ground_truth,
                 output_dir=args.output_dir.resolve(),
+                candidate_dir=args.candidate_dir.resolve(),
                 log_dir=args.log_dir.resolve(),
                 resume=args.resume,
             ): peak_file

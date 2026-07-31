@@ -84,22 +84,31 @@ def create_result_group(
     name: str,
     condition_shape: tuple[int, ...],
     n: int,
+    n_best: int,
 ) -> h5py.Group:
     group = parent.require_group(name)
     specifications = {
         "orientation_matrix_sample_to_crystal": (
-            condition_shape + (n, 3, 3),
+            condition_shape + (n, n_best, 3, 3),
             np.float64,
             np.nan,
         ),
         "euler_bunge_lab_to_crystal_deg": (
-            condition_shape + (n, 3),
+            condition_shape + (n, n_best, 3),
             np.float64,
             np.nan,
         ),
-        "correlation": (condition_shape + (n,), np.float32, np.nan),
-        "mirrored_template": (condition_shape + (n,), np.bool_, False),
-        "template_index": (condition_shape + (n,), np.int32, -1),
+        "correlation": (condition_shape + (n, n_best), np.float32, np.nan),
+        "mirrored_template": (
+            condition_shape + (n, n_best),
+            np.bool_,
+            False,
+        ),
+        "template_index": (
+            condition_shape + (n, n_best),
+            np.int32,
+            -1,
+        ),
     }
     for dataset_name, (shape, dtype, fillvalue) in specifications.items():
         if dataset_name not in group:
@@ -227,6 +236,9 @@ def main() -> None:
     args = parse_args()
     config = load_config()
     settings = dict(config["clean_image"]["pyxem_template_matching"])
+    n_best = int(settings["n_best"])
+    if n_best != 5:
+        raise ValueError(f"V5 Top-5 run requires n_best=5, got {n_best}")
     batch_size = int(args.batch_size or settings["batch_size"])
     if batch_size <= 0:
         raise ValueError("batch size must be positive")
@@ -296,7 +308,9 @@ def main() -> None:
             raise ValueError("resume output sample IDs differ")
 
         if args.track in {"expectation", "all"}:
-            group = create_result_group(output, "clean_e", (), sample_count)
+            group = create_result_group(
+                output, "clean_e", (), sample_count, n_best
+            )
             if not args.resume or not bool(group["condition_complete"][0]):
                 with h5py.File(expectation_path, "r") as source:
                     run_condition(
@@ -347,13 +361,18 @@ def main() -> None:
                     )
                     output.attrs["counted_repeats"] = repeats
                 noiseless_group = create_result_group(
-                    output, "clean_c_noiseless", (len(doses),), sample_count
+                    output,
+                    "clean_c_noiseless",
+                    (len(doses),),
+                    sample_count,
+                    n_best,
                 )
                 counted_group = create_result_group(
                     output,
                     "clean_c_counted",
                     (len(doses), len(counted_level_indices), repeats),
                     sample_count,
+                    n_best,
                 )
                 for dose_index, dose in enumerate(doses):
                     condition = (dose_index,)

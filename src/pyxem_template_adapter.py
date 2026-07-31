@@ -188,16 +188,18 @@ def match_prepared_batch(
     )
     elapsed = time.perf_counter() - start
     # A 1-D navigation signal is promoted by Pyxem to shape [1,N].
+    # Preserve the complete candidate axis; slicing ``[..., 0]`` here would
+    # silently turn an n_best=5 experiment back into a Top-1 experiment.
     return {
-        "euler_deg": np.asarray(result["orientation"][0, :, 0], dtype=np.float64),
-        "correlation": np.asarray(result["correlation"][0, :, 0], dtype=np.float64),
+        "euler_deg": np.asarray(result["orientation"][0], dtype=np.float64),
+        "correlation": np.asarray(result["correlation"][0], dtype=np.float64),
         "mirrored": np.asarray(
-            result["mirrored_template"][0, :, 0], dtype=bool
+            result["mirrored_template"][0], dtype=bool
         ),
         "template_index": np.asarray(
-            result["template_index"][0, :, 0], dtype=np.int32
+            result["template_index"][0], dtype=np.int32
         ),
-        "phase_index": np.asarray(result["phase_index"][0, :, 0], dtype=np.int8),
+        "phase_index": np.asarray(result["phase_index"][0], dtype=np.int8),
         "seconds": elapsed,
         "phase_key": phase_key,
     }
