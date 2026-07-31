@@ -207,7 +207,7 @@ acom:
   tol_distance_Ainv: 0.01
   min_number_peaks: 3
   inversion_symmetry: true
-  num_matches_return: 1
+  num_matches_return: 5
   cuda: false
   progress_bar: true
   min_probe_discrete_seed_misorientation_deg: 0.1

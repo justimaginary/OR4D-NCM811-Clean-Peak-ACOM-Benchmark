@@ -35,7 +35,7 @@ clean_image:
     intensity_power: 0.25
     central_beam_exclusion_Ainv: 0.03
     frac_keep: 0.1
-    n_best: 1
+    n_best: 5
     batch_size: 128
     precision: float32
     target: gpu
