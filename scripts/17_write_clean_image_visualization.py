@@ -14,20 +14,22 @@ import yaml
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "reports" / "CLEAN_IMAGE_ACOM_VISUALIZATION.html"
+REPORT_DIR = ROOT / "reports" / "v4"
+V3_REPORT_DIR = ROOT / "reports" / "v3"
+OUTPUT = REPORT_DIR / "CLEAN_IMAGE_ACOM_VISUALIZATION.html"
 IMAGE_FILE = ROOT / "public" / "clean_images.h5"
 COUNTED_FILE = ROOT / "public" / "clean_counted_images.h5"
 ORACLE_FILE = ROOT / "private" / "clean_physical_oracle_reflections.h5"
 GT_FILE = ROOT / "private" / "clean_ground_truth.jsonl"
 TRACE_FILE = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
 CONFIG_FILE = ROOT / "config" / "benchmark.yaml"
-DETAILS_ORACLE = ROOT / "reports" / "acom_clean_details_physical_oracle.json"
-DETAILS_V3 = ROOT / "reports" / "acom_clean_details.json"
-EVALUATION_V3 = ROOT / "reports" / "acom_clean_evaluation.json"
-PEAK_REPORT_E = ROOT / "reports" / "clean_image_pipeline_evaluation.json"
-PEAK_REPORT_C = ROOT / "reports" / "clean_counted_pipeline_evaluation.json"
-ACOM_REPORT_E = ROOT / "reports" / "clean_acom_comparison.json"
-ACOM_REPORT_C = ROOT / "reports" / "clean_counted_acom_comparison.json"
+DETAILS_ORACLE = REPORT_DIR / "acom_clean_details_physical_oracle.json"
+DETAILS_V3 = V3_REPORT_DIR / "acom_clean_details.json"
+EVALUATION_V3 = V3_REPORT_DIR / "acom_clean_evaluation.json"
+PEAK_REPORT_E = REPORT_DIR / "clean_image_pipeline_evaluation.json"
+PEAK_REPORT_C = REPORT_DIR / "clean_counted_pipeline_evaluation.json"
+ACOM_REPORT_E = REPORT_DIR / "clean_acom_comparison.json"
+ACOM_REPORT_C = REPORT_DIR / "clean_counted_acom_comparison.json"
 DOSES = (10_000, 100_000, 1_000_000)
 DETECTORS = ("autodisk", "py4dstem")
 
@@ -366,10 +368,10 @@ def parameter_tables() -> dict[str, list[list[str]]]:
 
 def details_path(track: str, dose: int | None, repeat: int, detector: str) -> Path:
     if track == "expectation":
-        return ROOT / "reports" / f"acom_clean_details_expectation_{detector}.json"
+        return REPORT_DIR / f"acom_clean_details_expectation_{detector}.json"
     return (
-        ROOT
-        / "reports"
+        REPORT_DIR
+        / "runs"
         / f"acom_clean_details_counted_dose{dose}_repeat{repeat}_{detector}.json"
     )
 
@@ -622,7 +624,7 @@ def build_data() -> dict:
         (3, "acom_clean_evaluation_angle_3deg.json"),
         (2, "acom_clean_evaluation.json"),
     ):
-        metrics = load_json(ROOT / "reports" / filename)["metrics"]
+        metrics = load_json(V3_REPORT_DIR / filename)["metrics"]
         v3_sweep.append(
             {
                 "angle_step_deg": angle,
@@ -882,7 +884,10 @@ table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:left;p
   <p class="lead">Full Clean image benchmark · expectation + counted electrons · AutoDisk vs py4DSTEM find_Bragg_disks</p>
   <span class="stamp">全量实际运行结果 / completed full run</span>
  </div>
- <a class="page-switch" href="ACOM_COORDINATE_VISUALIZATION.html">← 返回 v3 直接峰页面</a>
+ <div>
+  <a class="page-switch" href="../v3/ACOM_COORDINATE_VISUALIZATION.html">← V3 · 直接峰</a>
+  <a class="page-switch" href="../v5/ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量、噪声与 Top‑5 →</a>
+ </div>
 </header>
 <div class="flow"><div><b>1</b> 运动学 CBED<br><span class="mini">physical expectation</span></div><div><b>2</b> 电子计数<br><span class="mini">10⁴ / 10⁵ / 10⁶ e⁻</span></div><div><b>3</b> 衍射盘检测<br><span class="mini">AutoDisk / find_Bragg_disks</span></div><div><b>4</b> ACOM + GT 评测<br><span class="mini">same 2° orientation plan</span></div></div>
 

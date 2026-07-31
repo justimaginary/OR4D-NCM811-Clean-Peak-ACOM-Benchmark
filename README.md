@@ -145,11 +145,11 @@ in `diagnostics/clean_coordinate_trace.jsonl.gz`.
 ## Interactive HTML
 
 The frozen v3 coordinate page remains available. Open
-[`reports/ACOM_COORDINATE_VISUALIZATION.html`](reports/ACOM_COORDINATE_VISUALIZATION.html)
+[`reports/v3/ACOM_COORDINATE_VISUALIZATION.html`](reports/v3/ACOM_COORDINATE_VISUALIZATION.html)
 directly in a browser:
 
 ```bash
-open reports/ACOM_COORDINATE_VISUALIZATION.html
+open reports/v3/ACOM_COORDINATE_VISUALIZATION.html
 ```
 
 The self-contained page includes:
@@ -176,10 +176,10 @@ conda run -n or4d-clean \
 ```
 
 The full image-first comparison is
-[`reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html`](reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html):
+[`reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html`](reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html):
 
 ```bash
-open reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html
+open reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html
 ```
 
 It keeps the v3 direct-peak results, parameters, matrices, HKL tables, and
@@ -198,6 +198,20 @@ conda run -n or4d-clean \
   python scripts/17_write_clean_image_visualization.py
 ```
 
+The v5 dose/noise/Top-5 comparison is
+[`reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html`](reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html):
+
+```bash
+open reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html
+```
+
+It shows the full Clean-E and Clean-C result grid, Top-1 through Top-5
+success curves, Acc@1°/2°/5°, median/P95 error, indexing coverage,
+ACOM-versus-Pyxem comparisons, real input images and peak overlays, and
+per-sample `HKL → B → g_crystal → g_sample → q` intermediate variables.
+The three HTML pages link to one another. See
+[`reports/README.md`](reports/README.md) for the result-directory layout.
+
 ## Report
 
 The 44-page static report is
@@ -212,11 +226,11 @@ this repository.
 Machine-readable results and the generated Markdown report are under
 [`reports/`](reports/), including:
 
-- `ACOM_CLEAN_REPORT.md`: generated numerical report;
-- `ACOM_COORDINATE_ANALYSIS.md`: coordinate and peak-level audit;
-- `acom_clean_evaluation*.json`: symmetry/Friedel-aware metrics;
-- `acom_clean_details*.json`: per-sample ACOM diagnostics;
-- `acom_plan_audit*.json`: orientation-plan metadata.
+- `reports/v3/ACOM_CLEAN_REPORT.md`: generated numerical report;
+- `reports/v3/ACOM_COORDINATE_ANALYSIS.md`: coordinate and peak-level audit;
+- `reports/v3/acom_clean_evaluation*.json`: symmetry/Friedel-aware metrics;
+- `reports/v3/acom_clean_details*.json`: per-sample ACOM diagnostics;
+- `reports/v3/acom_plan_audit*.json`: orientation-plan metadata.
 
 
 ## Repository layout

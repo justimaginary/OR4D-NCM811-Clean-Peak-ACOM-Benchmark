@@ -20,13 +20,14 @@ from or4d_common import (  # noqa: E402
 
 CONFIG_PATH = ROOT / "config" / "benchmark.yaml"
 TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
-DETAILS_PATH = ROOT / "reports" / "acom_clean_details.json"
-PLAN_AUDIT_PATH = ROOT / "reports" / "acom_plan_audit.json"
-OUTPUT_PATH = ROOT / "reports" / "ACOM_COORDINATE_VISUALIZATION.html"
+REPORT_DIR = ROOT / "reports" / "v3"
+DETAILS_PATH = REPORT_DIR / "acom_clean_details.json"
+PLAN_AUDIT_PATH = REPORT_DIR / "acom_plan_audit.json"
+OUTPUT_PATH = REPORT_DIR / "ACOM_COORDINATE_VISUALIZATION.html"
 EVALUATION_PATHS = {
-    4.0: ROOT / "reports" / "acom_clean_evaluation_angle_4deg.json",
-    3.0: ROOT / "reports" / "acom_clean_evaluation_angle_3deg.json",
-    2.0: ROOT / "reports" / "acom_clean_evaluation.json",
+    4.0: REPORT_DIR / "acom_clean_evaluation_angle_4deg.json",
+    3.0: REPORT_DIR / "acom_clean_evaluation_angle_3deg.json",
+    2.0: REPORT_DIR / "acom_clean_evaluation.json",
 }
 
 
@@ -778,7 +779,10 @@ tbody tr.is-selected { background: #eef4ff; }
 <main>
   <header class="page-header">
     <h1>Clean v3 坐标与倒空间中间变量</h1>
-    <a class="page-switch" href="CLEAN_IMAGE_ACOM_VISUALIZATION.html">进入二维衍射图版本 →</a>
+    <div>
+      <a class="page-switch" href="../v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html">V4 · 二维衍射图</a>
+      <a class="page-switch" href="../v5/ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量、噪声与 Top‑5 →</a>
+    </div>
   </header>
   <section class="overview">
     <div class="overview-head">
