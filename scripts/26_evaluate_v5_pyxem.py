@@ -159,14 +159,19 @@ def main() -> None:
         Structure.from_file(str(cif_path(config)))
     )
     ground_truth_rows = read_jsonl(args.ground_truth_file)
-    ground_truth_by_id = {
-        row.get("sample_id", row.get("orientation_id")): np.asarray(
+    ground_truth_by_id: dict[str, np.ndarray] = {}
+    for row in ground_truth_rows:
+        identifier = row.get("sample_id", row.get("orientation_id"))
+        if identifier is None:
+            raise ValueError("ground-truth rows lack sample_id/orientation_id")
+        matrix = np.asarray(
             row["orientation_matrix_sample_to_crystal"], dtype=np.float64
         )
-        for row in ground_truth_rows
-    }
-    if None in ground_truth_by_id:
-        raise ValueError("ground-truth rows lack sample_id/orientation_id")
+        ground_truth_by_id[str(identifier)] = matrix
+        # Image datasets retain the historical ``clean_`` sample prefix,
+        # whereas the V5 construction manifest calls the same row by its
+        # orientation_id.  Record both exact, deterministic aliases.
+        ground_truth_by_id[f"clean_{identifier}"] = matrix
     summaries: list[dict[str, object]] = []
     clean_e_details: list[dict[str, object]] = []
     with h5py.File(args.result_file, "r") as result:

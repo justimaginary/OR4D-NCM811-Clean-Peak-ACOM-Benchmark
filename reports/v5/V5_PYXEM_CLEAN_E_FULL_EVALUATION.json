@@ -1,0 +1,43 @@
+{
+  "metadata": {
+    "method": "pyxem_accelerated_template_matching",
+    "pyxem_version": "0.21.0",
+    "target": "cpu",
+    "settings": {
+      "batch_size": 128,
+      "central_beam_exclusion_Ainv": 0.03,
+      "frac_keep": 0.1,
+      "in_plane_resolution_deg": 2.0,
+      "intensity_power": 0.25,
+      "max_excitation_error_Ainv": 0.06,
+      "minimum_relative_intensity": 0.0001,
+      "n_best": 1,
+      "orientation_resolution_deg": 2.0,
+      "package_version": "0.21.0",
+      "precision": "float32",
+      "reciprocal_radius_Ainv": 1.5,
+      "shape_factor_minima": 3,
+      "shape_factor_model": "sin2c",
+      "target": "gpu"
+    }
+  },
+  "metric": "Minimum misorientation over proper crystal point-group rotations and the detector-plane Friedel branch.",
+  "conditions": [
+    {
+      "track": "Clean-E",
+      "num_samples": 2048,
+      "num_valid_predictions": 2048,
+      "prediction_coverage": 1.0,
+      "median_misorientation_deg": 9.088556775382399,
+      "p95_misorientation_deg": 59.758111658546994,
+      "max_misorientation_deg": 89.78349247993687,
+      "accuracy_within_1deg": 0.0859375,
+      "accuracy_within_2deg": 0.31005859375,
+      "accuracy_within_5deg": 0.43896484375,
+      "group": "clean_e",
+      "raw_median_deg": 140.92510820742189,
+      "strict_median_deg": 57.36747907279016,
+      "condition_seconds": 30.29430421604775
+    }
+  ]
+}
