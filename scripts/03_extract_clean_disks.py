@@ -62,6 +62,12 @@ def parse_args() -> argparse.Namespace:
         "--output-dir", type=Path, default=ROOT / "diagnostics"
     )
     parser.add_argument("--report-output", type=Path)
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=50,
+        help="Print one progress row every N samples (default: 50).",
+    )
     return parser.parse_args()
 
 
@@ -228,6 +234,8 @@ def read_image(
 
 def main() -> None:
     args = parse_args()
+    if args.progress_every <= 0:
+        raise ValueError("--progress-every must be positive")
     config = load_config()
     image_cfg = config["clean_image"]
     noise_manifest = load_noise_manifest(args.noise_manifest)
@@ -319,8 +327,10 @@ def main() -> None:
                     )
                     batch_seconds = time.perf_counter() - batch_started
                 for sample_index, sample_id in enumerate(sample_ids):
-                    image = read_image(
-                        variant, sample_index, noise_manifest
+                    image = (
+                        None
+                        if batch_results is not None
+                        else read_image(variant, sample_index, noise_manifest)
                     )
                     started = time.perf_counter()
                     try:
@@ -358,6 +368,8 @@ def main() -> None:
                                     central_exclusion_Ainv=central_exclusion,
                                 )
                             )
+                            if isinstance(result, Exception):
+                                raise result
                             peak_diagnostics = {
                                 "refined_row_px": result.row_px,
                                 "refined_col_px": result.col_px,
@@ -421,11 +433,17 @@ def main() -> None:
                     sample["sample_metadata"]["runtime_seconds"] = elapsed
                     timings.append(elapsed)
                     samples.append(sample)
-                    print(
-                        f"{variant['name']} {detector_name} "
-                        f"{sample_index + 1}/{len(sample_ids)} {sample_id}: "
-                        f"peaks={len(sample['qx'])}, seconds={elapsed:.3f}"
-                    )
+                    if (
+                        (sample_index + 1) % args.progress_every == 0
+                        or sample_index + 1 == len(sample_ids)
+                        or sample["sample_metadata"]["detection_status"] != "ok"
+                    ):
+                        print(
+                            f"{variant['name']} {detector_name} "
+                            f"{sample_index + 1}/{len(sample_ids)} {sample_id}: "
+                            f"peaks={len(sample['qx'])}, seconds={elapsed:.3f}",
+                            flush=True,
+                        )
 
                 suffix = "_smoke" if "smoke" in source_path.stem else ""
                 output = (

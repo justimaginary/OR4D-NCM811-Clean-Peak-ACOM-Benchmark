@@ -23,6 +23,22 @@ clean_sampling:
 
 clean_image:
   forward_model: coherent_first_born
+  pyxem_template_matching:
+    package_version: "0.21.0"
+    orientation_resolution_deg: 2.0
+    in_plane_resolution_deg: 2.0
+    reciprocal_radius_Ainv: 1.5
+    max_excitation_error_Ainv: 0.06
+    shape_factor_model: sin2c
+    shape_factor_minima: 3
+    minimum_relative_intensity: 0.0001
+    intensity_power: 0.25
+    central_beam_exclusion_Ainv: 0.03
+    frac_keep: 0.1
+    n_best: 5
+    batch_size: 128
+    precision: float32
+    target: gpu
   cuda_first_born:
     batch_size: 16
     complex_dtype: complex64
