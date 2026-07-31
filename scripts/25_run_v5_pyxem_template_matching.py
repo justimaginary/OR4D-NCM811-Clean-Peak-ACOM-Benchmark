@@ -247,6 +247,11 @@ def counted_reader(
 
 def main() -> None:
     args = parse_args()
+    if args.target == "gpu":
+        # Numba's legacy ctypes driver path segfaults inside Pyxem's CUDA
+        # kernel on the server's RTX 5090 / CUDA 12 stack.  cuda-python 12.9
+        # provides the supported NVIDIA driver binding used by Numba here.
+        os.environ.setdefault("NUMBA_CUDA_USE_NVIDIA_BINDING", "1")
     config = load_config()
     settings = dict(config["clean_image"]["pyxem_template_matching"])
     n_best = int(settings["n_best"])
@@ -317,6 +322,9 @@ def main() -> None:
         output.attrs["pyxem_version"] = "0.21.0"
         output.attrs["target"] = args.target
         output.attrs["physical_gpu_index"] = physical_gpu or ""
+        output.attrs["numba_cuda_use_nvidia_binding"] = os.environ.get(
+            "NUMBA_CUDA_USE_NVIDIA_BINDING", ""
+        )
         output.attrs["shard_count"] = args.shard_count
         output.attrs["shard_index"] = args.shard_index
         output.attrs["settings_json"] = json.dumps(settings, sort_keys=True)

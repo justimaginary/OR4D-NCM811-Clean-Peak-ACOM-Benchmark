@@ -14,3 +14,4 @@ dependencies:
   - pyxem=0.21
   - pip:
       - "py4DSTEM[acom]==0.14.18"
+      - "cuda-python==12.9.7"
