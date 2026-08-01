@@ -77,6 +77,17 @@ def aggregate_group_keys(
         return keys
     dose = int(label["dose_electrons"])
     noise = str(label["noise"])
+    if "detector" not in label:
+        keys.extend(
+            [
+                ("dose_all", str(dose)),
+                ("dose_noise", f"{dose}|{noise}"),
+                ("noise_all", noise),
+            ]
+        )
+        if noise != "noiseless":
+            keys.append(("dose_counted", str(dose)))
+        return keys
     detector = str(label["detector"])
     keys.extend(
         [

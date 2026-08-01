@@ -101,6 +101,24 @@ class V5ResultsTests(unittest.TestCase):
             },
         )
 
+    def test_pyxem_clean_c_does_not_require_a_disk_detector(self):
+        label = {
+            "track": "Clean-C",
+            "dose_electrons": 10000,
+            "noise": "poisson_only",
+            "repeat": 0,
+        }
+        self.assertEqual(
+            aggregate_group_keys(label),
+            [
+                ("track", "Clean-C"),
+                ("dose_all", "10000"),
+                ("dose_noise", "10000|poisson_only"),
+                ("noise_all", "poisson_only"),
+                ("dose_counted", "10000"),
+            ],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
