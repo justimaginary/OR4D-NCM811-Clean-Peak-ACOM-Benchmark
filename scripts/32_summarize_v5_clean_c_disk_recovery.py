@@ -38,13 +38,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--run-record", type=Path, required=True)
     parser.add_argument(
+        "--study",
+        choices=("main", "001"),
+        default="main",
+        help="Select the 2,048-sample headline set or 512-sample [001] set.",
+    )
+    parser.add_argument(
         "--py4dstem-detection-report", type=Path, action="append", default=[]
     )
     parser.add_argument("--workers", type=int, default=12)
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "reports/v5/pipeline/clean_c_disk_recovery_full.json",
+        help="Compact JSON output; a study-specific default is used if omitted.",
     )
     return parser.parse_args()
 
@@ -186,8 +192,20 @@ def main() -> None:
     if not 1 <= args.workers <= 16:
         raise ValueError("--workers must be in [1, 16]")
     data_root = args.data_root.resolve()
-    oracle_path = data_root / "intermediates/clean_v5_first_born_oracle_2048.h5"
-    expectation_path = data_root / "datasets/clean_v5_first_born_expectation_2048.h5"
+    if args.study == "001":
+        oracle_path = (
+            data_root / "intermediates/clean_v5_001_first_born_oracle_512.h5"
+        )
+        expectation_path = (
+            data_root / "datasets/clean_v5_001_first_born_expectation_512.h5"
+        )
+    else:
+        oracle_path = (
+            data_root / "intermediates/clean_v5_first_born_oracle_2048.h5"
+        )
+        expectation_path = (
+            data_root / "datasets/clean_v5_first_born_expectation_2048.h5"
+        )
     with h5py.File(expectation_path, "r") as handle:
         qx = np.asarray(handle["detector/qx_Ainv"][:], dtype=float)
         q_pixel = float(np.median(np.diff(qx)))
@@ -216,6 +234,7 @@ def main() -> None:
     )
     report = {
         "schema": "or4d-v5-clean-c-disk-recovery-v1",
+        "study": args.study,
         "scope": "Clean-C saved peak lists; no detector or indexer rerun",
         "num_samples_per_condition": sample_count,
         "num_conditions": len(completed),
@@ -230,9 +249,19 @@ def main() -> None:
         "conditions": completed,
         "aggregates": aggregate_conditions(completed),
     }
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(f"Wrote {args.output.resolve()}")
+    output = args.output or (
+        ROOT
+        / (
+            "reports/v5/study_001/clean_c_disk_recovery_full.json"
+            if args.study == "001"
+            else "reports/v5/pipeline/clean_c_disk_recovery_full.json"
+        )
+    )
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"Wrote {output.resolve()}")
 
 
 if __name__ == "__main__":
