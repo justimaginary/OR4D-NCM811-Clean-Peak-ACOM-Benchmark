@@ -1170,7 +1170,7 @@ def build_payload(args: argparse.Namespace) -> dict:
         "noise_gallery": noise_gallery,
         "parameters": rounded(
             {
-                "common": v5_config["common"],
+                "common": config["common"],
                 "clean_sampling": v5_config["clean_sampling"],
                 "clean_image": v5_config["clean_image"],
                 "generation_report": generation,
