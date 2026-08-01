@@ -156,6 +156,27 @@ def image_data_url(
     ).decode("ascii")
 
 
+def difference_data_url(array: np.ndarray) -> str:
+    """Render a non-negative residual with a white-to-red scale.
+
+    This is a display-only image for comparing a counted realization with its
+    expectation.  The numeric residual is retained in the payload as well.
+    """
+    values = np.maximum(np.asarray(array, dtype=np.float64), 0.0)
+    positive = values[values > 0]
+    ceiling = float(np.percentile(positive, 99.7)) if positive.size else 1.0
+    normalized = np.clip(values / max(ceiling, 1e-12), 0.0, 1.0) ** 0.55
+    rgb = np.empty((*normalized.shape, 3), dtype=np.uint8)
+    rgb[..., 0] = (255 - 35 * normalized).astype(np.uint8)
+    rgb[..., 1] = (255 - 205 * normalized).astype(np.uint8)
+    rgb[..., 2] = (255 - 205 * normalized).astype(np.uint8)
+    buffer = io.BytesIO()
+    Image.fromarray(rgb, mode="RGB").save(buffer, format="PNG", optimize=True)
+    return "data:image/png;base64," + base64.b64encode(
+        buffer.getvalue()
+    ).decode("ascii")
+
+
 def rotation_angle_deg(relative: np.ndarray) -> float:
     cosine = np.clip((np.trace(relative) - 1.0) / 2.0, -1.0, 1.0)
     return float(np.rad2deg(np.arccos(cosine)))
@@ -550,6 +571,48 @@ def build_noise_gallery(
                     sigma,
                 )
             )
+        comparison_arrays: list[dict] = []
+        for dose_value in (100, 1_000_000):
+            dose_idx = int(np.where(noise["doses"] == dose_value)[0][0])
+            expected = np.asarray(
+                noiseless["images/expected_counts"][sample_index, dose_idx],
+                dtype=np.float32,
+            )
+            sampled = np.asarray(
+                counted["images/counts"][sample_index, dose_idx, repeat],
+                dtype=np.float32,
+            )
+            normalized_sampled = sampled / max(float(dose_value), 1.0)
+            residual = np.abs(normalized_sampled - probability)
+            comparison_arrays.append(
+                {
+                    "id": f"dose_{dose_value}_noiseless",
+                    "label": f"Clean-C · {dose_value:,} e⁻ · noiseless",
+                    "description": (
+                        "同一取向、同一物理图像，仅改变总电子数；共同色标旁"
+                        "同时给出绝对计数和归一化结构。"
+                    ),
+                    "values": expected,
+                    "difference_values": residual,
+                    "dose_electrons": dose_value,
+                    "kind": "noiseless",
+                }
+            )
+            comparison_arrays.append(
+                {
+                    "id": f"dose_{dose_value}_poisson",
+                    "label": f"Clean-C · {dose_value:,} e⁻ · Poisson",
+                    "description": (
+                        "同一取向的电子计数 realization；差异图显示"
+                        " |n/Nₑ − P(q)|。"
+                    ),
+                    "values": sampled,
+                    "difference_values": residual,
+                    "dose_electrons": dose_value,
+                    "kind": "poisson",
+                }
+            )
+
     display_positive = np.concatenate(
         [
             np.maximum(display, 0.0)[np.maximum(display, 0.0) > 0]
@@ -584,6 +647,26 @@ def build_noise_gallery(
                 "read_noise_sigma_e_rms_per_pixel": sigma,
             }
         )
+    comparisons = []
+    for item in comparison_arrays:
+        values = item["values"]
+        residual = item["difference_values"]
+        comparisons.append(
+            {
+                key: value
+                for key, value in item.items()
+                if key not in {"values", "difference_values"}
+            }
+            | {
+                "image_url": image_data_url(values),
+                "difference_url": difference_data_url(residual),
+                "sum": float(np.sum(values)),
+                "minimum": float(np.min(values)),
+                "maximum": float(np.max(values)),
+                "relative_rms": float(np.sqrt(np.mean(np.square(residual)))),
+                "relative_p95": float(np.percentile(residual, 95)),
+            }
+        )
     return rounded(
         {
             "sample_id": sample_id,
@@ -601,6 +684,7 @@ def build_noise_gallery(
                 ),
             },
             "images": images,
+            "comparison": comparisons,
         }
     )
 
@@ -1091,11 +1175,67 @@ def aggregate_payload(summary: dict) -> list[dict]:
     return rounded(summary["aggregates"])
 
 
+def parameter_tables(config: dict, v5_config: dict) -> dict[str, list[list[str]]]:
+    """Prepare the V4-style bilingual parameter tables for the V5 page."""
+    common = config["common"]
+    clean = config["clean"]
+    image = config["clean_image"]
+    acom = config["acom"]
+    counting = image["counting"]
+    instrument = image["instrument_noise"]
+    fmt = lambda value: str(value)
+    return {
+        "dataset": [
+            ["数据集 / Dataset", "dataset.id", v5_config["dataset"]["id"]],
+            ["headline 样本 / Headline samples", "dataset.expected_num_orientations", "2,048"],
+            ["独立 [001] 样本 / Separate [001] study", "v5.study_001.sample_count", "512 (not mixed into headline)"],
+            ["最大倒空间半径 / Kmax", "common.k_max_Ainv", f"{common['k_max_Ainv']} Å⁻¹"],
+            ["中心束排除 / Central exclusion", "common.central_beam_exclusion_Ainv", f"{common['central_beam_exclusion_Ainv']} Å⁻¹"],
+            ["加速电压 / Voltage", "common.accelerating_voltage_V", f"{common['accelerating_voltage_V'] / 1000:g} kV"],
+            ["取向 canonicalization", "clean_sampling.headline_core.canonicalize_friedel", "True"],
+        ],
+        "image": [
+            ["公开输入 / Public input", "input_type", "HDF5 2D array, [sample,row,col]"],
+            ["图像模型 / Image model", "clean_image.forward_model", fmt(image["forward_model"])],
+            ["图像尺寸 / Image shape", "clean_image.gpts", "512 × 512"],
+            ["图像倒空间范围 / Image q range", "clean_image.q_max_Ainv", f"±{image.get('q_max_Ainv', 1.6)} Å⁻¹"],
+            ["会聚半角 / Semiangle", "clean_image.convergence_semiangle_mrad", f"{image.get('convergence_semiangle_mrad', 0.5)} mrad"],
+            ["样品厚度 / Thickness", "clean_image.thickness_nm", f"{image.get('thickness_nm', 5.0)} nm (diagnostic model)"],
+            ["过采样 / Oversampling", "clean_image.oversampling", fmt(image.get("oversampling", 4))],
+            ["中心束比例 / Direct beam", "clean_image.canonical_direct_beam_fraction", fmt(image.get("canonical_direct_beam_fraction", 0.90))],
+            ["探测器 PSF / Detector PSF", "clean_image.detector_psf_sigma_px", "disabled in canonical V5"],
+        ],
+        "counting_noise": [
+            ["计数模型 / Counting model", "clean_image.counting.model", fmt(counting["model"])],
+            ["剂量 / Electron doses", "clean_image.counting.doses_electrons", ", ".join(str(x) for x in counting["doses_electrons"]) + " e⁻"],
+            ["随机重复 / Random repeats", "clean_image.counting.repeats", fmt(counting["repeats"])],
+            ["读出噪声 / Read noise", "clean_image.instrument_noise.model", fmt(instrument["model"])],
+            ["参考探测器 / Reference detector", "instrument_noise.reference_detector", fmt(instrument["reference_detector"])],
+            ["读出噪声 RMS / Read-noise RMS", "instrument_noise.reference_read_noise_primary_e_rms_per_pixel", fmt(instrument["reference_read_noise_primary_e_rms_per_pixel"]) + " e⁻/pixel"],
+            ["噪声阶梯 / Noise levels", "instrument_noise.levels", "noiseless · Poisson · 1/4/16/64 frames"],
+            ["电子总量是否固定 / Fixed total dose", "counting.model", "Poisson expected total; total fluctuates"],
+        ],
+        "acom": [
+            ["晶带轴角步长 / Zone-axis step", "acom.angle_step_zone_axis_deg", f"{acom['angle_step_zone_axis_deg']}°"],
+            ["面内角步长 / In-plane step", "acom.angle_step_in_plane_deg", f"{acom['angle_step_in_plane_deg']}°"],
+            ["历史步长对照 / Legacy sweep", "acom.sweep_angle_steps_deg", ", ".join(f"{x}°" for x in acom["sweep_angle_steps_deg"])],
+            ["相关核半径 / Correlation kernel", "acom.corr_kernel_size_Ainv", f"{acom['corr_kernel_size_Ainv']} Å⁻¹"],
+            ["径向权重 / Radial power", "acom.power_radial", fmt(acom["power_radial"])],
+            ["模拟强度权重 / Simulated intensity power", "acom.power_intensity_simulated", fmt(acom["power_intensity_simulated"])],
+            ["输入强度权重 / Input intensity power", "acom.power_intensity_experiment", fmt(acom["power_intensity_experiment"])],
+            ["峰距离容差 / Distance tolerance", "acom.tol_distance_Ainv", f"{acom['tol_distance_Ainv']} Å⁻¹"],
+            ["最少峰数 / Minimum peaks", "acom.min_number_peaks", fmt(acom["min_number_peaks"])],
+            ["晶体/Friedel 等价 / Symmetry + Friedel", "evaluation", "best proper crystal symmetry × Friedel branch"],
+            ["返回候选数 / Candidates returned", "acom.num_matches_return", fmt(acom["num_matches_return"])],
+            ["GPU / CUDA", "acom.cuda", fmt(acom["cuda"])],
+        ],
+    }
+
+
 def build_payload(args: argparse.Namespace) -> dict:
-    config = load_config()
-    v5_config = yaml.safe_load(
-        (ROOT / "config/benchmark_v5.yaml").read_text(encoding="utf-8")
-    )
+    v5_config_path = ROOT / "config/benchmark_v5.yaml"
+    config = load_config(v5_config_path)
+    v5_config = yaml.safe_load(v5_config_path.read_text(encoding="utf-8"))
     structure = Structure.from_file(str(cif_path(config)))
     symmetries = proper_point_group_rotations(structure)
     cases, reciprocal_basis, _ = build_cases(
@@ -1180,11 +1320,13 @@ def build_payload(args: argparse.Namespace) -> dict:
                 "noise_report": noise_report,
             }
         ),
+        "parameter_tables": parameter_tables(config, v5_config),
         "legacy_v3": rounded(legacy_v3),
         "acom": {
             "conditions": int(acom["num_conditions"]),
             "clean_e_conditions": int(acom["num_clean_e_conditions"]),
             "clean_c_conditions": int(acom["num_clean_c_conditions"]),
+            "condition_rows": rounded(acom["conditions"]),
             "aggregates": aggregate_payload(acom),
         },
         "pyxem": {
@@ -1237,6 +1379,7 @@ def build_payload(args: argparse.Namespace) -> dict:
                 "clean_c_conditions": int(
                     study_001_acom["num_clean_c_conditions"]
                 ),
+                "condition_rows": rounded(study_001_acom["conditions"]),
                 "aggregates": aggregate_payload(study_001_acom),
             },
             "pyxem": {
@@ -1317,6 +1460,8 @@ HTML_TEMPLATE = r"""<!doctype html>
 :root{--ink:#172033;--muted:#64748b;--line:#dbe3ef;--panel:#f7f9fc;--blue:#2563eb;--cyan:#0891b2;--orange:#ea580c;--green:#15803d;--purple:#7c3aed;--red:#dc2626}
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
 .summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
+.definitions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{margin:7px 0}.definition .tag{display:inline-block;background:#eef2ff;border-radius:99px;padding:3px 8px;font-size:12px}.formation{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.formation>div{border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--panel);min-height:112px}.formation b{display:block;color:var(--blue);margin-bottom:5px}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px}.input-schema>section{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}.schema-note{padding:12px;border-radius:9px;background:#f8fafc;border:1px solid var(--line)}.input-examples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.input-example{border:1px solid var(--line);border-radius:12px;padding:10px}.input-example img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.image-comparison-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.comparison-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.comparison-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.comparison-card .diff{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.comparison-card .diff img{width:100%;aspect-ratio:1;object-fit:contain}.compare-stage{position:relative;max-width:680px;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#f8fafc}.compare-stage img,.compare-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.comparison-layout{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:16px;align-items:start}.parameter-table-wrap{overflow:auto}.parameter-table-wrap table{font-size:13px}.parameter-table-wrap td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:left}.study-quick{border:2px solid #c4b5fd;background:linear-gradient(135deg,#faf5ff,#fff);border-radius:14px;padding:18px}.study-quick .cards{margin:12px 0}.study-quick canvas{height:330px}@media(max-width:1100px){.definitions,.formation,.image-comparison-grid{grid-template-columns:1fr 1fr}.input-schema,.comparison-layout{grid-template-columns:1fr}}@media(max-width:650px){.definitions,.formation,.image-comparison-grid,.input-examples{grid-template-columns:1fr}}
+.image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
@@ -1341,6 +1486,63 @@ HTML_TEMPLATE = r"""<!doctype html>
   <div class="finding"><span>[001] Clean‑E</span><b id="summary-001">—</b><small>512 个独立样本，不混入 headline</small></div>
   <div class="finding"><span>检峰全量条件</span><b id="summary-disks">—</b><small>Precision / Recall / 位置误差可独立查看</small></div>
  </div>
+</section>
+
+<section class="section"><h2>先区分三种输入 / Three input tracks</h2>
+ <div class="definitions">
+  <article class="definition v3"><span class="tag">V3 · direct peak list</span><h3>直接峰输入</h3><p>输入已经是 <code>(qₓ,qᵧ,intensity)</code> 浮点峰列表。它测试 ACOM 的取向搜索，不测试二维图像形成和检峰。</p><p class="small muted">文件：private/oracle peaks HDF5；ACOM 直接读取 PointList。</p></article>
+  <article class="definition e"><span class="tag">Clean‑E · expectation</span><h3>物理期望图</h3><p>由 CIF、取向和 First‑Born 运动学模型得到的 <code>float32 P(q)</code>。没有电子抽样和读出噪声，是图像接口的确定性基线。</p><p class="small muted">目标：隔离图像形成与自动检峰对 ACOM 的影响。</p></article>
+  <article class="definition c"><span class="tag">Clean‑C · counted observation</span><h3>电子计数图</h3><p>从同一张 Clean‑E 图按电子剂量产生 <code>uint32 counts</code>；随后可叠加确定性 EMPAD‑G2 读出噪声。</p><p class="small muted">目标：测量剂量和噪声如何改变检峰与最终取向。</p></article>
+ </div>
+ <div class="warning" style="margin-top:12px"><b>比较顺序：</b>V3 → Clean‑E 判断图像形成/检峰损失；Clean‑E → Clean‑C 判断电子计数与读出噪声损失。三层不混为一个指标。</div>
+</section>
+
+<section class="section"><h2>二维衍射图如何得到 / Image formation</h2>
+ <div class="panel">
+  <div class="formation">
+   <div><b>① CIF + R</b>固定 NCM811 结构和 sample→crystal 取向。</div>
+   <div><b>② 运动学反射</b>按 HKL、结构因子和激发误差生成倒易反射。</div>
+   <div><b>③ 有限衍射盘</b>使用会聚束软边孔径和 4× 过采样，不把反射画成高斯点。</div>
+   <div><b>④ First‑Born 图像</b>累加中心盘与衍射盘，得到概率图 P(q)。</div>
+   <div><b>⑤ Clean‑E</b>保存归一化 float32 期望图；显示时不改原始数组。</div>
+   <div><b>⑥ Clean‑C</b>Poisson expected-total 计数，再按独立噪声层构建观测图。</div>
+  </div>
+  <div class="formula" style="margin-top:12px">g_crystal = [h k l] B
+g_sample = R_sample→crystalᵀ g_crystal
+P_E(q) = normalized physical First‑Born intensity
+n(q) ~ Poisson(Nₑ P_E(q))
+y(q) = n(q) + Normal(0, σ_read²)
+q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
+  <p class="small muted"><b>边界：</b>V5 当前 canonical 是运动学 First‑Born 图像，不是 multislice/dynamical。噪声只改变观测层，不改变散射模型。</p>
+ </div>
+</section>
+
+<section class="section"><h2>二维图像输入格式 / HDF5 interface</h2>
+ <div class="panel">
+  <p>检峰器输入的是 HDF5 数值数组，不是 PNG、截图或网页中的峰坐标。像素 <code>[row,col]</code> 通过 <code>detector/qx_Ainv[col]</code> 与 <code>detector/qy_Ainv[row]</code> 转回 Å⁻¹。</p>
+  <div class="input-schema">
+   <section><h3>Clean‑E</h3><p><code>datasets/clean_v5_first_born_expectation_2048.h5</code></p><p><code>expectation/intensity</code> · float32 · <code>[2048,512,512]</code></p><p class="small muted">每个样本是一张确定性概率/期望图，另存 sample_id、q 轴、beam center 和 vacuum probe。</p></section>
+   <section><h3>Clean‑C</h3><p><code>datasets/clean_v5_first_born_counted_2048.h5</code></p><p><code>images/counts</code> · uint32 · <code>[2048,9,5,512,512]</code></p><p class="small muted">维度依次为 sample、dose、repeat、row、col；噪声 manifest 记录读出噪声种子和 σ。</p></section>
+  </div>
+  <div class="schema-note" style="margin-top:12px"><b>实际读取链：</b>HDF5 二维数组 → AutoDisk / DoG‑RGM / py4DSTEM <code>find_Bragg_disks</code> → <code>(qx,qy,intensity)</code> PointList → 现有 ACOM。Pyxem 路径直接读取二维图像做模板匹配。</div>
+ </div>
+</section>
+
+<section class="section"><details class="fold" open><summary>同一取向的图像差异 / Same-orientation image comparison</summary><div class="fold-body">
+ <p class="section-intro">这里不把每幅图单独拉伸后并排比较，而是同时显示：实际图像、归一化后与 Clean‑E 的差异图、总电子数和相对 RMS。这样可以直接看出“剂量改变计数精度”，而不是误把显示亮度当作物理强度。</p>
+ <div class="image-comparison-grid" id="image-comparison-grid"></div>
+ <div class="comparison-layout" style="margin-top:16px">
+  <div><h3>检峰结果叠加 / Detection overlay</h3><div class="compare-stage"><img id="comparison-base-image" alt="comparison diffraction image"><canvas id="comparison-overlay" width="512" height="512"></canvas></div><div class="legend"><span style="--c:#16a34a">绿色圆/线：TP</span><span style="--c:#eab308">黄色圆：FN 漏检</span><span style="--c:#dc2626">红色叉：FP 误检</span></div></div>
+  <div class="panel"><h3 id="comparison-case-title">当前诊断案例</h3><p id="comparison-case-note"></p><div class="metrics" id="comparison-case-metrics"></div><p class="small muted">这些颜色只表示检测与 oracle 的一对一匹配关系；它们不表示 ACOM 的候选正确性。ACOM 误差另在候选表中报告。</p></div>
+ </div>
+</div></details></section>
+
+<section class="section study-quick"><h2>[001] 独立测试集 / Separate [001] study</h2>
+ <p><b>512 个样本独立构建，未混入 2,048 headline。</b>其中 exact [001]、near [001]、transition [001] 和 [100]/[110] control 分组分别报告；下图直接比较这套研究集的 Top‑1 与 Top‑5，而不是把它藏在 headline 曲线里。</p>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-quick-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div></div>
+ <div class="cards" id="study001-quick-cards"></div>
+ <canvas class="chart" id="study001-quick-chart" width="1280" height="330"></canvas><div class="legend" id="study001-quick-legend"></div>
+ <p class="small muted">若 exact [001] 明显低于 controls，而检峰 Recall 仍高，优先归因于高对称投影下的 ACOM 模板歧义；若 Recall 同步下降，则是图像/检峰层问题。完整分组表和倾角曲线见下方独立研究板块。</p>
 </section>
 
 <section class="section"><h2>完整数据路径与处理链</h2>
@@ -1477,6 +1679,10 @@ q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
 </div></details></section>
 
 <section class="section"><h2>运行参数与结果解释</h2>
+ <details open><summary>数据集与输入参数 / Dataset and input parameters</summary><div class="parameter-table-wrap" id="parameter-table-dataset"></div></details>
+ <details><summary>图像形成参数 / Image formation parameters</summary><div class="parameter-table-wrap" id="parameter-table-image"></div></details>
+ <details><summary>电子计数与噪声参数 / Counting and noise parameters</summary><div class="parameter-table-wrap" id="parameter-table-counting"></div></details>
+ <details><summary>ACOM 与评价参数 / ACOM and evaluation parameters</summary><div class="parameter-table-wrap" id="parameter-table-acom"></div></details>
  <details open><summary>Top‑K、对称性与 Friedel branch</summary><p>“Top‑K 含有正确答案”定义为：算法按相关分数给出的前 K 个候选中，至少一个候选在 proper crystal point-group rotations 与 detector-plane Friedel branch 两类等价变换后，取向误差 ≤2°。Friedel branch 处理二维衍射图无法区分的探测器平面反演；V5 同时在数据构建时保存 canonical Friedel branch，评价仍做等价搜索以避免代表选择影响指标。</p></details>
  <details><summary>电子计数与噪声</summary><div class="formula">Clean‑E: P(q), Σq P(q)=1
 Noiseless expected counts: I_N(q)=N_e P(q)
@@ -1501,13 +1707,13 @@ const DISK_METRIC={precision:{field:"precision_mean",label:"Precision",fixed:tru
 function canvasSurface(canvas){const rect=canvas.getBoundingClientRect(),W=Math.max(1,Math.round(rect.width||canvas.width)),H=Math.max(1,Math.round(rect.height||canvas.height)),ratio=Math.max(2,window.devicePixelRatio||1),pixelW=Math.round(W*ratio),pixelH=Math.round(H*ratio);if(canvas.width!==pixelW||canvas.height!==pixelH){canvas.width=pixelW;canvas.height=pixelH}const ctx=canvas.getContext("2d");ctx.setTransform(ratio,0,0,ratio,0,0);ctx.imageSmoothingEnabled=false;return {ctx,W,H}}
 function matrixText(m){return m.map(r=>"["+r.map(v=>Number(v).toFixed(6).padStart(10)).join("  ")+"]").join("\n")}
 function resultRoot(scope){return scope==="study001"?DATA.study_001:DATA}
-function aggregateScoped(scope,method,group,fields){const rows=resultRoot(scope)[method].aggregates.filter(r=>r.group_by===group&&Object.entries(fields).every(([k,v])=>r[k]===v));if(rows.length!==1)throw new Error(`aggregate ${scope}/${method}/${group} ${JSON.stringify(fields)} -> ${rows.length}`);return rows[0]}
+function aggregateScoped(scope,method,group,fields){const source=resultRoot(scope)[method],rows=source.aggregates.filter(r=>r.group_by===group&&Object.entries(fields).every(([k,v])=>r[k]===v));if(rows.length===1)return rows[0];if(group==="dose_noise_detector"){const conditionRows=(source.condition_rows||[]).filter(r=>Object.entries(fields).every(([k,v])=>r[k]===v));if(conditionRows.length===1)return {...conditionRows[0],num_conditions:1}}throw new Error(`aggregate ${scope}/${method}/${group} ${JSON.stringify(fields)} -> ${rows.length}`)}
 function aggregate(method,group,fields){return aggregateScoped("headline",method,group,fields)}
 function cleanCRow(methodValue,dose,noise,scope="headline"){const spec=METHODS[methodValue];return spec.detector?aggregateScoped(scope,"acom","dose_noise_detector",{track:"Clean-C",detector:spec.detector,dose_electrons:dose,noise}):aggregateScoped(scope,"pyxem","dose_noise",{track:"Clean-C",dose_electrons:dose,noise})}
 function diskRow(scope,detector,dose,noise){const key=scope==="study001"?"study_001":scope,rows=DATA.disk_recovery[key].aggregates.filter(r=>r.detector===detector&&r.dose_electrons===dose&&r.noise_level_id===noise);if(rows.length!==1)throw new Error(`disk ${scope}/${detector}/${dose}/${noise} -> ${rows.length}`);return rows[0]}
 function addOptions(id,values,label){for(const v of values){const o=document.createElement("option");o.value=v;o.textContent=label(v);$(id).append(o)}}
-function setupSelectors(){for(const id of ["dose-noise","condition-noise","disk-noise"]){addOptions(id,NOISE_ORDER,n=>NOISE_LABEL[n])}for(const id of ["noise-dose","condition-dose","disk-fixed-dose"]){addOptions(id,DATA.dataset.doses,d=>d.toLocaleString()+" e⁻")}$("noise-dose").value="10000";$("condition-dose").value="10000";$("disk-fixed-dose").value="10000";for(const c of DATA.cases){const o=document.createElement("option");o.value=c.id;o.textContent=c.label+" · "+c.sample_id;$("case-select").append(o)}}
-function chart(canvas,labels,series,{logX=false,yTitle="Acc@2°",fixed=true}={}){const {ctx,W,H}=canvasSurface(canvas),p={l:72,r:24,t:28,b:64};ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);const finite=series.flatMap(s=>s.values).filter(Number.isFinite),maxValue=fixed?1:Math.max(1,...finite)*1.08,minValue=0;ctx.font="12px system-ui";ctx.strokeStyle="#dbe3ef";ctx.fillStyle="#64748b";ctx.lineWidth=1;for(let i=0;i<=5;i++){const y=p.t+(H-p.t-p.b)*i/5,v=maxValue-(maxValue-minValue)*i/5;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke();ctx.textAlign="right";ctx.fillText(v<2?v.toFixed(1):v.toFixed(0),p.l-10,y+4)}const xs=labels.map((v,i)=>{if(logX){const lo=Math.log10(labels[0]),hi=Math.log10(labels[labels.length-1]);return p.l+(Math.log10(v)-lo)/(hi-lo)*(W-p.l-p.r)}return labels.length===1?(p.l+W-p.r)/2:p.l+i/(labels.length-1)*(W-p.l-p.r)});labels.forEach((v,i)=>{ctx.fillStyle="#64748b";ctx.textAlign="center";const text=logX?Number(v).toExponential(0):String(v);ctx.fillText(text,xs[i],H-p.b+22)});for(const s of series){ctx.strokeStyle=s.color;ctx.fillStyle=s.color;ctx.lineWidth=2.5;ctx.beginPath();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);if(i===0)ctx.moveTo(xs[i],y);else ctx.lineTo(xs[i],y)});ctx.stroke();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);ctx.beginPath();ctx.arc(xs[i],y,4,0,Math.PI*2);ctx.fill()})}ctx.save();ctx.translate(18,(p.t+H-p.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillStyle="#172033";ctx.font="13px system-ui";ctx.fillText(yTitle,0,0);ctx.restore()}
+function setupSelectors(){for(const id of ["dose-noise","condition-noise","disk-noise"]){addOptions(id,NOISE_ORDER,n=>NOISE_LABEL[n])}for(const id of ["noise-dose","condition-dose","disk-fixed-dose"]){addOptions(id,DATA.dataset.doses,d=>d.toLocaleString()+" e⁻")}$("dose-noise").value="poisson_only";$("noise-dose").value="10000";$("condition-dose").value="10000";$("disk-fixed-dose").value="10000";for(const c of DATA.cases){const o=document.createElement("option");o.value=c.id;o.textContent=c.label+" · "+c.sample_id;$("case-select").append(o)}}
+function chart(canvas,labels,series,{logX=false,yTitle="Acc@2°",fixed=true}={}){const {ctx,W,H}=canvasSurface(canvas),p={l:72,r:24,t:28,b:64};ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);const finite=series.flatMap(s=>s.values).filter(Number.isFinite),maxValue=fixed?1:Math.max(1,...finite)*1.08,minValue=0;ctx.font="12px system-ui";ctx.strokeStyle="#dbe3ef";ctx.fillStyle="#64748b";ctx.lineWidth=1;for(let i=0;i<=5;i++){const y=p.t+(H-p.t-p.b)*i/5,v=maxValue-(maxValue-minValue)*i/5;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke();ctx.textAlign="right";ctx.fillText(fixed?`${(v*100).toFixed(0)}%`:(v<2?v.toFixed(1):v.toFixed(0)),p.l-10,y+4)}const xs=labels.map((v,i)=>{if(logX){const lo=Math.log10(labels[0]),hi=Math.log10(labels[labels.length-1]);return p.l+(Math.log10(v)-lo)/(hi-lo)*(W-p.l-p.r)}return labels.length===1?(p.l+W-p.r)/2:p.l+i/(labels.length-1)*(W-p.l-p.r)});labels.forEach((v,i)=>{ctx.fillStyle="#64748b";ctx.textAlign="center";const text=logX?Number(v).toExponential(0):String(v);ctx.fillText(text,xs[i],H-p.b+22)});for(const s of series){ctx.strokeStyle=s.color;ctx.fillStyle=s.color;ctx.lineWidth=2.5;ctx.beginPath();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);if(i===0)ctx.moveTo(xs[i],y);else ctx.lineTo(xs[i],y)});ctx.stroke();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);ctx.beginPath();ctx.arc(xs[i],y,4,0,Math.PI*2);ctx.fill()})}ctx.save();ctx.translate(18,(p.t+H-p.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillStyle="#172033";ctx.font="13px system-ui";ctx.fillText(yTitle,0,0);ctx.restore()}
 function legend(id,series){$(id).innerHTML=series.map(s=>`<span style="--c:${s.color}">${s.name}</span>`).join("")}
 function metricSeries(rows,metricKey){const m=METRIC[metricKey];return [1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r.top_k[k-1][m.field])}))}
 function drawDose(){const scope=$("dose-scope").value,method=$("dose-method").value,noise=$("dose-noise").value,m=METRIC[$("dose-metric").value];const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise,scope)),series=metricSeries(rows,$("dose-metric").value);chart($("dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:`${scope==="study001"?"[001]":"Headline"} · ${m.label}`,fixed:m.fixed});legend("dose-legend",series)}
@@ -1525,16 +1731,21 @@ function drawCoordinateTrace(){const c=DATA.cases.find(x=>x.id===$("case-select"
 function updateReflection(){const c=DATA.cases.find(x=>x.id===$("case-select").value),r=c.reflections[Number($("reflection-select").value)||0];if(!r){$("reflection-detail").textContent="No retained reflection";return}$("reflection-detail").textContent=`HKL = [${r.hkl.join(", ")}]\ng_crystal = [h k l] B = [${r.g_crystal_Ainv.map(x=>num(x,5)).join(", ")}] Å⁻¹\ng_sample = Rᵀ g_crystal = [${r.g_sample_Ainv.map(x=>num(x,5)).join(", ")}] Å⁻¹\nq = [qx,qy,qz] = [${r.q_Ainv.map(x=>num(x,5)).join(", ")}] Å⁻¹\nexcitation error = ${num(r.excitation_error_Ainv,6)} Å⁻¹\nF_g = ${num(r.structure_factor[0],5)} + ${num(r.structure_factor[1],5)}i\nI_raw = ${num(r.intensity_raw,6)}, I_normalized = ${num(r.intensity_normalized,6)}`;drawCoordinateTrace();drawOverlay()}
 let axisAligned=true;
 function drawAxes(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{ctx,W,H}=canvasSurface($("axis-chart")),cx=W/2,cy=H/2,scale=Math.min(W/2-55,H/2-38)*.9;ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);ctx.strokeStyle="#dbe3ef";ctx.beginPath();ctx.moveTo(40,cy);ctx.lineTo(W-40,cy);ctx.moveTo(cx,30);ctx.lineTo(cx,H-35);ctx.stroke();const sets=[["GT",c.ground_truth_matrix,"#2563eb"],["ACOM",c.acom_candidates.length?(axisAligned?c.acom_candidates[0].aligned_matrix:c.acom_candidates[0].matrix):null,"#ea580c"],["Pyxem",axisAligned?c.pyxem_candidates[0].aligned_matrix:c.pyxem_candidates[0].matrix,"#15803d"]];for(const [name,m,color] of sets){if(!m)continue;for(let j=0;j<3;j++){const x=cx+m[0][j]*scale,y=cy-m[1][j]*scale;ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=name==="GT"?3:2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();ctx.font="12px system-ui";ctx.fillText(`${name} ${["x","y","z"][j]}`,x+6,y-5)}}}
-function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes()}
+function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes();drawComparisonOverlay()}
 function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("")}
+function parameterTable(rows){if(!rows||!rows.length)return '<p class="muted">没有保存参数。</p>';return `<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td><code>${row[1]}</code></td><td>${row[2]}</td></tr>`).join('')}</tbody></table>`}
+function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom']])$(id).innerHTML=parameterTable(tables[key])}
+function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$("image-comparison-grid").innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>与 P(q) 的绝对差异 / residual</figcaption><img src="${x.difference_url}" alt="${x.label} residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
+function drawComparisonOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value);if(!c)return;$("comparison-base-image").src=c.image_url;$("comparison-case-title").textContent=`${c.sample_id} · ${c.track==='expectation'?'Clean-E':`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("comparison-case-note").textContent=c.description;const m=c.peak_metrics;$("comparison-case-metrics").innerHTML=[['TP',m.true_positive],['FP',m.false_positive],['FN',m.false_negative],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['RMSE',`${num(m.position_rmse_px,3)} px`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');const {ctx,W,H}=canvasSurface($("comparison-overlay"));ctx.clearRect(0,0,W,H);const matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.lineWidth=1.5;for(const pair of m.matches){const a=qToPixel(c,c.oracle_peaks[pair.oracle_index].qx,c.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(c,c.detected_peaks[pair.detected_index].qx,c.detected_peaks[pair.detected_index].qy,W,H);ctx.strokeStyle='#16a34a';ctx.fillStyle='#16a34a';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.beginPath();ctx.arc(a[0],a[1],5,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(b[0],b[1],3,0,Math.PI*2);ctx.fill()}ctx.strokeStyle='#eab308';ctx.lineWidth=2;for(let i=0;i<c.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(c,c.oracle_peaks[i].qx,c.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle='#dc2626';ctx.lineWidth=2;for(let i=0;i<c.detected_peaks.length;i++)if(!matchedD.has(i)){const p=qToPixel(c,c.detected_peaks[i].qx,c.detected_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-5,p[1]-5);ctx.lineTo(p[0]+5,p[1]+5);ctx.moveTo(p[0]+5,p[1]-5);ctx.lineTo(p[0]-5,p[1]+5);ctx.stroke()}}
+function drawStudy001Quick(){const method=$("study001-quick-method").value,groups=DATA.study_001.topk_groups.groups||[],order=['exact_001','near_001','transition_001','control_100','control_110'],labels={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100] control',control_110:'[110] control'},chartLabels={exact_001:'exact',near_001:'near',transition_001:'transition',control_100:'[100]',control_110:'[110]'},find=group=>groups.find(x=>x.method===method&&x.group===group);const rows=order.map(group=>find(group)).filter(Boolean);const series=[{name:'Top-1',color:'#7c3aed',values:rows.map(r=>r.topk_acc2[0])},{name:'Top-5',color:'#ea580c',values:rows.map(r=>r.topk_acc2[4])}];chart($("study001-quick-chart"),rows.map(r=>chartLabels[r.group]||r.group),series,{yTitle:'Acc@2°',fixed:true});legend('study001-quick-legend',series);$("study001-quick-cards").innerHTML=rows.map(r=>`<div class="card"><strong>${pct(r.topk_acc2[0])} → ${pct(r.topk_acc2[4])}</strong><span>${labels[r.group]||r.group} · N=${r.samples}</span></div>`).join('')}
 function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5",study_001:"[001] independent study"};const show=v=>typeof v==="object"?JSON.stringify(v,null,2):String(v);$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]||k}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><pre class="file">${show(b)}</pre></div>`).join("")}</div>`).join("")}
 function cleanERow(scope,method){return method==="pyxem"?aggregateScoped(scope,"pyxem","track",{track:"Clean-E"}):aggregateScoped(scope,"acom","clean_e_input",{track:"Clean-E",input:method})}
 function renderSummary(){const methods=Object.keys(METHODS),rows=methods.map(m=>({m,row:cleanCRow(m,1000000,"poisson_only")})),best=rows.sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-headline").textContent=`${METHODS[best.m].label}: ${pct(best.row.top_k[4].accuracy_all_inputs_within_2deg)}`;const s001=["oracle","autodisk","dog_rgm","py4dstem","pyxem"].map(m=>({m,row:cleanERow("study001",m)})).sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-001").textContent=`${s001.m==="pyxem"?"Pyxem":DETECTOR_LABEL[s001.m]||"Oracle"}: ${pct(s001.row.top_k[4].accuracy_all_inputs_within_2deg)}`;$("summary-disks").textContent=`${DATA.disk_recovery.headline.num_conditions} + ${DATA.disk_recovery.study_001.num_conditions} conditions`}
 function drawStudy001(){const data=DATA.study_001.topk_groups,method=$("study001-method").value,key=`topk_${$("study001-metric").value}`,rows=data.tilts.filter(r=>r.method===method),labels=rows.map(r=>r.tilt_deg),series=[1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r[key][k-1])}));chart($("study001-tilt-chart"),labels,series,{yTitle:`[001] ${$("study001-metric").selectedOptions[0].textContent}`,fixed:true});legend("study001-legend",series)}
 function renderStudy001(){const s=DATA.study_001,labels=s.topk_groups.method_labels;$("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>为何单独研究：</b>接近 [001] 时，投影反射的简并和高对称性会增加候选取向歧义。该实验用 exact、near、transition 和两个控制组区分“高对称区固有歧义”与“检峰错误”。</div>`;const groups=s.topk_groups.groups,ordered=["exact_001","near_001","transition_001","control_100","control_110"];$("study001-tables").innerHTML=`<h3>Clean‑E Top‑1 / Top‑5 Acc@2° by group</h3><div class="table-wrap"><table><thead><tr><th>Method</th>${ordered.map(g=>`<th>${g}<br>Top‑1 / Top‑5</th>`).join("")}</tr></thead><tbody>${Object.keys(labels).map(method=>`<tr><td>${labels[method]}</td>${ordered.map(group=>{const r=groups.find(x=>x.method===method&&x.group===group);return `<td>${pct(r.topk_acc2[0])} / <b>${pct(r.topk_acc2[4])}</b><br><span class="small muted">N=${r.samples}</span></td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;drawStudy001()}
 function renderLegacy(){const rows=DATA.legacy_v3,series=[{name:"Headline Acc@2°",color:"#2563eb",values:rows.map(r=>r.headline.accuracy_within_2deg)},{name:"40 grid probes Acc@2°",color:"#ea580c",values:rows.map(r=>r.grid_probe.accuracy_within_2deg)}];chart($("legacy-chart"),rows.map(r=>`${r.angle_step_deg}°`),series,{yTitle:"V3 Acc@2°",fixed:true});legend("legacy-legend",series);$("legacy-table").innerHTML=rows.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${r.headline.num_samples}</td><td>${pct(r.headline.accuracy_within_2deg)}</td><td>${num(r.headline.median_misorientation_deg)}°</td><td>${r.grid_probe.num_samples}</td><td>${pct(r.grid_probe.accuracy_within_2deg)}</td><td>${num(r.grid_probe.median_misorientation_deg)}°</td></tr>`).join("")}
-function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderFiles();renderStudy001();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
-let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes()},120)});
+function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderImageComparison();renderParameterTables();renderFiles();renderStudy001();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();drawStudy001Quick();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));$("study001-quick-method").addEventListener("change",drawStudy001Quick);$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
+let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();drawStudy001Quick();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes();drawComparisonOverlay()},120)});
 init();
 </script>
 </main></body></html>"""
