@@ -352,7 +352,7 @@ def compact_trace(
         enumerate(row["acom_simulated_reflections"]),
         key=lambda item: item[1]["reported_by_py4DSTEM_intensity_normalized"],
         reverse=True,
-    )[:12]
+    )
     observed_index = {
         original_index: compact_index
         for compact_index, (original_index, _) in enumerate(observed_ranked)
@@ -1255,10 +1255,10 @@ function renderOrientationTabs(sample) {
 }
 
 function renderDetector(sample) {
-  const plottedObserved = sample.observed.slice(0, 12).map((peak, index) => ({peak, index}));
-  if (reflectionIndex >= 12) {
-    plottedObserved.push({peak: sample.observed[reflectionIndex], index: reflectionIndex});
-  }
+  const plottedObserved = sample.observed.map((peak, index) => ({peak, index}));
+  const visibleObserved = new Set(plottedObserved.map(item => item.index));
+  const plottedMatches = sample.matches.filter(match => visibleObserved.has(match.observed));
+  const plottedPredicted = sample.predicted.map((peak, index) => ({peak, index}));
   let markup = `
     <line x1="82" y1="200" x2="500" y2="200" stroke="var(--border)"/>
     <line x1="280" y1="22" x2="280" y2="378" stroke="var(--border)"/>
@@ -1266,7 +1266,7 @@ function renderDetector(sample) {
     <text x="495" y="222" text-anchor="end" fill="var(--muted-foreground)">qₓ (Å⁻¹)</text>
     <text x="290" y="36" fill="var(--muted-foreground)">qᵧ (Å⁻¹)</text>`;
   if (displayMode === "overlay") {
-    sample.matches.filter(match => match.observed < 12).forEach(match => {
+    plottedMatches.forEach(match => {
       const observed = sample.observed[match.observed];
       const predicted = sample.predicted[match.predicted];
       markup += `<line x1="${qX(observed.q[0])}" y1="${qY(observed.q[1])}" x2="${qX(predicted.q[0])}" y2="${qY(predicted.q[1])}" stroke="var(--border)"/>`;
@@ -1280,17 +1280,18 @@ function renderDetector(sample) {
     });
   }
   if (displayMode !== "gt") {
-    sample.predicted.forEach(peak => {
+    plottedPredicted.forEach(({peak, index}) => {
       const x = qX(peak.q[0]);
       const y = qY(peak.q[1]);
       const size = 4 + 6 * Math.sqrt(peak.intensity);
-      markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM 模拟预测反射 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
+      markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM 预测反射 #${index + 1} · HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
     });
   }
   detector.innerHTML = markup;
-  const modeText = displayMode === "gt" ? "GT 观测峰" : displayMode === "acom" ? "ACOM 预测峰" : "GT 与 ACOM 叠加";
+  const modeText = displayMode === "gt" ? "全部 GT 观测峰" : displayMode === "acom" ? "全部 ACOM 预测峰" : "全部 GT 与 ACOM 峰叠加";
   document.getElementById("detector-note").textContent =
-    `当前显示：${modeText}（强度前 12）；诊断选择为 GT HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
+    `当前显示：${modeText}；GT ${sample.num_observed_peaks} 个，ACOM ${sample.num_predicted_peaks} 个，` +
+    `一对一匹配 ${sample.num_matched_peaks} 个（全部峰均显示）。诊断选择为 GT HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
 }
 
 function renderAxes(sample) {

@@ -109,6 +109,9 @@ class OrientationAlignmentTest(unittest.TestCase):
             atol=1e-12,
         )
         self.assertGreater(reciprocal["cell_volume_A3"], 0.0)
+        self.assertEqual(len(sample["observed"]), sample["num_observed_peaks"])
+        self.assertEqual(len(sample["predicted"]), sample["num_predicted_peaks"])
+        self.assertEqual(len(sample["matches"]), sample["num_matched_peaks"])
 
         friedel = next(row for row in samples if row["label"] == "Friedel branch")
         self.assertEqual(friedel["sample_id"], "clean_core_0061")
