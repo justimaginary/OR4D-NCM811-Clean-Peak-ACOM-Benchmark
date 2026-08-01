@@ -534,9 +534,12 @@ def build_noise_gallery(
             noisy = add_gaussian_read_noise(
                 poisson, sigma, np.random.default_rng(seed)
             )
-            frame_label = level.removeprefix("empad_g2_").replace(
-                "frames", " frames"
-            ).replace("frame", " frame")
+            frame_count = level.removeprefix("empad_g2_").removesuffix(
+                "frames"
+            ).removesuffix("frame")
+            frame_label = f"{frame_count} frame" + (
+                "" if frame_count == "1" else "s"
+            )
             arrays.append(
                 (
                     level,
@@ -1388,12 +1391,12 @@ HTML_TEMPLATE = r"""<!doctype html>
  <p class="chart-note">横轴为电子数/图样（对数）；纵轴由上方指标选择。Top‑K 候选顺序来自算法相关分数，不使用 GT 重排。</p>
 </section>
 
-<section class="section"><h2>全噪声 × 全方法小多图</h2>
+<section class="section"><details class="fold"><summary>全噪声 × 全方法小多图（24 张）</summary><div class="fold-body">
  <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem。每张图同时保留 Top‑1…Top‑5。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="overview-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <div class="legend" id="overview-legend"></div>
  <div class="small-multiples" id="overview-grid"></div>
-</section>
+</div></details></section>
 
 <section class="section"><h2>固定电子剂量下的噪声阶梯</h2>
  <div class="controls">
