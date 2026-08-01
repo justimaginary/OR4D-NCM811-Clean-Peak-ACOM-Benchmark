@@ -55,6 +55,14 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--detection-workers", type=int, default=8)
     parser.add_argument("--acom-workers", type=int, default=4)
+    parser.add_argument(
+        "--cpu-worker-limit",
+        type=int,
+        help=(
+            "Explicit total worker authorization. Omit to enforce the normal "
+            "single-GPU limit of 16 or two-GPU limit of 32."
+        ),
+    )
     parser.add_argument("--resume", action="store_true")
     return parser.parse_args()
 
@@ -325,7 +333,15 @@ def main() -> None:
         raise ValueError("--detection-workers must be in [1, 24]")
     if not 1 <= args.acom_workers <= 8:
         raise ValueError("--acom-workers must be in [1, 8]")
-    worker_limit = 16 if len(cuda_devices) == 1 else 32
+    default_worker_limit = 16 if len(cuda_devices) == 1 else 32
+    worker_limit = args.cpu_worker_limit or default_worker_limit
+    maximum_authorized_limit = 20 if len(cuda_devices) == 1 else 32
+    if not 1 <= worker_limit <= maximum_authorized_limit:
+        raise ValueError(
+            "--cpu-worker-limit exceeds the supported explicit authorization "
+            f"range for {len(cuda_devices)} GPU(s): [1, "
+            f"{maximum_authorized_limit}]"
+        )
     if args.detection_workers + args.acom_workers > worker_limit:
         raise ValueError(
             f"combined worker count must not exceed {worker_limit} for "
@@ -350,6 +366,8 @@ def main() -> None:
         "cuda_visible_devices": cuda_devices,
         "detection_workers": args.detection_workers,
         "acom_workers": args.acom_workers,
+        "cpu_worker_limit": worker_limit,
+        "default_cpu_worker_limit": default_worker_limit,
         "num_conditions": len(conditions),
         "records": [],
     }
