@@ -19,6 +19,7 @@ class V5ResultsTests(unittest.TestCase):
         self.assertEqual(counted["noise"], "empad_g2_16frames")
         self.assertEqual(counted["repeat"], 4)
         self.assertEqual(counted["frames"], 16)
+        self.assertEqual(counted["detector"], "py4dstem")
 
         single_frame = parse_clean_c_condition_stem(
             "dose100_noise_empad_g2_1frame_repeat0_py4dstem"
@@ -30,6 +31,16 @@ class V5ResultsTests(unittest.TestCase):
             "dose1000000_noise_noiseless_py4dstem"
         )
         self.assertEqual(noiseless["repeat"], None)
+
+        autodisk = parse_clean_c_condition_stem(
+            "dose3000_noise_poisson_only_repeat2_autodisk"
+        )
+        self.assertEqual(autodisk["detector"], "autodisk")
+
+        dog = parse_clean_c_condition_stem(
+            "dose10000_noise_noiseless_dog_rgm"
+        )
+        self.assertEqual(dog["detector"], "dog_rgm")
 
     def test_aggregate_keeps_missing_inputs_in_accuracy_denominator(self):
         first = np.array([[0.5, 0.4], [4.0, 1.0]])
@@ -45,6 +56,41 @@ class V5ResultsTests(unittest.TestCase):
         self.assertEqual(
             aggregate_group_keys(label),
             [("track", "Clean-E"), ("clean_e_input", "oracle")],
+        )
+
+    def test_clean_c_detectors_are_aggregated_separately(self):
+        label = {
+            "track": "Clean-C",
+            "detector": "autodisk",
+            "dose_electrons": 1000,
+            "noise": "empad_g2_4frames",
+        }
+        self.assertEqual(
+            aggregate_group_keys(label),
+            [
+                ("track", "Clean-C"),
+                ("detector", "autodisk"),
+                ("dose_all_detector", "autodisk|1000"),
+                (
+                    "dose_noise_detector",
+                    "autodisk|1000|empad_g2_4frames",
+                ),
+                ("noise_all_detector", "autodisk|empad_g2_4frames"),
+                ("dose_counted_detector", "autodisk|1000"),
+            ],
+        )
+        self.assertEqual(
+            group_label(
+                "dose_noise_detector",
+                "dog_rgm|30000|poisson_only",
+            ),
+            {
+                "group_by": "dose_noise_detector",
+                "track": "Clean-C",
+                "detector": "dog_rgm",
+                "dose_electrons": 30000,
+                "noise": "poisson_only",
+            },
         )
         self.assertEqual(
             group_label("clean_e_input", "py4dstem"),

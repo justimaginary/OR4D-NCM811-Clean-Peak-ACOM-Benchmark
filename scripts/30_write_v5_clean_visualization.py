@@ -447,6 +447,21 @@ def detected_path(data_root: Path, case: dict) -> Path:
                 f"{case['detector']}_peaks_first_born.h5"
             )
         )
+    detector = str(case["detector"])
+    if detector in {"autodisk", "dog_rgm"}:
+        suffix = (
+            f"dose{case['dose']}_noise_{case['noise']}"
+            + (
+                ""
+                if case["noise"] == "noiseless"
+                else f"_repeat{case['repeat']}"
+            )
+        )
+        return (
+            data_root
+            / f"intermediates/detected_clean_c_full_{detector}"
+            / f"clean_{suffix}_{detector}_peaks_first_born.h5"
+        )
     if case["noise"] == "noiseless":
         return (
             data_root
@@ -480,7 +495,7 @@ def candidate_path(data_root: Path, case: dict) -> Path:
             if case["noise"] == "noiseless"
             else f"_repeat{case['repeat']}"
         )
-        + "_py4dstem"
+        + f"_{case['detector']}"
     )
     return (
         data_root
@@ -579,13 +594,35 @@ def build_cases(
         {
             "id": "clean_c_read_noise",
             "label": "Clean-C · 100 e⁻ · EMPAD-G2 64 frames",
-            "description": "Low dose with the strongest configured read-noise level.",
+            "description": "Low dose with the strongest configured read-noise level, detected by find_Bragg_disks.",
             "sample_id": None,
             "track": "counted",
             "dose": 100,
             "noise": "empad_g2_64frames",
             "repeat": 0,
             "detector": "py4dstem",
+        },
+        {
+            "id": "clean_c_autodisk_worst",
+            "label": "Clean-C · AutoDisk · low-dose difficult case",
+            "description": "Worst saved ACOM Top-1 case for AutoDisk at 100 e⁻ with the strongest configured read noise.",
+            "sample_id": None,
+            "track": "counted",
+            "dose": 100,
+            "noise": "empad_g2_64frames",
+            "repeat": 0,
+            "detector": "autodisk",
+        },
+        {
+            "id": "clean_c_dog_worst",
+            "label": "Clean-C · DoG-RGM · low-dose difficult case",
+            "description": "Worst saved ACOM Top-1 case for DoG-RGM at 100 e⁻ with the strongest configured read noise.",
+            "sample_id": None,
+            "track": "counted",
+            "dose": 100,
+            "noise": "empad_g2_64frames",
+            "repeat": 0,
+            "detector": "dog_rgm",
         },
     ]
 
@@ -605,7 +642,11 @@ def build_cases(
             if not failures:
                 raise ValueError("expected a saved low-dose indexing failure")
             case["sample_id"] = str(failures[0]["sample_id"])
-        elif case["id"] == "clean_c_read_noise":
+        elif case["id"] in {
+            "clean_c_read_noise",
+            "clean_c_autodisk_worst",
+            "clean_c_dog_worst",
+        }:
             case["sample_id"] = select_sample(path, "worst")
         elif case["id"] == "clean_c_mid_noise":
             case["sample_id"] = select_sample(path, "median")
@@ -883,14 +924,14 @@ HTML_TEMPLATE = r"""<!doctype html>
 </head>
 <body><main>
 <header class="topbar">
- <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · independent detector-noise ladder · ACOM and Pyxem</p></div>
+ <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · 3 disk detectors + Pyxem · ACOM Top‑1…Top‑5</p></div>
  <nav class="nav"><a href="../v3/ACOM_COORDINATE_VISUALIZATION.html">V3 · 直接峰</a><a href="../v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html">V4 · 图像接口</a><a class="active" href="ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量/噪声/Top‑5</a></nav>
 </header>
 
 <section class="cards">
  <div class="card"><strong>2,048</strong><span>headline orientations</span></div>
  <div class="card"><strong>9 × 6</strong><span>剂量 × 噪声阶梯</span></div>
- <div class="card"><strong>238 / 235</strong><span>ACOM / Pyxem completed conditions</span></div>
+ <div class="card"><strong id="condition-count">—</strong><span>ACOM / Pyxem completed conditions</span></div>
  <div class="card"><strong>Top‑1…Top‑5</strong><span>全部候选等级均保存并评测</span></div>
 </section>
 
@@ -910,7 +951,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 <section class="section"><h2>Top‑1…Top‑5 剂量曲线</h2>
  <p>每条曲线使用全部 2,048 个输入作为分母。ACOM 没有候选的样本计为错误；Pyxem 返回候选并不代表候选正确。</p>
  <div class="controls">
-  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct-image template matching</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct-image template matching</option></select></div>
   <div class="control"><label>噪声梯度 / Noise level</label><select id="dose-noise"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="dose-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -920,7 +961,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 </section>
 
 <section class="section"><h2>全噪声 × 全方法小多图</h2>
- <p>每一行固定一个噪声等级；左列是 ACOM + find_Bragg_disks，右列是 Pyxem 直接图像匹配。每张图同时保留 Top‑1…Top‑5。</p>
+ <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem。每张图同时保留 Top‑1…Top‑5。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="overview-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <div class="legend" id="overview-legend"></div>
  <div class="small-multiples" id="overview-grid"></div>
@@ -928,7 +969,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
 <section class="section"><h2>固定电子剂量下的噪声阶梯</h2>
  <div class="controls">
-  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="noise-dose"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="noise-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -938,21 +979,21 @@ HTML_TEMPLATE = r"""<!doctype html>
 </section>
 
 <section class="section"><h2>Clean‑E 输入/检峰器与 Top‑K</h2>
- <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 直接读取图像，不是检峰器。Clean‑C 全量 ACOM 当前只运行了 find_Bragg_disks。</p>
+ <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 直接读取图像。Clean‑C 的三种检峰器均已完成 234 个条件。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="cleane-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <canvas class="chart" id="cleane-chart" width="1280" height="390"></canvas>
  <div class="legend" id="cleane-legend"></div>
  <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Track / method</th><th>Clean‑E full</th><th>Clean‑C full</th><th>说明</th></tr></thead><tbody>
   <tr><td>ACOM + oracle</td><td class="status-ok">✓ 2,048</td><td class="status-no">—</td><td>只用于上限比较</td></tr>
-  <tr><td>ACOM + AutoDisk</td><td class="status-ok">✓ 2,048</td><td class="status-no">未运行</td><td>不绘制不存在的 Clean‑C 曲线</td></tr>
-  <tr><td>ACOM + DoG‑RGM</td><td class="status-ok">✓ 2,048</td><td class="status-no">未运行</td><td>不绘制不存在的 Clean‑C 曲线</td></tr>
+  <tr><td>ACOM + AutoDisk</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>环形互相关、LoG 初检、RGM 精修</td></tr>
+  <tr><td>ACOM + DoG‑RGM</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>DoG 尺度空间初检、RGM 精修</td></tr>
   <tr><td>ACOM + find_Bragg_disks</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>Clean‑C ACOM 正式路径</td></tr>
   <tr><td>Pyxem direct image</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>直接图像模板匹配，无检峰步骤</td></tr>
  </tbody></table></div>
 </section>
 
 <section class="section"><h2>当前条件的精确 Top‑K 数值</h2>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
  <p id="condition-caption"></p><div class="table-wrap"><table><thead><tr><th>K</th><th>Coverage</th><th>Acc@1°</th><th>Acc@2°</th><th>Acc@5°</th><th>Median error</th><th>P95 error</th></tr></thead><tbody id="condition-table"></tbody></table></div>
 </section>
 
@@ -1010,19 +1051,21 @@ const NOISE_ORDER=["noiseless","poisson_only","empad_g2_1frame","empad_g2_4frame
 const NOISE_LABEL={noiseless:"Noiseless expected counts",poisson_only:"Poisson only",empad_g2_1frame:"EMPAD-G2 · 1 frame",empad_g2_4frames:"EMPAD-G2 · 4 frames",empad_g2_16frames:"EMPAD-G2 · 16 frames",empad_g2_64frames:"EMPAD-G2 · 64 frames"};
 const pct=v=>(100*v).toFixed(2)+"%";const num=(v,d=3)=>Number.isFinite(v)?Number(v).toFixed(d):"—";
 const METRIC={acc1:{field:"accuracy_all_inputs_within_1deg",label:"Acc@1°",fixed:true},acc2:{field:"accuracy_all_inputs_within_2deg",label:"Acc@2°",fixed:true},acc5:{field:"accuracy_all_inputs_within_5deg",label:"Acc@5°",fixed:true},median:{field:"median_misorientation_deg_indexed",label:"Median equivalent error (°)",fixed:false},p95:{field:"p95_misorientation_deg_indexed",label:"P95 equivalent error (°)",fixed:false},coverage:{field:"prediction_coverage",label:"Prediction coverage",fixed:true}};
+const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem direct image"}};
 function canvasSurface(canvas){const rect=canvas.getBoundingClientRect(),W=Math.max(1,Math.round(rect.width||canvas.width)),H=Math.max(1,Math.round(rect.height||canvas.height)),ratio=Math.max(2,window.devicePixelRatio||1),pixelW=Math.round(W*ratio),pixelH=Math.round(H*ratio);if(canvas.width!==pixelW||canvas.height!==pixelH){canvas.width=pixelW;canvas.height=pixelH}const ctx=canvas.getContext("2d");ctx.setTransform(ratio,0,0,ratio,0,0);ctx.imageSmoothingEnabled=false;return {ctx,W,H}}
 function matrixText(m){return m.map(r=>"["+r.map(v=>Number(v).toFixed(6).padStart(10)).join("  ")+"]").join("\n")}
 function aggregate(method,group,fields){const rows=DATA[method].aggregates.filter(r=>r.group_by===group&&Object.entries(fields).every(([k,v])=>r[k]===v));if(rows.length!==1)throw new Error(`aggregate ${method}/${group} ${JSON.stringify(fields)} -> ${rows.length}`);return rows[0]}
+function cleanCRow(methodValue,dose,noise){const spec=METHODS[methodValue];return spec.detector?aggregate("acom","dose_noise_detector",{track:"Clean-C",detector:spec.detector,dose_electrons:dose,noise}):aggregate("pyxem","dose_noise",{track:"Clean-C",dose_electrons:dose,noise})}
 function setupSelectors(){NOISE_ORDER.forEach(n=>{for(const id of ["dose-noise","condition-noise"]){const o=document.createElement("option");o.value=n;o.textContent=NOISE_LABEL[n];$(id).append(o)}});DATA.dataset.doses.forEach(d=>{for(const id of ["noise-dose","condition-dose"]){const o=document.createElement("option");o.value=d;o.textContent=d.toLocaleString()+" e⁻";$(id).append(o)}});$("noise-dose").value="10000";$("condition-dose").value="10000";for(const c of DATA.cases){const o=document.createElement("option");o.value=c.id;o.textContent=c.label+" · "+c.sample_id;$("case-select").append(o)}}
 function chart(canvas,labels,series,{logX=false,yTitle="Acc@2°",fixed=true}={}){const {ctx,W,H}=canvasSurface(canvas),p={l:72,r:24,t:28,b:64};ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);const finite=series.flatMap(s=>s.values).filter(Number.isFinite),maxValue=fixed?1:Math.max(1,...finite)*1.08,minValue=0;ctx.font="12px system-ui";ctx.strokeStyle="#dbe3ef";ctx.fillStyle="#64748b";ctx.lineWidth=1;for(let i=0;i<=5;i++){const y=p.t+(H-p.t-p.b)*i/5,v=maxValue-(maxValue-minValue)*i/5;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke();ctx.textAlign="right";ctx.fillText(v<2?v.toFixed(1):v.toFixed(0),p.l-10,y+4)}const xs=labels.map((v,i)=>{if(logX){const lo=Math.log10(labels[0]),hi=Math.log10(labels[labels.length-1]);return p.l+(Math.log10(v)-lo)/(hi-lo)*(W-p.l-p.r)}return labels.length===1?(p.l+W-p.r)/2:p.l+i/(labels.length-1)*(W-p.l-p.r)});labels.forEach((v,i)=>{ctx.fillStyle="#64748b";ctx.textAlign="center";const text=logX?Number(v).toExponential(0):String(v);ctx.fillText(text,xs[i],H-p.b+22)});for(const s of series){ctx.strokeStyle=s.color;ctx.fillStyle=s.color;ctx.lineWidth=2.5;ctx.beginPath();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);if(i===0)ctx.moveTo(xs[i],y);else ctx.lineTo(xs[i],y)});ctx.stroke();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);ctx.beginPath();ctx.arc(xs[i],y,4,0,Math.PI*2);ctx.fill()})}ctx.save();ctx.translate(18,(p.t+H-p.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillStyle="#172033";ctx.font="13px system-ui";ctx.fillText(yTitle,0,0);ctx.restore()}
 function legend(id,series){$(id).innerHTML=series.map(s=>`<span style="--c:${s.color}">${s.name}</span>`).join("")}
 function metricSeries(rows,metricKey){const m=METRIC[metricKey];return [1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r.top_k[k-1][m.field])}))}
-function drawDose(){const method=$("dose-method").value,noise=$("dose-noise").value,m=METRIC[$("dose-metric").value];const rows=DATA.dataset.doses.map(d=>aggregate(method,"dose_noise",{track:"Clean-C",dose_electrons:d,noise})),series=metricSeries(rows,$("dose-metric").value);chart($("dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("dose-legend",series)}
-function drawNoise(){const method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>aggregate(method,"dose_noise",{track:"Clean-C",dose_electrons:dose,noise})),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_LABEL[n].replace("EMPAD-G2 · ","").replace("Noiseless expected counts","Noiseless")),series,{yTitle:m.label,fixed:m.fixed});legend("noise-legend",series)}
+function drawDose(){const method=$("dose-method").value,noise=$("dose-noise").value,m=METRIC[$("dose-metric").value];const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,$("dose-metric").value);chart($("dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("dose-legend",series)}
+function drawNoise(){const method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>cleanCRow(method,dose,noise)),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_LABEL[n].replace("EMPAD-G2 · ","").replace("Noiseless expected counts","Noiseless")),series,{yTitle:m.label,fixed:m.fixed});legend("noise-legend",series)}
 function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem image"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
-function buildOverview(){const grid=$("overview-grid");grid.innerHTML="";for(const noise of NOISE_ORDER){for(const method of ["acom","pyxem"]){const box=document.createElement("div");box.className="mini-chart";box.innerHTML=`<h3>${NOISE_LABEL[noise]} · ${method==="acom"?"ACOM + find_Bragg":"Pyxem image"}</h3><canvas width="620" height="240"></canvas>`;grid.append(box)}}drawOverview()}
-function drawOverview(){const key=$("overview-metric").value,m=METRIC[key],canvases=$("overview-grid").querySelectorAll("canvas");let index=0;for(const noise of NOISE_ORDER){for(const method of ["acom","pyxem"]){const rows=DATA.dataset.doses.map(d=>aggregate(method,"dose_noise",{track:"Clean-C",dose_electrons:d,noise})),series=metricSeries(rows,key);chart(canvases[index++],DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed})}}const dummy={top_k:[1,2,3,4,5].map(()=>({[m.field]:0}))};legend("overview-legend",metricSeries([dummy],key))}
-function drawCondition(){const method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value);const row=aggregate(method,"dose_noise",{track:"Clean-C",dose_electrons:dose,noise});$("condition-caption").textContent=`${method==="acom"?"ACOM + find_Bragg_disks":"Pyxem direct image"} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
+function buildOverview(){const grid=$("overview-grid");grid.innerHTML="";for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const box=document.createElement("div");box.className="mini-chart";box.innerHTML=`<h3>${NOISE_LABEL[noise]} · ${METHODS[method].label}</h3><canvas width="620" height="240"></canvas>`;grid.append(box)}}drawOverview()}
+function drawOverview(){const key=$("overview-metric").value,m=METRIC[key],canvases=$("overview-grid").querySelectorAll("canvas");let index=0;for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,key);chart(canvases[index++],DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed})}}const dummy={top_k:[1,2,3,4,5].map(()=>({[m.field]:0}))};legend("overview-legend",metricSeries([dummy],key))}
+function drawCondition(){const method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value),row=cleanCRow(method,dose,noise);$("condition-caption").textContent=`${METHODS[method].label} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
 function qToPixel(caseRow,qx,qy,W,H){const q=caseRow.q_axis;return [(qx-q.qx_min)/(q.qx_max-q.qx_min)*W,(qy-q.qy_min)/(q.qy_max-q.qy_min)*H]}
 function drawOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{ctx,W,H}=canvasSurface($("peak-overlay"));ctx.clearRect(0,0,W,H);if($("show-links").checked){ctx.strokeStyle="rgba(124,58,237,.7)";ctx.lineWidth=1;c.peak_metrics.matches.forEach(m=>{const a=c.oracle_peaks[m.oracle_index],b=c.detected_peaks[m.detected_index],p=qToPixel(c,a.qx,a.qy,W,H),q=qToPixel(c,b.qx,b.qy,W,H);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke()})}if($("show-oracle").checked){ctx.strokeStyle="#0891b2";ctx.lineWidth=1.6;c.oracle_peaks.forEach(x=>{const p=qToPixel(c,x.qx,x.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()})}if($("show-detected").checked){ctx.strokeStyle="#ea580c";ctx.lineWidth=1.6;c.detected_peaks.forEach(x=>{const p=qToPixel(c,x.qx,x.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()})}const r=c.reflections[Number($("reflection-select").value)||0];if(r){const p=qToPixel(c,r.q_Ainv[0],r.q_Ainv[1],W,H);ctx.strokeStyle="#7c3aed";ctx.lineWidth=3;ctx.beginPath();ctx.arc(p[0],p[1],10,0,Math.PI*2);ctx.stroke()}}
 function candidateTable(rows,method){if(!rows.length)return `<div class="warning">ACOM 未生成候选：检峰列表中的可用峰不足。该样本仍保留在 2,048 输入分母中。</div>`;return `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Correlation</th><th>Equivalent error</th><th>Friedel used</th><th>Correct ≤2°</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.rank}</td><td>${num(r.correlation,5)}</td><td>${num(r.friedel_error_deg,4)}°</td><td>${r.friedel_used?"yes":"no"}</td><td class="${r.friedel_error_deg<=2?"status-ok":"status-no"}">${r.friedel_error_deg<=2?"✓":"—"}</td></tr>`).join("")}</tbody></table></div><details><summary>Top‑1 raw/aligned matrices</summary><div class="grid2"><div><b>raw</b><pre class="matrix">${matrixText(rows[0].matrix)}</pre></div><div><b>aligned</b><pre class="matrix">${matrixText(rows[0].aligned_matrix)}</pre></div></div></details>`}
@@ -1033,7 +1076,7 @@ function drawAxes(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{c
 function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes()}
 function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5"};$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><div class="file">${Array.isArray(b)?JSON.stringify(b):b}</div></div>`).join("")}</div>`).join("")}
 function renderStudy001(){const s=DATA.study_001;$("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.num_samples||512}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.exact_001_count||32}</strong><span>exact [001]</span></div><div class="card"><strong>0.125°–6°</strong><span>local/transition tilts</span></div><div class="card"><strong>32 + 32</strong><span>[100] / [110] controls</span></div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Detector</th><th>Precision</th><th>Recall</th><th>Position RMSE</th><th>High-angle recall</th></tr></thead><tbody>${s.detectors.map(d=>`<tr><td>${d.detector}</td><td>${pct(d.precision)}</td><td>${pct(d.recall)}</td><td>${num(d.position_rmse_px)} px</td><td>${pct(d.high_angle_recall)}</td></tr>`).join("")}</tbody></table></div>`}
-function init(){$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);setupSelectors();renderFiles();renderStudy001();buildOverview();drawDose();drawNoise();drawCleanE();drawCondition();updateCase();["dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
+function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);setupSelectors();renderFiles();renderStudy001();buildOverview();drawDose();drawNoise();drawCleanE();drawCondition();updateCase();["dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
 let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDose();drawNoise();drawCleanE();drawOverview();drawCoordinateTrace();drawOverlay();drawAxes()},120)});
 init();
 </script>

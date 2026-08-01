@@ -11,7 +11,8 @@ from topk_evaluation import summarize_topk_errors
 _CLEAN_C_STEM = re.compile(
     r"^dose(?P<dose>\d+)_noise_"
     r"(?P<noise>noiseless|poisson_only|empad_g2_(?P<frames>\d+)frames?)"
-    r"(?:_repeat(?P<repeat>\d+))?_py4dstem$"
+    r"(?:_repeat(?P<repeat>\d+))?_"
+    r"(?P<detector>py4dstem|autodisk|dog_rgm)$"
 )
 
 
@@ -34,6 +35,7 @@ def parse_clean_c_condition_stem(stem: str) -> dict[str, int | str | None]:
         "frames": (
             None if values["frames"] is None else int(values["frames"])
         ),
+        "detector": str(values["detector"]),
     }
 
 
@@ -75,15 +77,17 @@ def aggregate_group_keys(
         return keys
     dose = int(label["dose_electrons"])
     noise = str(label["noise"])
+    detector = str(label["detector"])
     keys.extend(
         [
-            ("dose_all", str(dose)),
-            ("dose_noise", f"{dose}|{noise}"),
-            ("noise_all", noise),
+            ("detector", detector),
+            ("dose_all_detector", f"{detector}|{dose}"),
+            ("dose_noise_detector", f"{detector}|{dose}|{noise}"),
+            ("noise_all_detector", f"{detector}|{noise}"),
         ]
     )
     if noise != "noiseless":
-        keys.append(("dose_counted", str(dose)))
+        keys.append(("dose_counted_detector", f"{detector}|{dose}"))
     return keys
 
 
@@ -92,6 +96,37 @@ def group_label(group_by: str, key: str) -> dict[str, int | str]:
         return {"group_by": group_by, "track": key}
     if group_by == "clean_e_input":
         return {"group_by": group_by, "track": "Clean-E", "input": key}
+    if group_by == "detector":
+        return {
+            "group_by": group_by,
+            "track": "Clean-C",
+            "detector": key,
+        }
+    if group_by in {"dose_all_detector", "dose_counted_detector"}:
+        detector, dose = key.split("|", 1)
+        return {
+            "group_by": group_by,
+            "track": "Clean-C",
+            "detector": detector,
+            "dose_electrons": int(dose),
+        }
+    if group_by == "dose_noise_detector":
+        detector, dose, noise = key.split("|", 2)
+        return {
+            "group_by": group_by,
+            "track": "Clean-C",
+            "detector": detector,
+            "dose_electrons": int(dose),
+            "noise": noise,
+        }
+    if group_by == "noise_all_detector":
+        detector, noise = key.split("|", 1)
+        return {
+            "group_by": group_by,
+            "track": "Clean-C",
+            "detector": detector,
+            "noise": noise,
+        }
     if group_by in {"dose_all", "dose_counted"}:
         return {
             "group_by": group_by,

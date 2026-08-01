@@ -24,6 +24,8 @@ from v5_results import (  # noqa: E402
 
 
 DETAIL_SUFFIX = "_details.json"
+ACOM_CLEAN_C_DETECTORS = ("autodisk", "dog_rgm", "py4dstem")
+CONDITIONS_PER_CLEAN_C_DETECTOR = 234
 
 
 def parse_args() -> argparse.Namespace:
@@ -172,9 +174,29 @@ def load_acom(
                 ),
             },
         )
-    if len(clean_c_paths) != 234:
+    expected_clean_c = (
+        len(ACOM_CLEAN_C_DETECTORS) * CONDITIONS_PER_CLEAN_C_DETECTOR
+    )
+    if len(clean_c_paths) != expected_clean_c:
         raise ValueError(
-            f"expected 234 ACOM Clean-C conditions, found {len(clean_c_paths)}"
+            f"expected {expected_clean_c} ACOM Clean-C conditions, "
+            f"found {len(clean_c_paths)}"
+        )
+    detector_counts = {
+        detector: sum(
+            condition.get("detector") == detector
+            for condition in conditions
+            if condition["track"] == "Clean-C"
+        )
+        for detector in ACOM_CLEAN_C_DETECTORS
+    }
+    if any(
+        count != CONDITIONS_PER_CLEAN_C_DETECTOR
+        for count in detector_counts.values()
+    ):
+        raise ValueError(
+            "ACOM Clean-C detector condition counts are incomplete: "
+            f"{detector_counts}"
         )
     aggregates = [
         {
@@ -186,13 +208,17 @@ def load_acom(
     ]
     summary = {
         "schema": "or4d-v5-acom-topk-summary-v1",
-        "method": "py4DSTEM ACOM on find_Bragg_disks peak lists",
+        "method": (
+            "py4DSTEM ACOM on saved AutoDisk, DoG-RGM, and "
+            "find_Bragg_disks peak lists"
+        ),
         "metric": (
             "Minimum misorientation over proper crystal point-group rotations "
             "and the detector-plane Friedel branch."
         ),
         "num_clean_e_conditions": len(clean_e_paths),
         "num_clean_c_conditions": len(clean_c_paths),
+        "clean_c_conditions_by_detector": detector_counts,
         "num_conditions": len(conditions),
         "conditions": conditions,
         "aggregates": aggregates,
@@ -225,20 +251,43 @@ def metric_at(row: dict, k: int, field: str) -> float:
 
 
 def write_comparison_plot(acom: dict, pyxem: dict, path: Path) -> None:
-    indexes = {"ACOM": aggregate_index(acom), "Pyxem": aggregate_index(pyxem)}
     doses = sorted(
         {
             int(row["dose_electrons"])
             for row in acom["aggregates"]
-            if row["group_by"] == "dose_counted"
+            if row["group_by"] == "dose_counted_detector"
         }
     )
     fig, axes = plt.subplots(1, 2, figsize=(11, 4.2), constrained_layout=True)
-    colors = {"ACOM": "#e76f51", "Pyxem": "#2a6fdb"}
-    for method, index in indexes.items():
-        rows = [
-            index[("dose_counted", dose, None, "Clean-C")] for dose in doses
-        ]
+    methods = (
+        ("ACOM + AutoDisk", "autodisk", "#e76f51"),
+        ("ACOM + DoG-RGM", "dog_rgm", "#ca8a04"),
+        ("ACOM + find_Bragg", "py4dstem", "#7c3aed"),
+        ("Pyxem image", None, "#2a6fdb"),
+    )
+    for label, detector, color in methods:
+        rows = (
+            [
+                find_aggregate(
+                    acom,
+                    "dose_counted_detector",
+                    track="Clean-C",
+                    detector=detector,
+                    dose_electrons=dose,
+                )
+                for dose in doses
+            ]
+            if detector is not None
+            else [
+                find_aggregate(
+                    pyxem,
+                    "dose_counted",
+                    track="Clean-C",
+                    dose_electrons=dose,
+                )
+                for dose in doses
+            ]
+        )
         axes[0].plot(
             doses,
             [
@@ -248,8 +297,8 @@ def write_comparison_plot(acom: dict, pyxem: dict, path: Path) -> None:
                 for row in rows
             ],
             "o--",
-            color=colors[method],
-            label=f"{method} Top-1",
+            color=color,
+            label=f"{label} Top-1",
         )
         axes[0].plot(
             doses,
@@ -260,8 +309,8 @@ def write_comparison_plot(acom: dict, pyxem: dict, path: Path) -> None:
                 for row in rows
             ],
             "o-",
-            color=colors[method],
-            label=f"{method} Top-5",
+            color=color,
+            label=f"{label} Top-5",
         )
         axes[1].plot(
             doses,
@@ -270,8 +319,8 @@ def write_comparison_plot(acom: dict, pyxem: dict, path: Path) -> None:
                 for row in rows
             ],
             "o-",
-            color=colors[method],
-            label=method,
+            color=color,
+            label=label,
         )
     for axis in axes:
         axis.set_xscale("log")
@@ -338,8 +387,9 @@ def write_markdown_report(
         "- Clean-C: electron-counted images at 9 independent dose levels. Each "
         "dose has a noiseless condition plus Poisson-only and EMPAD-G2 detector "
         "noise levels; the counted noise conditions have 5 repeats.",
-        "- ACOM: py4DSTEM ACOM using saved peak lists. Clean-E additionally "
-        "compares oracle, AutoDisk, DoG-RGM, and py4DSTEM peak inputs.",
+        "- ACOM: py4DSTEM ACOM using saved peak lists. Clean-E compares "
+        "oracle, AutoDisk, DoG-RGM, and find_Bragg_disks inputs; Clean-C "
+        "runs all three automatic disk detectors independently.",
         "- Pyxem: accelerated template matching from the diffraction image.",
         "- Error: minimum misorientation over proper crystal point-group "
         "symmetry and the detector-plane Friedel branch.",
@@ -373,36 +423,47 @@ def write_markdown_report(
             "",
             "## Clean-C: counted conditions grouped by electron dose",
             "",
-            "| Electrons / pattern | ACOM coverage | ACOM Top-1 Acc@2° | "
-            "ACOM Top-5 Acc@2° | Pyxem coverage | Pyxem Top-1 Acc@2° | "
-            "Pyxem Top-5 Acc@2° |",
-            "|---:|---:|---:|---:|---:|---:|---:|",
+            "| Method / input | Electrons / pattern | Coverage | "
+            "Top-1 Acc@2° | Top-5 Acc@2° | Top-1 median | Top-1 P95 |",
+            "|---|---:|---:|---:|---:|---:|---:|",
         ]
     )
     doses = sorted(
-        int(row["dose_electrons"])
-        for row in acom["aggregates"]
-        if row["group_by"] == "dose_counted"
+        {
+            int(row["dose_electrons"])
+            for row in acom["aggregates"]
+            if row["group_by"] == "dose_counted_detector"
+        }
     )
     for dose in doses:
-        acom_row = find_aggregate(
-            acom,
-            "dose_counted",
-            track="Clean-C",
-            dose_electrons=dose,
-        )
+        for detector, label in (
+            ("autodisk", "ACOM / AutoDisk"),
+            ("dog_rgm", "ACOM / DoG-RGM"),
+            ("py4dstem", "ACOM / find_Bragg_disks"),
+        ):
+            row = find_aggregate(
+                acom,
+                "dose_counted_detector",
+                track="Clean-C",
+                detector=detector,
+                dose_electrons=dose,
+            )
+            lines.append(
+                f"| {label} | {dose:,} | "
+                + " | ".join(report_metrics(row))
+                + " |"
+            )
         pyxem_row = find_aggregate(
             pyxem,
             "dose_counted",
             track="Clean-C",
             dose_electrons=dose,
         )
-        acom_values = report_metrics(acom_row)
         pyxem_values = report_metrics(pyxem_row)
         lines.append(
-            f"| {dose:,} | {acom_values[0]} | {acom_values[1]} | "
-            f"{acom_values[2]} | {pyxem_values[0]} | {pyxem_values[1]} | "
-            f"{pyxem_values[2]} |"
+            f"| Pyxem / image | {dose:,} | "
+            + " | ".join(pyxem_values)
+            + " |"
         )
 
     lines.extend(
@@ -413,28 +474,42 @@ def write_markdown_report(
             "These rows aggregate all 9 dose levels. Dose and noise remain "
             "separate experimental variables in the stored condition table.",
             "",
-            "| Noise model | Conditions | ACOM Top-1 Acc@2° | "
-            "ACOM Top-5 Acc@2° | Pyxem Top-1 Acc@2° | Pyxem Top-5 Acc@2° |",
-            "|---|---:|---:|---:|---:|---:|",
+            "| Method / input | Noise model | Conditions | Top-1 Acc@2° | "
+            "Top-5 Acc@2° |",
+            "|---|---|---:|---:|---:|",
         ]
     )
     noise_names = sorted(
-        str(row["noise"])
-        for row in acom["aggregates"]
-        if row["group_by"] == "noise_all"
+        {
+            str(row["noise"])
+            for row in acom["aggregates"]
+            if row["group_by"] == "noise_all_detector"
+        }
     )
     for noise in noise_names:
-        acom_row = find_aggregate(
-            acom, "noise_all", track="Clean-C", noise=noise
-        )
+        for detector, label in (
+            ("autodisk", "ACOM / AutoDisk"),
+            ("dog_rgm", "ACOM / DoG-RGM"),
+            ("py4dstem", "ACOM / find_Bragg_disks"),
+        ):
+            row = find_aggregate(
+                acom,
+                "noise_all_detector",
+                track="Clean-C",
+                detector=detector,
+                noise=noise,
+            )
+            values = report_metrics(row)
+            lines.append(
+                f"| {label} | {noise} | {row['num_conditions']} | "
+                f"{values[1]} | {values[2]} |"
+            )
         pyxem_row = find_aggregate(
             pyxem, "noise_all", track="Clean-C", noise=noise
         )
-        acom_values = report_metrics(acom_row)
         pyxem_values = report_metrics(pyxem_row)
         lines.append(
-            f"| {noise} | {acom_row['num_conditions']} | "
-            f"{acom_values[1]} | {acom_values[2]} | "
+            f"| Pyxem / image | {noise} | {pyxem_row['num_conditions']} | "
             f"{pyxem_values[1]} | {pyxem_values[2]} |"
         )
 
@@ -512,7 +587,9 @@ def main() -> None:
         "scope": {
             "acom_clean_e_conditions": 4,
             "pyxem_clean_e_conditions": 1,
-            "clean_c_conditions": 234,
+            "acom_clean_c_conditions": 702,
+            "acom_clean_c_detectors": list(ACOM_CLEAN_C_DETECTORS),
+            "pyxem_clean_c_conditions": 234,
             "doses_electrons": [
                 100,
                 300,
