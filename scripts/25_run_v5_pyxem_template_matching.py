@@ -32,6 +32,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--output-file", type=Path, required=True)
     parser.add_argument(
+        "--study",
+        choices=("main", "001"),
+        default="main",
+        help="Select the 2,048-sample headline set or 512-sample [001] set.",
+    )
+    parser.add_argument(
         "--track",
         choices=("expectation", "clean_c", "all"),
         default="all",
@@ -272,18 +278,17 @@ def main() -> None:
         else None
     )
     data_root = args.data_root.resolve()
-    expectation_path = (
-        data_root / "datasets" / "clean_v5_first_born_expectation_2048.h5"
+    prefix = "clean_v5_001_first_born" if args.study == "001" else "clean_v5_first_born"
+    count = 512 if args.study == "001" else 2048
+    expectation_path = data_root / "datasets" / f"{prefix}_expectation_{count}.h5"
+    counted_path = data_root / "datasets" / f"{prefix}_counted_{count}.h5"
+    noiseless_path = data_root / "datasets" / f"{prefix}_dose_noiseless_{count}.h5"
+    noise_name = (
+        "clean_v5_001_instrument_noise_512.h5"
+        if args.study == "001"
+        else "clean_v5_instrument_noise_2048.h5"
     )
-    counted_path = (
-        data_root / "datasets" / "clean_v5_first_born_counted_2048.h5"
-    )
-    noiseless_path = (
-        data_root / "datasets" / "clean_v5_first_born_dose_noiseless_2048.h5"
-    )
-    noise_path = (
-        data_root / "manifests" / "clean_v5_instrument_noise_2048.h5"
-    )
+    noise_path = data_root / "manifests" / noise_name
     for path in (expectation_path, counted_path, noiseless_path, noise_path):
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -319,6 +324,7 @@ def main() -> None:
     mode = "a" if args.resume else "w"
     with h5py.File(args.output_file, mode) as output:
         output.attrs["method"] = "pyxem_accelerated_template_matching"
+        output.attrs["study"] = args.study
         output.attrs["pyxem_version"] = "0.21.0"
         output.attrs["target"] = args.target
         output.attrs["physical_gpu_index"] = physical_gpu or ""

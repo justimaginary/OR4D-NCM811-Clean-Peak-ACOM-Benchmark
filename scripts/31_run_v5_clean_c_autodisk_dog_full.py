@@ -47,6 +47,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--ground-truth-file", type=Path, required=True)
+    parser.add_argument("--study", choices=("main", "001"), default="main")
     parser.add_argument(
         "--cuda-visible-device",
         required=True,
@@ -73,9 +74,32 @@ def child_env(cuda_device: str | None) -> dict[str, str]:
     return env
 
 
-def load_conditions(data_root: Path) -> list[Condition]:
-    counted = data_root / "datasets" / "clean_v5_first_born_counted_2048.h5"
-    noise = data_root / "manifests" / "clean_v5_instrument_noise_2048.h5"
+def study_files(data_root: Path, study: str) -> dict[str, Path | str]:
+    if study == "001":
+        return {
+            "counted": data_root / "datasets/clean_v5_001_first_born_counted_512.h5",
+            "noiseless": data_root / "datasets/clean_v5_001_first_born_dose_noiseless_512.h5",
+            "noise": data_root / "manifests/clean_v5_001_instrument_noise_512.h5",
+            "detected_prefix": "detected_001_clean_c_full",
+            "result_track": "clean_001_c",
+            "sample_role": "study_001",
+            "tag_prefix": "v5_001_c",
+        }
+    return {
+        "counted": data_root / "datasets/clean_v5_first_born_counted_2048.h5",
+        "noiseless": data_root / "datasets/clean_v5_first_born_dose_noiseless_2048.h5",
+        "noise": data_root / "manifests/clean_v5_instrument_noise_2048.h5",
+        "detected_prefix": "detected_clean_c_full",
+        "result_track": "clean_c",
+        "sample_role": "headline_core",
+        "tag_prefix": "v5_c",
+    }
+
+
+def load_conditions(data_root: Path, study: str) -> list[Condition]:
+    files = study_files(data_root, study)
+    counted = Path(files["counted"])
+    noise = Path(files["noise"])
     with h5py.File(counted, "r") as h5:
         doses = [int(value) for value in h5["dose_electrons"][:]]
         repeats = int(h5["images/counts"].shape[2])
@@ -102,21 +126,23 @@ def load_conditions(data_root: Path) -> list[Condition]:
     return conditions
 
 
-def artifact_paths(data_root: Path, condition: Condition) -> dict[str, Path]:
-    peak_dir = data_root / "intermediates" / f"detected_clean_c_full_{condition.detector}"
+def artifact_paths(data_root: Path, condition: Condition, study: str) -> dict[str, Path]:
+    files = study_files(data_root, study)
+    peak_dir = data_root / "intermediates" / f"{files['detected_prefix']}_{condition.detector}"
     peak = peak_dir / f"clean_{condition.condition_name}_{condition.detector}_peaks_first_born.h5"
-    result_dir = data_root / "results" / "acom_top5" / "clean_c"
-    candidate_dir = data_root / "results" / "acom_top5_candidates" / "clean_c"
+    result_dir = data_root / "results" / "acom_top5" / str(files["result_track"])
+    candidate_dir = data_root / "results" / "acom_top5_candidates" / str(files["result_track"])
+    report_stem = "v5_001_full_detectors" if study == "001" else "v5_full_detectors"
     return {
         "peak": peak,
-        "detection_report": data_root / "reports" / "v5_full_detectors" / f"{condition.stem}_detection.json",
-        "detection_log": data_root / "logs" / "v5_full_detectors" / "detection" / f"{condition.stem}.log",
+        "detection_report": data_root / "reports" / report_stem / f"{condition.stem}_detection.json",
+        "detection_log": data_root / "logs" / report_stem / "detection" / f"{condition.stem}.log",
         "predictions": result_dir / f"{condition.stem}_predictions.jsonl",
         "details": result_dir / f"{condition.stem}_details.json",
         "audit": result_dir / f"{condition.stem}_audit.json",
         "evaluation": result_dir / f"{condition.stem}_evaluation.json",
         "candidates": candidate_dir / f"{condition.stem}_candidates.h5",
-        "acom_log": data_root / "logs" / "v5_full_detectors" / "acom" / f"{condition.stem}.log",
+        "acom_log": data_root / "logs" / report_stem / "acom" / f"{condition.stem}.log",
     }
 
 
@@ -128,18 +154,16 @@ def run_detection(
     data_root: Path,
     condition: Condition,
     *,
+    study: str,
     resume: bool,
 ) -> dict:
-    paths = artifact_paths(data_root, condition)
+    files = study_files(data_root, study)
+    paths = artifact_paths(data_root, condition, study)
     if resume and complete_file(paths["peak"]) and complete_file(paths["detection_report"]):
         return {"status": "reused", "seconds": 0.0, "paths": paths}
     for key in ("peak", "detection_report", "detection_log"):
         paths[key].parent.mkdir(parents=True, exist_ok=True)
-    image_file = data_root / "datasets" / (
-        "clean_v5_first_born_dose_noiseless_2048.h5"
-        if condition.track == "dose_noiseless"
-        else "clean_v5_first_born_counted_2048.h5"
-    )
+    image_file = Path(files["noiseless"] if condition.track == "dose_noiseless" else files["counted"])
     command = [
         sys.executable,
         str(ROOT / "scripts" / "03_extract_clean_disks.py"),
@@ -164,7 +188,7 @@ def run_detection(
         command.extend(
             [
                 "--noise-manifest",
-                str(data_root / "manifests" / "clean_v5_instrument_noise_2048.h5"),
+                str(files["noise"]),
                 "--noise-level",
                 condition.noise_level,
             ]
@@ -197,10 +221,12 @@ def run_acom(
     ground_truth: Path,
     condition: Condition,
     *,
+    study: str,
     cuda_device: str,
     resume: bool,
 ) -> dict:
-    paths = artifact_paths(data_root, condition)
+    files = study_files(data_root, study)
+    paths = artifact_paths(data_root, condition, study)
     required = ("predictions", "details", "audit", "evaluation", "candidates")
     if resume and all(complete_file(paths[key]) for key in required):
         return {"status": "reused", "seconds": 0.0, "paths": paths}
@@ -219,7 +245,7 @@ def run_acom(
                 "--ground-truth-id-prefix",
                 "clean_",
                 "--output-tag",
-                f"v5_c_{condition.stem}",
+                f"{files['tag_prefix']}_{condition.stem}",
                 "--prediction-file",
                 str(paths["predictions"]),
                 "--details-file",
@@ -250,7 +276,7 @@ def run_acom(
                 "--ground-truth-id-prefix",
                 "clean_",
                 "--headline-sample-role",
-                "headline_core",
+                str(files["sample_role"]),
                 "--allow-subset",
                 "--output",
                 str(paths["evaluation"]),
@@ -307,14 +333,20 @@ def main() -> None:
         )
     data_root = args.data_root.resolve()
     ground_truth = args.ground_truth_file.resolve()
-    conditions = load_conditions(data_root)
-    manifest_path = data_root / "run_records" / "v5_clean_c_autodisk_dog_full.json"
+    conditions = load_conditions(data_root, args.study)
+    manifest_name = (
+        "v5_001_clean_c_autodisk_dog_full.json"
+        if args.study == "001"
+        else "v5_clean_c_autodisk_dog_full.json"
+    )
+    manifest_path = data_root / "run_records" / manifest_name
     payload = {
         "schema": "or4d-v5-clean-c-autodisk-dog-full-v1",
         "started_unix": time.time(),
         "repo": str(ROOT),
         "data_root": str(data_root),
         "ground_truth": str(ground_truth),
+        "study": args.study,
         "cuda_visible_devices": cuda_devices,
         "detection_workers": args.detection_workers,
         "acom_workers": args.acom_workers,
@@ -331,7 +363,7 @@ def main() -> None:
     ) as acom_pool:
         detection_futures = {
             detection_pool.submit(
-                run_detection, data_root, condition, resume=args.resume
+                run_detection, data_root, condition, study=args.study, resume=args.resume
             ): condition
             for condition in conditions
         }
@@ -348,6 +380,7 @@ def main() -> None:
                     data_root,
                     ground_truth,
                     condition,
+                    study=args.study,
                     cuda_device=cuda_device,
                     resume=args.resume,
                 )

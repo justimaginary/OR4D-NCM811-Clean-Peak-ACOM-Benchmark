@@ -178,6 +178,7 @@ def main() -> None:
                 "details": result_dir / f"{method}_details.json",
                 "audit": result_dir / f"{method}_audit.json",
                 "evaluation": result_dir / f"{method}_evaluation.json",
+                "candidates": result_dir / f"{method}_candidates.h5",
             }
             if args.resume and all(path.is_file() for path in paths.values()):
                 print(f"Skipping completed {study}/{method}", flush=True)
@@ -202,7 +203,11 @@ def main() -> None:
                 str(paths["details"]),
                 "--audit-file",
                 str(paths["audit"]),
+                "--candidates-file",
+                str(paths["candidates"]),
                 "--cuda" if args.cuda else "--no-cuda",
+                "--insufficient-peaks-policy",
+                "skip",
             ]
             evaluation_command = [
                 sys.executable,

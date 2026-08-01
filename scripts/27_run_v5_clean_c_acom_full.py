@@ -27,6 +27,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output-dir", type=Path, required=True)
     parser.add_argument("--candidate-dir", type=Path, required=True)
     parser.add_argument("--log-dir", type=Path, required=True)
+    parser.add_argument(
+        "--headline-sample-role",
+        default="headline_core",
+        help="Ground-truth sample_role included by the evaluator.",
+    )
     parser.add_argument("--max-workers", type=int, default=8)
     parser.add_argument(
         "--cuda-visible-device",
@@ -50,6 +55,7 @@ def run_one(
     log_dir: Path,
     resume: bool,
     cuda_visible_device: str | None,
+    headline_sample_role: str,
 ) -> dict:
     match = NAME.fullmatch(peak_file.name)
     if match is None:
@@ -130,7 +136,7 @@ def run_one(
                 "--ground-truth-id-prefix",
                 "clean_",
                 "--headline-sample-role",
-                "headline_core",
+                headline_sample_role,
                 "--allow-subset",
                 "--output",
                 str(outputs["evaluation"]),
@@ -192,6 +198,7 @@ def main() -> None:
                 log_dir=args.log_dir.resolve(),
                 resume=args.resume,
                 cuda_visible_device=args.cuda_visible_device,
+                headline_sample_role=args.headline_sample_role,
             ): peak_file
             for peak_file in peak_files
         }
