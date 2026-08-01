@@ -36,6 +36,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--acom-clean-c-candidates-dir", type=Path, required=True)
     parser.add_argument("--pyxem-summary", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True)
+    parser.add_argument("--artifact-prefix", default="V5")
+    parser.add_argument("--dataset-label", default="V5 Clean headline")
+    parser.add_argument("--sample-count", type=int, default=2048)
     return parser.parse_args()
 
 
@@ -373,16 +376,20 @@ def write_markdown_report(
     comparison_path: Path,
     plot_path: Path,
     path: Path,
+    *,
+    dataset_label: str,
+    sample_count: int,
 ) -> None:
     lines = [
-        "# V5 Clean Top-1 / Top-5 results",
+        f"# {dataset_label} Top-1 / Top-5 results",
         "",
         "This report is generated from the saved per-condition candidate files. "
         "No failed or inaccurate scientific result is removed.",
         "",
         "## Scope",
         "",
-        "- Dataset: 2,048 orientations per condition; `kmax = 1.5 Å⁻¹`.",
+        f"- Dataset: {sample_count:,} orientations per condition; "
+        "`kmax = 1.5 Å⁻¹`.",
         "- Clean-E: deterministic expectation-intensity diffraction images.",
         "- Clean-C: electron-counted images at 9 independent dose levels. Each "
         "dose has a noiseless condition plus Poisson-only and EMPAD-G2 detector "
@@ -542,9 +549,8 @@ def write_markdown_report(
             "",
             f"- Comparison data: `{comparison_path.name}`",
             f"- Dose plot: `{plot_path.name}`",
-            "- Full summaries: `V5_ACOM_TOP5_FULL_SUMMARY.json` and "
-            "`V5_PYXEM_TOP5_FULL_SUMMARY.json`",
-            "- Unified ACOM provenance: `V5_ACOM_TOP5_RUN_MANIFEST.json`",
+            "- Full ACOM summary and provenance use the artifact prefix "
+            f"`{path.stem.removesuffix('_TOP5_RESULTS')}`.",
             "",
         ]
     )
@@ -569,11 +575,17 @@ def main() -> None:
     if not pyxem.get("aggregates"):
         raise ValueError("Pyxem summary lacks exact aggregate blocks")
 
-    acom_path = output_dir / "V5_ACOM_TOP5_FULL_SUMMARY.json"
-    manifest_path = output_dir / "V5_ACOM_TOP5_RUN_MANIFEST.json"
-    comparison_path = output_dir / "V5_ACOM_PYXEM_TOP5_COMPARISON.json"
-    plot_path = output_dir / "V5_ACOM_PYXEM_TOP5_BY_DOSE.png"
-    report_path = output_dir / "V5_TOP5_RESULTS.md"
+    prefix = args.artifact_prefix.strip()
+    allowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+    if not prefix or any(char not in allowed for char in prefix):
+        raise ValueError(
+            "artifact prefix must contain only letters, digits, '_' or '-'"
+        )
+    acom_path = output_dir / f"{prefix}_ACOM_TOP5_FULL_SUMMARY.json"
+    manifest_path = output_dir / f"{prefix}_ACOM_TOP5_RUN_MANIFEST.json"
+    comparison_path = output_dir / f"{prefix}_ACOM_PYXEM_TOP5_COMPARISON.json"
+    plot_path = output_dir / f"{prefix}_ACOM_PYXEM_TOP5_BY_DOSE.png"
+    report_path = output_dir / f"{prefix}_TOP5_RESULTS.md"
     acom_path.write_text(
         json.dumps(acom, ensure_ascii=False, indent=2, allow_nan=True),
         encoding="utf-8",
@@ -585,6 +597,8 @@ def main() -> None:
     comparison = {
         "schema": "or4d-v5-acom-pyxem-comparison-v1",
         "scope": {
+            "dataset_label": args.dataset_label,
+            "samples_per_condition": args.sample_count,
             "acom_clean_e_conditions": 4,
             "pyxem_clean_e_conditions": 1,
             "acom_clean_c_conditions": 702,
@@ -620,6 +634,8 @@ def main() -> None:
         comparison_path,
         plot_path,
         report_path,
+        dataset_label=args.dataset_label,
+        sample_count=args.sample_count,
     )
     print(f"ACOM summary: {acom_path}")
     print(f"Unified manifest: {manifest_path}")
