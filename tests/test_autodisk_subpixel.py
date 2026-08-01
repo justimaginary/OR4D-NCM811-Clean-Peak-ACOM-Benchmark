@@ -4,10 +4,31 @@ import unittest
 
 import numpy as np
 
-from autodisk_adapter import _sample_bilinear, _sample_cubic
+from autodisk_adapter import (
+    _deduplicate_candidates,
+    _sample_bilinear,
+    _sample_cubic,
+)
 
 
 class AutoDiskSubpixelTest(unittest.TestCase):
+    def test_deduplication_stops_at_same_score_ordered_top_n(self) -> None:
+        candidates = [
+            (0.0, 0.0, 10.0),
+            (0.5, 0.5, 9.0),
+            (10.0, 0.0, 8.0),
+            (20.0, 0.0, 7.0),
+            (30.0, 0.0, 6.0),
+        ]
+        full = _deduplicate_candidates(candidates, min_spacing_px=2.0)
+        limited = _deduplicate_candidates(
+            candidates,
+            min_spacing_px=2.0,
+            max_num_peaks=2,
+        )
+
+        self.assertEqual(limited, full[:2])
+
     def test_cubic_sampling_can_resolve_a_subpixel_maximum(self) -> None:
         rows, cols = np.mgrid[:17, :17]
         expected_row = 8.3
