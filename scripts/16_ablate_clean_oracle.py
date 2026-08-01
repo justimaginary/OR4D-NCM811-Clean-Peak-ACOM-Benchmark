@@ -10,6 +10,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v4" / "runs"
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import read_peak_h5, write_peak_h5  # noqa: E402
@@ -129,7 +130,8 @@ def main() -> None:
         "outputs": outputs,
         "samples": sample_reports,
     }
-    report_path = ROOT / "reports" / "clean_oracle_ablation_smoke.json"
+    report_path = REPORT_DIR / "clean_oracle_ablation_smoke.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(json.dumps(report, indent=2))
     print(f"Ablation report: {report_path}")

@@ -12,6 +12,7 @@ import py4DSTEM
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v3"
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402
@@ -23,7 +24,7 @@ from or4d_common import (  # noqa: E402
 
 
 def load_details() -> dict:
-    path = ROOT / "reports" / "acom_clean_details.json"
+    path = REPORT_DIR / "acom_clean_details.json"
     with path.open("r", encoding="utf-8") as f:
         return json.load(f)
 
@@ -113,7 +114,7 @@ def plot_error_comparison(rows: list[dict]) -> None:
     axes[1].legend()
     axes[1].grid(alpha=0.25)
     fig.tight_layout()
-    path = ROOT / "reports" / "acom_error_comparison.png"
+    path = REPORT_DIR / "acom_error_comparison.png"
     fig.savefig(path, dpi=220)
     plt.close(fig)
     print(f"Saved: {path}")
@@ -154,7 +155,7 @@ def plot_offgrid_relation(rows: list[dict]) -> None:
     axes[0].legend()
     axes[1].set_title("Full range with catastrophic mismatches")
     fig.tight_layout()
-    path = ROOT / "reports" / "acom_offgrid_vs_error.png"
+    path = REPORT_DIR / "acom_offgrid_vs_error.png"
     fig.savefig(path, dpi=220)
     plt.close(fig)
     print(f"Saved: {path}")
@@ -251,7 +252,7 @@ def plot_peak_overlays(rows: list[dict], samples: list[dict], config: dict) -> N
         ncol=3,
     )
     fig.tight_layout(rect=(0, 0, 1, 0.93))
-    path = ROOT / "reports" / "acom_peak_overlay.png"
+    path = REPORT_DIR / "acom_peak_overlay.png"
     fig.savefig(path, dpi=200)
     plt.close(fig)
     print(f"Saved: {path}")

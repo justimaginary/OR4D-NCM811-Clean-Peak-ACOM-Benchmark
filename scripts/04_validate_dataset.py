@@ -256,7 +256,8 @@ def main() -> None:
     if not results:
         raise FileNotFoundError("No generated track found under public/")
 
-    output = ROOT / "reports" / "dataset_validation.json"
+    output = ROOT / "reports" / "common" / "dataset_validation.json"
+    output.parent.mkdir(parents=True, exist_ok=True)
     with output.open("w", encoding="utf-8") as f:
         json.dump(results, f, ensure_ascii=False, indent=2)
     print(json.dumps(results, ensure_ascii=False, indent=2))

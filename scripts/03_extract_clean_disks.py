@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v4"
 sys.path.insert(0, str(ROOT / "src"))
 
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402
@@ -533,8 +534,7 @@ def main() -> None:
     report_path = (
         args.report_output.resolve()
         if args.report_output is not None
-        else ROOT
-        / "reports"
+        else REPORT_DIR
         / f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
     )
     report_path.parent.mkdir(parents=True, exist_ok=True)

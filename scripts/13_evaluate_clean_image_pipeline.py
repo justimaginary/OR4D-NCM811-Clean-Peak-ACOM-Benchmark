@@ -13,6 +13,7 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v4"
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_counting import add_gaussian_read_noise  # noqa: E402
@@ -47,7 +48,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "reports" / "clean_image_pipeline_evaluation.json",
+        default=REPORT_DIR / "clean_image_pipeline_evaluation.json",
     )
     parser.add_argument(
         "--overlay-dir",

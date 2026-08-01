@@ -14,6 +14,7 @@ import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v4"
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_counting import (  # noqa: E402
@@ -232,7 +233,7 @@ def main() -> None:
     report_path = (
         args.report_output.resolve()
         if args.report_output is not None
-        else ROOT / "reports" / report_name
+        else REPORT_DIR / report_name
     )
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")

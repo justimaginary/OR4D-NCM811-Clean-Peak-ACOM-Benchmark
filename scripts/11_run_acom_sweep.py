@@ -75,6 +75,7 @@ def main() -> None:
                 str(
                     ROOT
                     / "reports"
+                    / "v3"
                     / f"acom_clean_evaluation{suffix}.json"
                 ),
             ]

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = ROOT / "reports" / "v3"
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import load_config  # noqa: E402
@@ -67,9 +68,9 @@ def load_sweep_rows(config: dict) -> list[dict]:
     for step_value in config["acom"]["sweep_angle_steps_deg"]:
         step = float(step_value)
         suffix = "" if step == canonical else f"_{step_tag(step)}"
-        evaluation_path = ROOT / "reports" / f"acom_clean_evaluation{suffix}.json"
-        details_path = ROOT / "reports" / f"acom_clean_details{suffix}.json"
-        audit_path = ROOT / "reports" / f"acom_plan_audit{suffix}.json"
+        evaluation_path = REPORT_DIR / f"acom_clean_evaluation{suffix}.json"
+        details_path = REPORT_DIR / f"acom_clean_details{suffix}.json"
+        audit_path = REPORT_DIR / f"acom_plan_audit{suffix}.json"
         if not (
             evaluation_path.exists()
             and details_path.exists()
@@ -119,9 +120,9 @@ def distance_bin_rows(
 
 def main() -> None:
     config = load_config()
-    details = load_json(ROOT / "reports" / "acom_clean_details.json")
-    evaluation = load_json(ROOT / "reports" / "acom_clean_evaluation.json")
-    audit = load_json(ROOT / "reports" / "acom_plan_audit.json")
+    details = load_json(REPORT_DIR / "acom_clean_details.json")
+    evaluation = load_json(REPORT_DIR / "acom_clean_evaluation.json")
+    audit = load_json(REPORT_DIR / "acom_plan_audit.json")
 
     headline_role = str(config["evaluation"]["headline_sample_role"])
     headline_rows = [
@@ -309,7 +310,7 @@ def main() -> None:
         ]
     )
 
-    output = ROOT / "reports" / "ACOM_CLEAN_REPORT.md"
+    output = REPORT_DIR / "ACOM_CLEAN_REPORT.md"
     output.write_text("\n".join(lines), encoding="utf-8")
     print(f"Saved: {output}")
 

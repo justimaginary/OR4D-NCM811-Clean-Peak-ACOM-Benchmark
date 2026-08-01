@@ -19,6 +19,7 @@ from pymatgen.core import Structure
 from scipy.spatial import cKDTree
 
 ROOT = Path(__file__).resolve().parents[1]
+V3_REPORT_DIR = ROOT / "reports" / "v3"
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402
@@ -610,7 +611,7 @@ def main() -> None:
     audit_path = (
         args.audit_file.resolve()
         if args.audit_file
-        else ROOT / "reports" / f"acom_plan_audit{output_suffix}.json"
+        else V3_REPORT_DIR / f"acom_plan_audit{output_suffix}.json"
     )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(
@@ -760,7 +761,7 @@ def main() -> None:
     candidates_path = (
         args.candidates_file.resolve()
         if args.candidates_file
-        else ROOT / "reports" / f"acom_candidates{output_suffix}.h5"
+        else V3_REPORT_DIR / f"acom_candidates{output_suffix}.h5"
     )
     candidates_path.parent.mkdir(parents=True, exist_ok=True)
     candidate_arrays = {
@@ -877,7 +878,7 @@ def main() -> None:
     details_path = (
         args.details_file.resolve()
         if args.details_file
-        else ROOT / "reports" / f"acom_clean_details{output_suffix}.json"
+        else V3_REPORT_DIR / f"acom_clean_details{output_suffix}.json"
     )
     details_path.parent.mkdir(parents=True, exist_ok=True)
     details_path.write_text(
