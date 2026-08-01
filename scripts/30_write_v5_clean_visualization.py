@@ -51,6 +51,42 @@ def parse_args() -> argparse.Namespace:
         default=ROOT / "reports/v5/topk/V5_PYXEM_TOP5_FULL_SUMMARY.json",
     )
     parser.add_argument(
+        "--disk-recovery-summary",
+        type=Path,
+        default=ROOT / "reports/v5/pipeline/clean_c_disk_recovery_full.json",
+    )
+    parser.add_argument(
+        "--study-001-acom-summary",
+        type=Path,
+        default=(
+            ROOT
+            / "reports/v5/study_001/topk/V5_001_ACOM_TOP5_FULL_SUMMARY.json"
+        ),
+    )
+    parser.add_argument(
+        "--study-001-pyxem-summary",
+        type=Path,
+        default=(
+            ROOT
+            / "reports/v5/study_001/topk/V5_001_PYXEM_TOP5_FULL_SUMMARY.json"
+        ),
+    )
+    parser.add_argument(
+        "--study-001-pyxem-details",
+        type=Path,
+        default=(
+            ROOT
+            / "reports/v5/study_001/topk/V5_001_PYXEM_CLEAN_E_DETAILS.jsonl"
+        ),
+    )
+    parser.add_argument(
+        "--study-001-disk-recovery-summary",
+        type=Path,
+        default=(
+            ROOT / "reports/v5/study_001/clean_c_disk_recovery_full.json"
+        ),
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=ROOT / "reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html",
@@ -83,16 +119,29 @@ def rounded(value: object, digits: int = 6) -> object:
     return value
 
 
-def image_data_url(array: np.ndarray) -> str:
+def image_data_url(
+    array: np.ndarray,
+    *,
+    reference: float | None = None,
+    ceiling: float | None = None,
+) -> str:
     values = np.asarray(array, dtype=np.float64)
     # Negative read-noise values are real stored/reconstructed values but cannot
     # be represented by the log display. Clipping is display-only and disclosed.
     display = np.maximum(values, 0.0)
     positive = display[display > 0]
-    reference = float(np.percentile(positive, 50)) if positive.size else 1.0
+    reference = (
+        float(reference)
+        if reference is not None
+        else (float(np.percentile(positive, 50)) if positive.size else 1.0)
+    )
     scaled = np.log1p(display / max(reference, 1e-12))
     nonzero = scaled[scaled > 0]
-    ceiling = float(np.percentile(nonzero, 99.7)) if nonzero.size else 1.0
+    ceiling = (
+        float(ceiling)
+        if ceiling is not None
+        else (float(np.percentile(nonzero, 99.7)) if nonzero.size else 1.0)
+    )
     normalized = np.clip(scaled / max(ceiling, 1e-12), 0.0, 1.0) ** 0.65
     rgb = np.empty((*normalized.shape, 3), dtype=np.uint8)
     rgb[..., 0] = (248 - 222 * normalized).astype(np.uint8)
@@ -394,6 +443,269 @@ def load_noise_manifest(path: Path) -> dict:
             ),
             "seeds": handle["read_noise_seed"][:],
         }
+
+
+def load_jsonl(path: Path) -> list[dict]:
+    return [
+        json.loads(line)
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+
+
+def build_noise_gallery(
+    data_root: Path,
+    *,
+    sample_id: str = "clean_v5_core_0464",
+    dose_electrons: int = 10_000,
+    repeat: int = 0,
+) -> dict:
+    expectation_path = (
+        data_root / "datasets/clean_v5_first_born_expectation_2048.h5"
+    )
+    counted_path = (
+        data_root / "datasets/clean_v5_first_born_counted_2048.h5"
+    )
+    noiseless_path = (
+        data_root / "datasets/clean_v5_first_born_dose_noiseless_2048.h5"
+    )
+    noise_path = data_root / "manifests/clean_v5_instrument_noise_2048.h5"
+    noise = load_noise_manifest(noise_path)
+    with h5py.File(expectation_path, "r") as expectation, h5py.File(
+        counted_path, "r"
+    ) as counted, h5py.File(noiseless_path, "r") as noiseless:
+        sample_ids = decode(expectation["sample_id"][:])
+        if sample_id not in sample_ids:
+            sample_id = sample_ids[0]
+        sample_index = sample_ids.index(sample_id)
+        dose_index = int(
+            np.where(noise["doses"] == int(dose_electrons))[0][0]
+        )
+        probability = np.asarray(
+            expectation["expectation/intensity"][sample_index], dtype=np.float32
+        )
+        expected_counts = np.asarray(
+            noiseless["images/expected_counts"][sample_index, dose_index],
+            dtype=np.float32,
+        )
+        poisson = np.asarray(
+            counted["images/counts"][sample_index, dose_index, repeat],
+            dtype=np.float32,
+        )
+        arrays: list[tuple[str, str, str, np.ndarray, np.ndarray, float]] = [
+            (
+                "expectation",
+                "Clean-E expectation / 理论期望图",
+                "无随机采样的归一化物理强度 P(q)；显示时仅乘以当前剂量以共用色标。",
+                probability,
+                probability * dose_electrons,
+                0.0,
+            ),
+            (
+                "noiseless",
+                "Clean-C noiseless / 无噪声期望计数",
+                "NₑP(q)，剂量改变总强度但不引入随机电子落点。",
+                expected_counts,
+                expected_counts,
+                0.0,
+            ),
+            (
+                "poisson_only",
+                "Poisson only / 仅电子计数涨落",
+                "同一剂量、同一 repeat 的整数电子计数；不含读出噪声。",
+                poisson,
+                poisson,
+                0.0,
+            ),
+        ]
+        for level in (
+            "empad_g2_1frame",
+            "empad_g2_4frames",
+            "empad_g2_16frames",
+            "empad_g2_64frames",
+        ):
+            level_index = noise["levels"].index(level)
+            sigma = float(noise["sigma"][level_index])
+            seed = int(
+                noise["seeds"][
+                    sample_index, dose_index, level_index, repeat
+                ]
+            )
+            noisy = add_gaussian_read_noise(
+                poisson, sigma, np.random.default_rng(seed)
+            )
+            frame_label = level.removeprefix("empad_g2_").replace(
+                "frames", " frames"
+            ).replace("frame", " frame")
+            arrays.append(
+                (
+                    level,
+                    f"EMPAD-G2 · {frame_label}",
+                    "同一 Poisson 图叠加确定性高斯读出噪声；只改变读出噪声等级。",
+                    noisy,
+                    noisy,
+                    sigma,
+                )
+            )
+    display_positive = np.concatenate(
+        [
+            np.maximum(display, 0.0)[np.maximum(display, 0.0) > 0]
+            for _, _, _, _, display, _ in arrays
+        ]
+    )
+    reference = (
+        float(np.percentile(display_positive, 50))
+        if display_positive.size
+        else 1.0
+    )
+    transformed = np.log1p(display_positive / max(reference, 1e-12))
+    ceiling = (
+        float(np.percentile(transformed, 99.7)) if transformed.size else 1.0
+    )
+    images = []
+    for identifier, label, description, values, display, sigma in arrays:
+        images.append(
+            {
+                "id": identifier,
+                "label": label,
+                "description": description,
+                "image_url": image_data_url(
+                    display, reference=reference, ceiling=ceiling
+                ),
+                "sum": float(np.sum(values)),
+                "minimum": float(np.min(values)),
+                "maximum": float(np.max(values)),
+                "mean": float(np.mean(values)),
+                "std": float(np.std(values)),
+                "negative_pixels": int(np.count_nonzero(values < 0)),
+                "read_noise_sigma_e_rms_per_pixel": sigma,
+            }
+        )
+    return rounded(
+        {
+            "sample_id": sample_id,
+            "sample_index": sample_index,
+            "dose_electrons": dose_electrons,
+            "repeat": repeat,
+            "display": {
+                "shared_reference": reference,
+                "shared_log_ceiling": ceiling,
+                "description": (
+                    "All seven cards use one shared clip(negative,0) + log1p "
+                    "display scale. Clean-E P(q) is multiplied by Nₑ for "
+                    "display only; stored values and reported statistics are "
+                    "unchanged."
+                ),
+            },
+            "images": images,
+        }
+    )
+
+
+def topk_metrics(errors: np.ndarray) -> dict:
+    values = np.asarray(errors, dtype=float)
+    if values.ndim != 2 or values.shape[1] != 5:
+        raise ValueError(f"expected [sample,5] Top-K errors, got {values.shape}")
+    cumulative = np.minimum.accumulate(values, axis=1)
+    return {
+        "samples": int(values.shape[0]),
+        "top1_median_deg": float(np.median(values[:, 0])),
+        "top1_p95_deg": float(np.percentile(values[:, 0], 95)),
+        "topk_acc1": [float(np.mean(cumulative[:, k] <= 1.0)) for k in range(5)],
+        "topk_acc2": [float(np.mean(cumulative[:, k] <= 2.0)) for k in range(5)],
+        "topk_acc5": [float(np.mean(cumulative[:, k] <= 5.0)) for k in range(5)],
+    }
+
+
+def build_study_001_topk_groups(
+    data_root: Path,
+    pyxem_details_path: Path,
+) -> dict:
+    manifest = load_jsonl(
+        data_root / "manifests/clean_v5_001_orientations.jsonl"
+    )
+    sample_ids = [str(row["sample_id"]) for row in manifest]
+    methods: dict[str, dict[str, np.ndarray]] = {}
+    candidate_root = data_root / "results/v5_001_suite/acom_001"
+    for method in ("oracle", "autodisk", "dog_rgm", "py4dstem"):
+        with h5py.File(candidate_root / f"{method}_candidates.h5", "r") as h5:
+            ids = decode(h5["sample_id"][:])
+            errors = np.asarray(
+                h5["friedel_equivalent_misorientation_deg"][:], dtype=float
+            )
+        methods[method] = dict(zip(ids, errors, strict=True))
+    pyxem_rows = load_jsonl(pyxem_details_path)
+    methods["pyxem"] = {
+        str(row["sample_id"]): np.asarray(
+            [
+                candidate["friedel_equivalent_misorientation_deg"]
+                for candidate in row["candidates"]
+            ],
+            dtype=float,
+        )
+        for row in pyxem_rows
+    }
+    missing = {
+        method: sorted(set(sample_ids) - set(rows))
+        for method, rows in methods.items()
+        if set(sample_ids) != set(rows)
+    }
+    if missing:
+        raise ValueError(f"[001] Top-K sample IDs differ: {missing}")
+
+    group_rows = []
+    tilt_rows = []
+    groups = sorted({str(row["study_group"]) for row in manifest})
+    for method, by_id in methods.items():
+        for group in groups:
+            members = [
+                row for row in manifest if str(row["study_group"]) == group
+            ]
+            group_rows.append(
+                {
+                    "method": method,
+                    "group": group,
+                    **topk_metrics(
+                        np.stack([by_id[str(row["sample_id"])] for row in members])
+                    ),
+                }
+            )
+        tilt_values = sorted(
+            {
+                float(row["tilt_deg"])
+                for row in manifest
+                if str(row["study_group"]).endswith("_001")
+            }
+        )
+        for tilt in tilt_values:
+            members = [
+                row
+                for row in manifest
+                if str(row["study_group"]).endswith("_001")
+                and np.isclose(float(row["tilt_deg"]), tilt)
+            ]
+            tilt_rows.append(
+                {
+                    "method": method,
+                    "tilt_deg": tilt,
+                    **topk_metrics(
+                        np.stack([by_id[str(row["sample_id"])] for row in members])
+                    ),
+                }
+            )
+    return rounded(
+        {
+            "groups": group_rows,
+            "tilts": tilt_rows,
+            "method_labels": {
+                "oracle": "ACOM + oracle peaks",
+                "autodisk": "ACOM + AutoDisk",
+                "dog_rgm": "ACOM + DoG-RGM",
+                "py4dstem": "ACOM + find_Bragg_disks",
+                "pyxem": "Pyxem image matching",
+            },
+        }
+    )
 
 
 def read_case_image(
@@ -788,6 +1100,12 @@ def build_payload(args: argparse.Namespace) -> dict:
     )
     acom = load_json(args.acom_summary.resolve())
     pyxem = load_json(args.pyxem_summary.resolve())
+    disk_recovery = load_json(args.disk_recovery_summary.resolve())
+    study_001_acom = load_json(args.study_001_acom_summary.resolve())
+    study_001_pyxem = load_json(args.study_001_pyxem_summary.resolve())
+    study_001_disk_recovery = load_json(
+        args.study_001_disk_recovery_summary.resolve()
+    )
     generation = load_json(
         ROOT
         / "reports/v5/pipeline/first_born_generation_2048.json"
@@ -803,6 +1121,26 @@ def build_payload(args: argparse.Namespace) -> dict:
         ROOT
         / "reports/v5/study_001/clean_v5_001_manifest_summary.json"
     )
+    study_001_topk_groups = build_study_001_topk_groups(
+        args.data_root.resolve(), args.study_001_pyxem_details.resolve()
+    )
+    noise_gallery = build_noise_gallery(args.data_root.resolve())
+    legacy_v3 = []
+    for step, filename in (
+        (4.0, "acom_clean_evaluation_angle_4deg.json"),
+        (3.0, "acom_clean_evaluation_angle_3deg.json"),
+        (2.0, "acom_clean_evaluation.json"),
+    ):
+        evaluation = load_json(ROOT / "reports/v3" / filename)
+        legacy_v3.append(
+            {
+                "angle_step_deg": step,
+                "headline": evaluation["metrics"],
+                "grid_probe": evaluation["metrics_by_sample_role"][
+                    "acom_grid_probe"
+                ],
+            }
+        )
     direct_basis = np.asarray(structure.lattice.matrix, dtype=float)
     payload = {
         "schema": "or4d-v5-clean-visualization-v1",
@@ -829,6 +1167,17 @@ def build_payload(args: argparse.Namespace) -> dict:
             ),
         },
         "noise": rounded(noise_report),
+        "noise_gallery": noise_gallery,
+        "parameters": rounded(
+            {
+                "common": v5_config["common"],
+                "clean_sampling": v5_config["clean_sampling"],
+                "clean_image": v5_config["clean_image"],
+                "generation_report": generation,
+                "noise_report": noise_report,
+            }
+        ),
+        "legacy_v3": rounded(legacy_v3),
         "acom": {
             "conditions": int(acom["num_conditions"]),
             "clean_e_conditions": int(acom["num_clean_e_conditions"]),
@@ -838,6 +1187,24 @@ def build_payload(args: argparse.Namespace) -> dict:
         "pyxem": {
             "conditions": len(pyxem["conditions"]),
             "aggregates": aggregate_payload(pyxem),
+        },
+        "disk_recovery": {
+            "headline": rounded(
+                {
+                    "matching": disk_recovery["matching"],
+                    "num_conditions": disk_recovery["num_conditions"],
+                    "aggregates": disk_recovery["aggregates"],
+                }
+            ),
+            "study_001": rounded(
+                {
+                    "matching": study_001_disk_recovery["matching"],
+                    "num_conditions": study_001_disk_recovery[
+                        "num_conditions"
+                    ],
+                    "aggregates": study_001_disk_recovery["aggregates"],
+                }
+            ),
         },
         "cases": cases,
         "study_001": {
@@ -859,6 +1226,21 @@ def build_payload(args: argparse.Namespace) -> dict:
                     for row in study_001["detectors"]
                 ]
             ),
+            "acom": {
+                "conditions": int(study_001_acom["num_conditions"]),
+                "clean_e_conditions": int(
+                    study_001_acom["num_clean_e_conditions"]
+                ),
+                "clean_c_conditions": int(
+                    study_001_acom["num_clean_c_conditions"]
+                ),
+                "aggregates": aggregate_payload(study_001_acom),
+            },
+            "pyxem": {
+                "conditions": len(study_001_pyxem["conditions"]),
+                "aggregates": aggregate_payload(study_001_pyxem),
+            },
+            "topk_groups": study_001_topk_groups,
         },
         "files": {
             "expectation": {
@@ -906,6 +1288,17 @@ def build_payload(args: argparse.Namespace) -> dict:
                 "local_path": "full_results/pyxem_top5_merged.h5",
                 "server_path": "results/pyxem_top5_merged.h5",
             },
+            "study_001": {
+                "manifest": "manifests/clean_v5_001_orientations.jsonl",
+                "expectation": (
+                    "datasets/clean_v5_001_first_born_expectation_512.h5"
+                ),
+                "counted": (
+                    "datasets/clean_v5_001_first_born_counted_512.h5"
+                ),
+                "acom_top5": "results/acom_top5/clean_001_c/",
+                "pyxem_top5": "results/pyxem_001_top5.h5",
+            },
         },
     }
     return rounded(payload)
@@ -920,6 +1313,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 <style>
 :root{--ink:#172033;--muted:#64748b;--line:#dbe3ef;--panel:#f7f9fc;--blue:#2563eb;--cyan:#0891b2;--orange:#ea580c;--green:#15803d;--purple:#7c3aed;--red:#dc2626}
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
+.summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
 </style>
 </head>
 <body><main>
@@ -935,6 +1329,17 @@ HTML_TEMPLATE = r"""<!doctype html>
  <div class="card"><strong>Top‑1…Top‑5</strong><span>全部候选等级均保存并评测</span></div>
 </section>
 
+<section class="summary-banner">
+ <span class="scope-badge">先读结论 / Executive summary</span>
+ <h2>本页同时回答“盘找得准不准”和“最终取向排得对不对”</h2>
+ <p class="section-intro">V5 固定同一套 First‑Born Clean 物理图像，仅独立改变电子剂量与读出噪声；分别报告检峰层和端到端取向层。所有百分比直接来自已保存全量结果，不做平滑或结果美化。</p>
+ <div class="findings">
+  <div class="finding"><span>Headline 高剂量</span><b id="summary-headline">—</b><small>2,048 样本，Top‑5 Acc@2°</small></div>
+  <div class="finding"><span>[001] Clean‑E</span><b id="summary-001">—</b><small>512 个独立样本，不混入 headline</small></div>
+  <div class="finding"><span>检峰全量条件</span><b id="summary-disks">—</b><small>Precision / Recall / 位置误差可独立查看</small></div>
+ </div>
+</section>
+
 <section class="section"><h2>完整数据路径与处理链</h2>
 <div class="pipeline">
  <div class="step"><b>① Orientation</b>SO(3) Sobol 取向；构建时做晶体对称性和 Friedel canonicalization。</div>
@@ -948,9 +1353,32 @@ HTML_TEMPLATE = r"""<!doctype html>
 <div class="warning" style="margin-top:14px"><b>重要：</b>网页读取已保存结果，不会重新运行 benchmark。图像亮度使用显示专用的 clip/log 映射；ACOM/Pyxem 输入仍是原始 HDF5 数组。</div>
 </section>
 
+<section class="section"><details class="fold" open><summary>二维输入与受控噪声示例 / Image input and controlled noise</summary><div class="fold-body">
+ <p class="section-intro"><b>Clean‑E</b> 是无随机采样的物理期望强度概率图；<b>Clean‑C noiseless</b> 是它乘以指定电子数后的确定性 expected counts；其余 Clean‑C 先进行 Poisson 电子计数，再独立叠加不同强度的 EMPAD‑G2 读出噪声。下面固定同一取向、同一剂量和同一显示尺度，只改变噪声层。</p>
+ <div class="gallery" id="noise-gallery"></div>
+ <p class="chart-note">显示变换仅用于网页可见性。算法读取 HDF5 中的原始 float32 / uint32 数组；图下方同时列出原始数组的 sum、min、max 与非零像素数。</p>
+</div></details></section>
+
+<section class="section"><details class="fold" open><summary>衍射盘恢复准确率 / Disk-recovery accuracy</summary><div class="fold-body">
+ <p class="section-intro">这一层只比较检峰结果与 image‑matched physical oracle，不涉及 ACOM 取向候选。Precision/Recall 判断盘是否找对；RMSE/P95 判断圆盘中心坐标精修误差；coverage 判断每张图是否至少产生可用检峰结果。</p>
+ <div class="controls">
+  <div class="control"><label>数据集 / Dataset</label><select id="disk-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
+  <div class="control"><label>噪声 / Noise</label><select id="disk-noise"></select></div>
+  <div class="control"><label>指标 / Metric</label><select id="disk-metric"><option value="recall">Recall</option><option value="precision">Precision</option><option value="high_angle_recall">High-angle recall</option><option value="position_rmse_px">Position RMSE (px)</option><option value="position_p95_px">Position P95 (px)</option><option value="sample_detection_coverage">Sample detection coverage</option><option value="false_positive_per_sample">False positives / sample</option><option value="false_negative_per_sample">False negatives / sample</option></select></div>
+ </div>
+ <canvas class="chart chart-wide" id="disk-dose-chart" width="1280" height="440"></canvas><div class="legend" id="disk-dose-legend"></div>
+ <div class="controls">
+  <div class="control"><label>固定剂量 / Fixed dose</label><select id="disk-fixed-dose"></select></div>
+  <div class="control"><label>检峰器 / Detector</label><select id="disk-detector"><option value="autodisk">AutoDisk</option><option value="dog_rgm">DoG‑RGM</option><option value="py4dstem">find_Bragg_disks</option></select></div>
+ </div>
+ <canvas class="chart" id="disk-noise-chart" width="1280" height="390"></canvas><div class="legend" id="disk-noise-legend"></div>
+ <p class="chart-note">上图：固定噪声，比较三个检峰器随剂量的变化。下图：固定剂量与检峰器，比较独立噪声阶梯。匹配阈值与高角度定义见运行参数。</p>
+</div></details></section>
+
 <section class="section"><h2>Top‑1…Top‑5 剂量曲线</h2>
  <p>每条曲线使用全部 2,048 个输入作为分母。ACOM 没有候选的样本计为错误；Pyxem 返回候选并不代表候选正确。</p>
  <div class="controls">
+  <div class="control"><label>数据集 / Dataset</label><select id="dose-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct-image template matching</option></select></div>
   <div class="control"><label>噪声梯度 / Noise level</label><select id="dose-noise"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="dose-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
@@ -969,6 +1397,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
 <section class="section"><h2>固定电子剂量下的噪声阶梯</h2>
  <div class="controls">
+  <div class="control"><label>数据集 / Dataset</label><select id="noise-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="noise-dose"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="noise-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
@@ -993,7 +1422,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 </section>
 
 <section class="section"><h2>当前条件的精确 Top‑K 数值</h2>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
+ <div class="controls"><div class="control"><label>数据集 / Dataset</label><select id="condition-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
  <p id="condition-caption"></p><div class="table-wrap"><table><thead><tr><th>K</th><th>Coverage</th><th>Acc@1°</th><th>Acc@2°</th><th>Acc@5°</th><th>Median error</th><th>P95 error</th></tr></thead><tbody id="condition-table"></tbody></table></div>
 </section>
 
@@ -1029,9 +1458,20 @@ g_sample = R_sample→crystalᵀ g_crystal
 q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
 </section>
 
-<section class="section"><h2>输入文件与中间变量</h2><div class="grid2" id="file-grid"></div></section>
+<section class="section"><details class="fold"><summary>输入文件与中间变量 / Files and traceable intermediates</summary><div class="fold-body"><div class="grid2" id="file-grid"></div></div></details></section>
 
-<section class="section"><h2>[001] 独立研究集</h2><div id="study001"></div><p class="warning">[001] 的 512 个样本不混入 2,048 headline 指标。旧 Top‑1 ACOM 结果已按要求删除；本页只展示仍保留的构建与检峰中间结果，不把旧结果伪装成 Top‑5。</p></section>
+<section class="section"><details class="fold" open><summary>[001] 独立研究集：全量 Top‑5 与失效分析</summary><div class="fold-body"><div id="study001"></div>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div><div class="control"><label>分组图指标 / Group metric</label><select id="study001-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option></select></div></div>
+ <canvas class="chart chart-wide" id="study001-tilt-chart" width="1280" height="440"></canvas><div class="legend" id="study001-legend"></div>
+ <div id="study001-tables"></div>
+ <p class="warning"><b>边界说明：</b>这 512 个样本是单独构建、单独检峰、单独运行 ACOM/Pyxem Top‑5 的研究集，不混入 2,048 headline 指标。页面显示的是新全量实验，不是旧 Top‑1 冒烟结果。</p>
+</div></details></section>
+
+<section class="section"><details class="fold"><summary>V3 直接峰基线与 40 个 ACOM grid probe</summary><div class="fold-body">
+ <p>V3 直接输入 <code>(qₓ,qᵧ,intensity)</code> 峰列表，没有二维图像形成与自动检峰层。此处保留 4°/3°/2° orientation-plan 步长结果，并单列 40 个 <code>acom_grid_probe</code>，便于判断 V5 的变化来自图像接口还是 ACOM 本身。</p>
+ <canvas class="chart" id="legacy-chart" width="1280" height="390"></canvas><div class="legend" id="legacy-legend"></div>
+ <div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Angle step</th><th>Headline N</th><th>Headline Acc@2°</th><th>Headline median</th><th>Grid probe N</th><th>Grid probe Acc@2°</th><th>Grid probe median</th></tr></thead><tbody id="legacy-table"></tbody></table></div>
+</div></details></section>
 
 <section class="section"><h2>运行参数与结果解释</h2>
  <details open><summary>Top‑K、对称性与 Friedel branch</summary><p>“Top‑K 含有正确答案”定义为：算法按相关分数给出的前 K 个候选中，至少一个候选在 proper crystal point-group rotations 与 detector-plane Friedel branch 两类等价变换后，取向误差 ≤2°。Friedel branch 处理二维衍射图无法区分的探测器平面反演；V5 同时在数据构建时保存 canonical Friedel branch，评价仍做等价搜索以避免代表选择影响指标。</p></details>
@@ -1041,6 +1481,7 @@ Counted: n(q) ~ Poisson(N_e P(q))
 Read noise: y(q)=n(q)+Normal(0, σ_level²)
 σ_level = 0.008666… × √(summed frame count) primary-e⁻ RMS/pixel</div></details>
  <details><summary>为什么更多 frames 的 read noise 可能更大</summary><p>这里的变量是“多帧求和后的读出噪声”，每帧独立读出噪声按 √frames 累积；它不是把固定总曝光平均后降低噪声的模型。网页直接展示当前 benchmark 已冻结的定义与实测结果。</p></details>
+ <details><summary>完整运行参数（中英文键名与已保存报告）</summary><p>下面内容直接嵌入生成时读取的 <code>config/benchmark_v5.yaml</code> 相关段落和生成/噪声报告；隐藏仅影响页面排版。</p><pre class="formula parameter-json" id="parameter-json"></pre></details>
 </section>
 
 <script>
@@ -1052,20 +1493,28 @@ const NOISE_LABEL={noiseless:"Noiseless expected counts",poisson_only:"Poisson o
 const pct=v=>(100*v).toFixed(2)+"%";const num=(v,d=3)=>Number.isFinite(v)?Number(v).toFixed(d):"—";
 const METRIC={acc1:{field:"accuracy_all_inputs_within_1deg",label:"Acc@1°",fixed:true},acc2:{field:"accuracy_all_inputs_within_2deg",label:"Acc@2°",fixed:true},acc5:{field:"accuracy_all_inputs_within_5deg",label:"Acc@5°",fixed:true},median:{field:"median_misorientation_deg_indexed",label:"Median equivalent error (°)",fixed:false},p95:{field:"p95_misorientation_deg_indexed",label:"P95 equivalent error (°)",fixed:false},coverage:{field:"prediction_coverage",label:"Prediction coverage",fixed:true}};
 const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem direct image"}};
+const DETECTOR_LABEL={autodisk:"AutoDisk",dog_rgm:"DoG‑RGM",py4dstem:"find_Bragg_disks"};
+const DISK_METRIC={precision:{field:"precision_mean",label:"Precision",fixed:true},recall:{field:"recall_mean",label:"Recall",fixed:true},high_angle_recall:{field:"high_angle_recall_mean",label:"High-angle recall",fixed:true},position_rmse_px:{field:"position_rmse_px_mean",label:"Position RMSE (px)",fixed:false},position_p95_px:{field:"position_p95_px_mean",label:"Position P95 (px)",fixed:false},sample_detection_coverage:{field:"sample_detection_coverage_mean",label:"Sample detection coverage",fixed:true},false_positive_per_sample:{field:"false_positive_per_sample_mean",label:"False positives / sample",fixed:false},false_negative_per_sample:{field:"false_negative_per_sample_mean",label:"False negatives / sample",fixed:false}};
 function canvasSurface(canvas){const rect=canvas.getBoundingClientRect(),W=Math.max(1,Math.round(rect.width||canvas.width)),H=Math.max(1,Math.round(rect.height||canvas.height)),ratio=Math.max(2,window.devicePixelRatio||1),pixelW=Math.round(W*ratio),pixelH=Math.round(H*ratio);if(canvas.width!==pixelW||canvas.height!==pixelH){canvas.width=pixelW;canvas.height=pixelH}const ctx=canvas.getContext("2d");ctx.setTransform(ratio,0,0,ratio,0,0);ctx.imageSmoothingEnabled=false;return {ctx,W,H}}
 function matrixText(m){return m.map(r=>"["+r.map(v=>Number(v).toFixed(6).padStart(10)).join("  ")+"]").join("\n")}
-function aggregate(method,group,fields){const rows=DATA[method].aggregates.filter(r=>r.group_by===group&&Object.entries(fields).every(([k,v])=>r[k]===v));if(rows.length!==1)throw new Error(`aggregate ${method}/${group} ${JSON.stringify(fields)} -> ${rows.length}`);return rows[0]}
-function cleanCRow(methodValue,dose,noise){const spec=METHODS[methodValue];return spec.detector?aggregate("acom","dose_noise_detector",{track:"Clean-C",detector:spec.detector,dose_electrons:dose,noise}):aggregate("pyxem","dose_noise",{track:"Clean-C",dose_electrons:dose,noise})}
-function setupSelectors(){NOISE_ORDER.forEach(n=>{for(const id of ["dose-noise","condition-noise"]){const o=document.createElement("option");o.value=n;o.textContent=NOISE_LABEL[n];$(id).append(o)}});DATA.dataset.doses.forEach(d=>{for(const id of ["noise-dose","condition-dose"]){const o=document.createElement("option");o.value=d;o.textContent=d.toLocaleString()+" e⁻";$(id).append(o)}});$("noise-dose").value="10000";$("condition-dose").value="10000";for(const c of DATA.cases){const o=document.createElement("option");o.value=c.id;o.textContent=c.label+" · "+c.sample_id;$("case-select").append(o)}}
+function resultRoot(scope){return scope==="study001"?DATA.study_001:DATA}
+function aggregateScoped(scope,method,group,fields){const rows=resultRoot(scope)[method].aggregates.filter(r=>r.group_by===group&&Object.entries(fields).every(([k,v])=>r[k]===v));if(rows.length!==1)throw new Error(`aggregate ${scope}/${method}/${group} ${JSON.stringify(fields)} -> ${rows.length}`);return rows[0]}
+function aggregate(method,group,fields){return aggregateScoped("headline",method,group,fields)}
+function cleanCRow(methodValue,dose,noise,scope="headline"){const spec=METHODS[methodValue];return spec.detector?aggregateScoped(scope,"acom","dose_noise_detector",{track:"Clean-C",detector:spec.detector,dose_electrons:dose,noise}):aggregateScoped(scope,"pyxem","dose_noise",{track:"Clean-C",dose_electrons:dose,noise})}
+function diskRow(scope,detector,dose,noise){const rows=DATA.disk_recovery[scope].aggregates.filter(r=>r.detector===detector&&r.dose_electrons===dose&&r.noise_level_id===noise);if(rows.length!==1)throw new Error(`disk ${scope}/${detector}/${dose}/${noise} -> ${rows.length}`);return rows[0]}
+function addOptions(id,values,label){for(const v of values){const o=document.createElement("option");o.value=v;o.textContent=label(v);$(id).append(o)}}
+function setupSelectors(){for(const id of ["dose-noise","condition-noise","disk-noise"]){addOptions(id,NOISE_ORDER,n=>NOISE_LABEL[n])}for(const id of ["noise-dose","condition-dose","disk-fixed-dose"]){addOptions(id,DATA.dataset.doses,d=>d.toLocaleString()+" e⁻")}$("noise-dose").value="10000";$("condition-dose").value="10000";$("disk-fixed-dose").value="10000";for(const c of DATA.cases){const o=document.createElement("option");o.value=c.id;o.textContent=c.label+" · "+c.sample_id;$("case-select").append(o)}}
 function chart(canvas,labels,series,{logX=false,yTitle="Acc@2°",fixed=true}={}){const {ctx,W,H}=canvasSurface(canvas),p={l:72,r:24,t:28,b:64};ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);const finite=series.flatMap(s=>s.values).filter(Number.isFinite),maxValue=fixed?1:Math.max(1,...finite)*1.08,minValue=0;ctx.font="12px system-ui";ctx.strokeStyle="#dbe3ef";ctx.fillStyle="#64748b";ctx.lineWidth=1;for(let i=0;i<=5;i++){const y=p.t+(H-p.t-p.b)*i/5,v=maxValue-(maxValue-minValue)*i/5;ctx.beginPath();ctx.moveTo(p.l,y);ctx.lineTo(W-p.r,y);ctx.stroke();ctx.textAlign="right";ctx.fillText(v<2?v.toFixed(1):v.toFixed(0),p.l-10,y+4)}const xs=labels.map((v,i)=>{if(logX){const lo=Math.log10(labels[0]),hi=Math.log10(labels[labels.length-1]);return p.l+(Math.log10(v)-lo)/(hi-lo)*(W-p.l-p.r)}return labels.length===1?(p.l+W-p.r)/2:p.l+i/(labels.length-1)*(W-p.l-p.r)});labels.forEach((v,i)=>{ctx.fillStyle="#64748b";ctx.textAlign="center";const text=logX?Number(v).toExponential(0):String(v);ctx.fillText(text,xs[i],H-p.b+22)});for(const s of series){ctx.strokeStyle=s.color;ctx.fillStyle=s.color;ctx.lineWidth=2.5;ctx.beginPath();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);if(i===0)ctx.moveTo(xs[i],y);else ctx.lineTo(xs[i],y)});ctx.stroke();s.values.forEach((v,i)=>{const y=p.t+(maxValue-v)/(maxValue-minValue)*(H-p.t-p.b);ctx.beginPath();ctx.arc(xs[i],y,4,0,Math.PI*2);ctx.fill()})}ctx.save();ctx.translate(18,(p.t+H-p.b)/2);ctx.rotate(-Math.PI/2);ctx.textAlign="center";ctx.fillStyle="#172033";ctx.font="13px system-ui";ctx.fillText(yTitle,0,0);ctx.restore()}
 function legend(id,series){$(id).innerHTML=series.map(s=>`<span style="--c:${s.color}">${s.name}</span>`).join("")}
 function metricSeries(rows,metricKey){const m=METRIC[metricKey];return [1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r.top_k[k-1][m.field])}))}
-function drawDose(){const method=$("dose-method").value,noise=$("dose-noise").value,m=METRIC[$("dose-metric").value];const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,$("dose-metric").value);chart($("dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("dose-legend",series)}
-function drawNoise(){const method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>cleanCRow(method,dose,noise)),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_LABEL[n].replace("EMPAD-G2 · ","").replace("Noiseless expected counts","Noiseless")),series,{yTitle:m.label,fixed:m.fixed});legend("noise-legend",series)}
+function drawDose(){const scope=$("dose-scope").value,method=$("dose-method").value,noise=$("dose-noise").value,m=METRIC[$("dose-metric").value];const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise,scope)),series=metricSeries(rows,$("dose-metric").value);chart($("dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:`${scope==="study001"?"[001]":"Headline"} · ${m.label}`,fixed:m.fixed});legend("dose-legend",series)}
+function drawNoise(){const scope=$("noise-scope").value,method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>cleanCRow(method,dose,noise,scope)),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_LABEL[n].replace("EMPAD-G2 · ","").replace("Noiseless expected counts","Noiseless")),series,{yTitle:`${scope==="study001"?"[001]":"Headline"} · ${m.label}`,fixed:m.fixed});legend("noise-legend",series)}
+function drawDiskDose(){const scope=$("disk-scope").value,noise=$("disk-noise").value,m=DISK_METRIC[$("disk-metric").value];const series=Object.keys(DETECTOR_LABEL).map((detector,i)=>({name:DETECTOR_LABEL[detector],color:["#2563eb","#ea580c","#15803d"][i],values:DATA.dataset.doses.map(d=>diskRow(scope,detector,d,noise)[m.field])}));chart($("disk-dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("disk-dose-legend",series);drawDiskNoise()}
+function drawDiskNoise(){const scope=$("disk-scope").value,dose=Number($("disk-fixed-dose").value),detector=$("disk-detector").value,m=DISK_METRIC[$("disk-metric").value],series=[{name:`${DETECTOR_LABEL[detector]} · ${m.label}`,color:"#7c3aed",values:NOISE_ORDER.map(noise=>diskRow(scope,detector,dose,noise)[m.field])}];chart($("disk-noise-chart"),NOISE_ORDER.map(n=>NOISE_LABEL[n].replace("EMPAD-G2 · ","").replace("Noiseless expected counts","Noiseless")),series,{yTitle:m.label,fixed:m.fixed});legend("disk-noise-legend",series)}
 function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem image"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
 function buildOverview(){const grid=$("overview-grid");grid.innerHTML="";for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const box=document.createElement("div");box.className="mini-chart";box.innerHTML=`<h3>${NOISE_LABEL[noise]} · ${METHODS[method].label}</h3><canvas width="620" height="240"></canvas>`;grid.append(box)}}drawOverview()}
 function drawOverview(){const key=$("overview-metric").value,m=METRIC[key],canvases=$("overview-grid").querySelectorAll("canvas");let index=0;for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,key);chart(canvases[index++],DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed})}}const dummy={top_k:[1,2,3,4,5].map(()=>({[m.field]:0}))};legend("overview-legend",metricSeries([dummy],key))}
-function drawCondition(){const method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value),row=cleanCRow(method,dose,noise);$("condition-caption").textContent=`${METHODS[method].label} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
+function drawCondition(){const scope=$("condition-scope").value,method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value),row=cleanCRow(method,dose,noise,scope);$("condition-caption").textContent=`${scope==="study001"?"[001] study":"Headline"} · ${METHODS[method].label} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
 function qToPixel(caseRow,qx,qy,W,H){const q=caseRow.q_axis;return [(qx-q.qx_min)/(q.qx_max-q.qx_min)*W,(qy-q.qy_min)/(q.qy_max-q.qy_min)*H]}
 function drawOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{ctx,W,H}=canvasSurface($("peak-overlay"));ctx.clearRect(0,0,W,H);if($("show-links").checked){ctx.strokeStyle="rgba(124,58,237,.7)";ctx.lineWidth=1;c.peak_metrics.matches.forEach(m=>{const a=c.oracle_peaks[m.oracle_index],b=c.detected_peaks[m.detected_index],p=qToPixel(c,a.qx,a.qy,W,H),q=qToPixel(c,b.qx,b.qy,W,H);ctx.beginPath();ctx.moveTo(p[0],p[1]);ctx.lineTo(q[0],q[1]);ctx.stroke()})}if($("show-oracle").checked){ctx.strokeStyle="#0891b2";ctx.lineWidth=1.6;c.oracle_peaks.forEach(x=>{const p=qToPixel(c,x.qx,x.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()})}if($("show-detected").checked){ctx.strokeStyle="#ea580c";ctx.lineWidth=1.6;c.detected_peaks.forEach(x=>{const p=qToPixel(c,x.qx,x.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()})}const r=c.reflections[Number($("reflection-select").value)||0];if(r){const p=qToPixel(c,r.q_Ainv[0],r.q_Ainv[1],W,H);ctx.strokeStyle="#7c3aed";ctx.lineWidth=3;ctx.beginPath();ctx.arc(p[0],p[1],10,0,Math.PI*2);ctx.stroke()}}
 function candidateTable(rows,method){if(!rows.length)return `<div class="warning">ACOM 未生成候选：检峰列表中的可用峰不足。该样本仍保留在 2,048 输入分母中。</div>`;return `<div class="table-wrap"><table><thead><tr><th>Rank</th><th>Correlation</th><th>Equivalent error</th><th>Friedel used</th><th>Correct ≤2°</th></tr></thead><tbody>${rows.map(r=>`<tr><td>${r.rank}</td><td>${num(r.correlation,5)}</td><td>${num(r.friedel_error_deg,4)}°</td><td>${r.friedel_used?"yes":"no"}</td><td class="${r.friedel_error_deg<=2?"status-ok":"status-no"}">${r.friedel_error_deg<=2?"✓":"—"}</td></tr>`).join("")}</tbody></table></div><details><summary>Top‑1 raw/aligned matrices</summary><div class="grid2"><div><b>raw</b><pre class="matrix">${matrixText(rows[0].matrix)}</pre></div><div><b>aligned</b><pre class="matrix">${matrixText(rows[0].aligned_matrix)}</pre></div></div></details>`}
@@ -1074,10 +1523,15 @@ function updateReflection(){const c=DATA.cases.find(x=>x.id===$("case-select").v
 let axisAligned=true;
 function drawAxes(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{ctx,W,H}=canvasSurface($("axis-chart")),cx=W/2,cy=H/2,scale=Math.min(W/2-55,H/2-38)*.9;ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);ctx.strokeStyle="#dbe3ef";ctx.beginPath();ctx.moveTo(40,cy);ctx.lineTo(W-40,cy);ctx.moveTo(cx,30);ctx.lineTo(cx,H-35);ctx.stroke();const sets=[["GT",c.ground_truth_matrix,"#2563eb"],["ACOM",c.acom_candidates.length?(axisAligned?c.acom_candidates[0].aligned_matrix:c.acom_candidates[0].matrix):null,"#ea580c"],["Pyxem",axisAligned?c.pyxem_candidates[0].aligned_matrix:c.pyxem_candidates[0].matrix,"#15803d"]];for(const [name,m,color] of sets){if(!m)continue;for(let j=0;j<3;j++){const x=cx+m[0][j]*scale,y=cy-m[1][j]*scale;ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=name==="GT"?3:2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();ctx.font="12px system-ui";ctx.fillText(`${name} ${["x","y","z"][j]}`,x+6,y-5)}}}
 function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes()}
-function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5"};$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><div class="file">${Array.isArray(b)?JSON.stringify(b):b}</div></div>`).join("")}</div>`).join("")}
-function renderStudy001(){const s=DATA.study_001;$("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.num_samples||512}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.exact_001_count||32}</strong><span>exact [001]</span></div><div class="card"><strong>0.125°–6°</strong><span>local/transition tilts</span></div><div class="card"><strong>32 + 32</strong><span>[100] / [110] controls</span></div></div><div class="table-wrap" style="margin-top:14px"><table><thead><tr><th>Detector</th><th>Precision</th><th>Recall</th><th>Position RMSE</th><th>High-angle recall</th></tr></thead><tbody>${s.detectors.map(d=>`<tr><td>${d.detector}</td><td>${pct(d.precision)}</td><td>${pct(d.recall)}</td><td>${num(d.position_rmse_px)} px</td><td>${pct(d.high_angle_recall)}</td></tr>`).join("")}</tbody></table></div>`}
-function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);setupSelectors();renderFiles();renderStudy001();buildOverview();drawDose();drawNoise();drawCleanE();drawCondition();updateCase();["dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
-let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDose();drawNoise();drawCleanE();drawOverview();drawCoordinateTrace();drawOverlay();drawAxes()},120)});
+function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("")}
+function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5",study_001:"[001] independent study"};const show=v=>typeof v==="object"?JSON.stringify(v,null,2):String(v);$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]||k}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><pre class="file">${show(b)}</pre></div>`).join("")}</div>`).join("")}
+function cleanERow(scope,method){return method==="pyxem"?aggregateScoped(scope,"pyxem","track",{track:"Clean-E"}):aggregateScoped(scope,"acom","clean_e_input",{track:"Clean-E",input:method})}
+function renderSummary(){const methods=Object.keys(METHODS),rows=methods.map(m=>({m,row:cleanCRow(m,1000000,"poisson_only")})),best=rows.sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-headline").textContent=`${METHODS[best.m].label}: ${pct(best.row.top_k[4].accuracy_all_inputs_within_2deg)}`;const s001=["oracle","autodisk","dog_rgm","py4dstem","pyxem"].map(m=>({m,row:cleanERow("study001",m)})).sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-001").textContent=`${s001.m==="pyxem"?"Pyxem":DETECTOR_LABEL[s001.m]||"Oracle"}: ${pct(s001.row.top_k[4].accuracy_all_inputs_within_2deg)}`;$("summary-disks").textContent=`${DATA.disk_recovery.headline.num_conditions} + ${DATA.disk_recovery.study_001.num_conditions} conditions`}
+function drawStudy001(){const data=DATA.study_001.topk_groups,method=$("study001-method").value,key=`topk_${$("study001-metric").value}`,rows=data.tilts.filter(r=>r.method===method),labels=rows.map(r=>r.tilt_deg),series=[1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r[key][k-1])}));chart($("study001-tilt-chart"),labels,series,{yTitle:`[001] ${$("study001-metric").selectedOptions[0].textContent}`,fixed:true});legend("study001-legend",series)}
+function renderStudy001(){const s=DATA.study_001,labels=s.topk_groups.method_labels;$("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>为何单独研究：</b>接近 [001] 时，投影反射的简并和高对称性会增加候选取向歧义。该实验用 exact、near、transition 和两个控制组区分“高对称区固有歧义”与“检峰错误”。</div>`;const groups=s.topk_groups.groups,ordered=["exact_001","near_001","transition_001","control_100","control_110"];$("study001-tables").innerHTML=`<h3>Clean‑E Top‑1 / Top‑5 Acc@2° by group</h3><div class="table-wrap"><table><thead><tr><th>Method</th>${ordered.map(g=>`<th>${g}<br>Top‑1 / Top‑5</th>`).join("")}</tr></thead><tbody>${Object.keys(labels).map(method=>`<tr><td>${labels[method]}</td>${ordered.map(group=>{const r=groups.find(x=>x.method===method&&x.group===group);return `<td>${pct(r.topk_acc2[0])} / <b>${pct(r.topk_acc2[4])}</b><br><span class="small muted">N=${r.samples}</span></td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;drawStudy001()}
+function renderLegacy(){const rows=DATA.legacy_v3,series=[{name:"Headline Acc@2°",color:"#2563eb",values:rows.map(r=>r.headline.accuracy_within_2deg)},{name:"40 grid probes Acc@2°",color:"#ea580c",values:rows.map(r=>r.grid_probe.accuracy_within_2deg)}];chart($("legacy-chart"),rows.map(r=>`${r.angle_step_deg}°`),series,{yTitle:"V3 Acc@2°",fixed:true});legend("legacy-legend",series);$("legacy-table").innerHTML=rows.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${r.headline.num_samples}</td><td>${pct(r.headline.accuracy_within_2deg)}</td><td>${num(r.headline.median_misorientation_deg)}°</td><td>${r.grid_probe.num_samples}</td><td>${pct(r.grid_probe.accuracy_within_2deg)}</td><td>${num(r.grid_probe.median_misorientation_deg)}°</td></tr>`).join("")}
+function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderFiles();renderStudy001();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
+let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes()},120)});
 init();
 </script>
 </main></body></html>"""
