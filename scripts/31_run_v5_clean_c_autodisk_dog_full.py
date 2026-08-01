@@ -295,12 +295,16 @@ def main() -> None:
         raise ValueError("--cuda-visible-device must contain physical GPU indices")
     if len(cuda_devices) > 2 or len(set(cuda_devices)) != len(cuda_devices):
         raise ValueError("at most two distinct physical GPU indices are allowed")
-    if not 1 <= args.detection_workers <= 12:
-        raise ValueError("--detection-workers must be in [1, 12]")
-    if not 1 <= args.acom_workers <= 4:
-        raise ValueError("--acom-workers must be in [1, 4]")
-    if args.detection_workers + args.acom_workers > 16:
-        raise ValueError("combined worker count must not exceed 16")
+    if not 1 <= args.detection_workers <= 24:
+        raise ValueError("--detection-workers must be in [1, 24]")
+    if not 1 <= args.acom_workers <= 8:
+        raise ValueError("--acom-workers must be in [1, 8]")
+    worker_limit = 16 if len(cuda_devices) == 1 else 32
+    if args.detection_workers + args.acom_workers > worker_limit:
+        raise ValueError(
+            f"combined worker count must not exceed {worker_limit} for "
+            f"{len(cuda_devices)} visible physical GPU(s)"
+        )
     data_root = args.data_root.resolve()
     ground_truth = args.ground_truth_file.resolve()
     conditions = load_conditions(data_root)
