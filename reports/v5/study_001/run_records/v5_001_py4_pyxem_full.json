@@ -1,0 +1,84 @@
+{
+  "schema": "or4d-v5-001-py4-pyxem-full-v1",
+  "started_unix": 1785613988.4684162,
+  "repo": "/home/xietianhong/OR4D-NCM811-smoke-v0",
+  "data_root": "/mnt/data/xietianhong/or4d-clean-v5",
+  "gpu_preflight": {
+    "physical_gpu": 0,
+    "uuid": "GPU-1f577906-7251-cc6e-3ddc-844a9a84e4e2",
+    "memory_used_MiB": 1,
+    "utilization_percent": 0
+  },
+  "cpu_worker_limit": 16,
+  "acom_workers": 4,
+  "stages": [
+    {
+      "stage": "py4dstem_noiseless_detection",
+      "status": "reused"
+    },
+    {
+      "stage": "py4dstem_counted_detection",
+      "status": "reused"
+    },
+    {
+      "stage": "py4dstem_acom_top5",
+      "status": "reused"
+    },
+    {
+      "stage": "pyxem_top5_all_tracks",
+      "status": "reused"
+    },
+    {
+      "stage": "evaluate_pyxem_top5",
+      "status": "completed",
+      "started_unix": 1785613988.4794936,
+      "command": [
+        "/home/xietianhong/miniconda3/envs/or4d-clean/bin/python",
+        "/home/xietianhong/OR4D-NCM811-smoke-v0/scripts/26_evaluate_v5_pyxem.py",
+        "--result-file",
+        "/mnt/data/xietianhong/or4d-clean-v5/results/pyxem_001_top5.h5",
+        "--ground-truth-file",
+        "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_001_orientations.jsonl",
+        "--summary-output",
+        "/mnt/data/xietianhong/or4d-clean-v5/reports/v5_001/topk/V5_001_PYXEM_TOP5_FULL_SUMMARY.json",
+        "--clean-e-details-output",
+        "/mnt/data/xietianhong/or4d-clean-v5/reports/v5_001/topk/V5_001_PYXEM_CLEAN_E_DETAILS.jsonl"
+      ],
+      "log": "/mnt/data/xietianhong/or4d-clean-v5/logs/v5_001/py4_pyxem/evaluate_pyxem_top5.log",
+      "finished_unix": 1785613992.2336378,
+      "seconds": 3.7538767310325056
+    },
+    {
+      "stage": "finalize_001_top5",
+      "status": "completed",
+      "started_unix": 1785613992.234744,
+      "command": [
+        "/home/xietianhong/miniconda3/envs/or4d-clean/bin/python",
+        "/home/xietianhong/OR4D-NCM811-smoke-v0/scripts/29_finalize_v5_top5.py",
+        "--acom-clean-e-details-dir",
+        "/mnt/data/xietianhong/or4d-clean-v5/results/v5_001_suite/acom_001",
+        "--acom-clean-e-candidates-dir",
+        "/mnt/data/xietianhong/or4d-clean-v5/results/v5_001_suite/acom_001",
+        "--acom-clean-c-details-dir",
+        "/mnt/data/xietianhong/or4d-clean-v5/results/acom_top5/clean_001_c",
+        "--acom-clean-c-candidates-dir",
+        "/mnt/data/xietianhong/or4d-clean-v5/results/acom_top5_candidates/clean_001_c",
+        "--pyxem-summary",
+        "/mnt/data/xietianhong/or4d-clean-v5/reports/v5_001/topk/V5_001_PYXEM_TOP5_FULL_SUMMARY.json",
+        "--output-dir",
+        "/mnt/data/xietianhong/or4d-clean-v5/reports/v5_001/topk",
+        "--artifact-prefix",
+        "V5_001",
+        "--dataset-label",
+        "V5 independent [001] study",
+        "--sample-count",
+        "512"
+      ],
+      "log": "/mnt/data/xietianhong/or4d-clean-v5/logs/v5_001/py4_pyxem/finalize_001_top5.log",
+      "finished_unix": 1785613998.8099458,
+      "seconds": 6.574656213168055
+    }
+  ],
+  "finished_unix": 1785613998.8109596,
+  "status": "completed"
+}
