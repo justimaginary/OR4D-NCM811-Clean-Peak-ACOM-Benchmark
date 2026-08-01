@@ -147,7 +147,7 @@ def aggregate(
 
 def labels_for_group(result: h5py.File, name: str) -> list[dict[str, object]]:
     if name == "clean_e":
-        return [{"track": "Clean-E"}]
+        return [{"track": "Clean-E", "input": "expectation_image"}]
     doses = np.asarray(result["dose_electrons"][:], dtype=np.int64)
     if name == "clean_c_noiseless":
         return [
