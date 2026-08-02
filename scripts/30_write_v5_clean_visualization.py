@@ -1519,7 +1519,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
  <p class="small muted">因此选择 <b>Disk metric → Recall</b> 时，图中三条线只比较 AutoDisk、DoG‑RGM 和 find_Bragg_disks 的检峰召回率；右侧的 ACOM/Pyxem 曲线是另一层的端到端取向指标。</p>
 </section>
 
-<section class="section" aria-labelledby="physics-scope-title">
+<section class="section physics-scope" aria-labelledby="physics-scope-title">
  <h2 id="physics-scope-title">V5 图像模型的物理范围 / Physical scope</h2>
  <p class="section-intro">V5 使用 coherent First‑Born 运动学 CBED。有限厚度通过反射振幅中的形状因子进入图像；该模型不是 multislice，也不包含多重散射。</p>
  <div class="grid2">
