@@ -2,14 +2,52 @@
 
 > **Note**
 >
-> Currently, only the Clean-Peak track has been evaluated. For more details,
-> see [OR4D NCM811 Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
+> V3 is the direct peak-input baseline. V4 and V5 add the Clean diffraction
+> image and dose/noise observation tracks; their compact results and pages are
+> included below. For the original benchmark contract, see [OR4D NCM811
+> Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
 
 > **Status**
 >
-> Clean-Peak v3 is the only evaluated track. It tests matched-model
-> orientation recovery from ideal kinematical diffraction peaks; it does not
+> All three versions are Clean, matched-model synthetic benchmarks. They test
+> kinematical orientation recovery and detector robustness; they do not
 > establish performance on experimental data or dynamical diffraction.
+
+## Clone, data, and reproducibility
+
+The Git checkout is intentionally code-and-results only. It contains the
+source CIF, YAML configurations, generation/detection/indexing scripts, tests,
+compact JSON/JSONL summaries, figures, PDFs, and self-contained HTML
+snapshots. Generated peak tables, orientation manifests, diffraction images,
+count images, detector-peak HDF5 files, and per-sample caches are not stored in
+Git. They are written to an external data root (on the server use
+`/mnt/data/$USER/or4d-clean-v5`; locally set `OR4D_V5_DATA_ROOT` to another
+directory).
+
+The small V3 public peak table (`public/clean_peaks.h5`) and the compact
+reflection table (`diagnostics/clean_reflections.h5`) are deliberate exceptions:
+they are tracked because they are part of the direct-peak baseline and are
+useful when rebuilding the V3 coordinate page. V4/V5 raw image stacks and
+full detector caches remain external.
+
+Small summaries, audit tables, representative overlays, and HTML payloads
+remain under `reports/` and are tracked because they are needed to inspect and
+regenerate the pages. The external run manifest records the Git commit,
+configuration, commands, backend, CPU limit, output hashes, and timing, so a
+generated data root can be checked against the exact checkout that produced it.
+
+After cloning, create the single Clean environment and run the versioned
+entrypoints below. No generated HDF5 file is required for a fresh clone:
+
+```bash
+git clone <repository-url>
+cd OR4D-NCM811-smoke-v0
+conda env create -f environment-clean.yml   # environment name: or4d-clean
+```
+
+The dynamical environment is retained as historical project scaffolding; the
+current reproducible V3/V4/V5 experiments are Clean-only and do not run
+multislice.
 
 This repository builds a synthetic NCM811 orientation benchmark and evaluates a
 py4DSTEM ACOM baseline using one shared contract:
@@ -124,6 +162,56 @@ See [`docs/CLEAN_IMAGE_PIPELINE.md`](docs/CLEAN_IMAGE_PIPELINE.md) for the
 formulas, HDF5 schema, detector comparison, commands, and current measured
 limitations.
 
+### V5 Clean-E/C and external data root
+
+V5 keeps the expectation image and the counted observation as separate tracks:
+
+- **Clean-E (expectation)** is the deterministic float32 kinematical
+  First-Born expectation image before electron counting.
+- **Clean-C (counted)** samples that same expectation with the configured
+  electron dose and noise model. It is an observation layer, not a different
+  scattering model.
+
+The generated images are stored outside the checkout. The preparation command
+also writes `run_records/v5_input_preparation.json`, which records the Git
+commit, configuration, commands, backend, CPU limit, output hashes, and timing:
+
+```bash
+export OR4D_V5_DATA_ROOT=/mnt/data/$USER/or4d-clean-v5
+./run_clean_v5.sh prepare all
+OR4D_DETECTOR_BACKEND=cuda CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh detect-e all
+OR4D_ACOM_CUDA=1 CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh acom-e all
+OR4D_PYXEM_TARGET=gpu ./run_clean_v5.sh pyxem all
+CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh clean-c all
+```
+
+`prepare` is CPU-portable by default. For image generation, py4DSTEM detection,
+ACOM, or Pyxem on a server, set the corresponding CUDA/target variable only
+after checking that one physical GPU is completely idle, and set
+`OR4D_CPU_THREADS` to at most 16. Each Python stage verifies its requested
+GPU before starting and exposes only that one GPU to the child process.
+AutoDisk and DoG-RGM remain CPU methods. The `clean-c` convenience stage
+orchestrates the full AutoDisk and DoG-RGM Clean-C runs; the py4DSTEM
+`find_Bragg_disks` and Pyxem runs remain separate, explicit stages so an
+optional dependency failure cannot silently change the ACOM baseline.
+
+To regenerate the tracked V5 HTML after the external runs complete, first write
+the compact disk-recovery summary and then rebuild the self-contained page:
+
+```bash
+python scripts/32_summarize_v5_clean_c_disk_recovery.py \
+  --data-root "$OR4D_V5_DATA_ROOT" \
+  --run-record "$OR4D_V5_DATA_ROOT/run_records/v5_clean_c_autodisk_dog_full.json" \
+  --study main --workers 12 \
+  --output reports/v5/pipeline/clean_c_disk_recovery_full.json
+python scripts/30_write_v5_clean_visualization.py \
+  --data-root "$OR4D_V5_DATA_ROOT"
+```
+
+The V5 visualization can therefore be opened from a clone without shipping the
+raw dataset; the external input root is needed only when rebuilding its
+embedded images and intermediate traces.
+
 Run the tests:
 
 ```bash
@@ -237,13 +325,16 @@ Machine-readable results and the generated Markdown report are under
 
 ```text
 config/       benchmark, Clean, ACOM, and evaluation parameters
-data/         NCM811 CIF and generated metadata
-public/       participant-visible peak sets
-private/      orientations and hidden ground truth
+data/         tracked NCM811 CIF and small source metadata
+public/       tracked V3 peaks; generated V4/V5 image HDF5 is ignored
+private/      generated orientations and hidden ground truth (ignored)
 submissions/  ACOM predictions and submission examples
-diagnostics/  HKL reflections and complete coordinate traces
+diagnostics/  tracked compact reflections/traces/overlays; large HDF5 ignored
 reports/      metrics, figures, analyses, and interactive HTML
 scripts/      generation, prediction, evaluation, and reporting tools
+<external root>/datasets      generated V4/V5 images and count images
+<external root>/intermediates generated detector peaks and traces
+<external root>/run_records   command, hash, and environment manifests
 ```
 
 See [`docs/CLEAN_BENCHMARK_V3.md`](docs/CLEAN_BENCHMARK_V3.md) for the detailed
@@ -258,5 +349,9 @@ sampling and evaluation contract.
 - A 2° plan is more accurate than a 4° plan but uses approximately eight times
   as many orientation seeds and substantially more runtime.
 - Grid probes are diagnostic only and must not be mixed into headline metrics.
+- The proposed next detector is documented in
+  [`docs/DETECTOR_PROPOSAL.md`](docs/DETECTOR_PROPOSAL.md). It is a design
+  proposal only; no performance number is claimed until it is run through the
+  same frozen evaluation contract.
 - Public, private, and evaluation files coexist for local reproducibility; this
   repository is not a server-side blind benchmark.

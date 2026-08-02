@@ -82,6 +82,31 @@ def child_env(cuda_device: str | None) -> dict[str, str]:
     return env
 
 
+def verify_empty_gpus(cuda_devices: list[str]) -> None:
+    """Fail before a full run if any requested physical GPU is occupied."""
+    rows = subprocess.check_output(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,memory.used,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        text=True,
+    )
+    status = {}
+    for line in rows.splitlines():
+        fields = [part.strip() for part in line.split(",")]
+        if len(fields) == 3:
+            status[fields[0]] = (int(fields[1]), int(fields[2]))
+    for device in cuda_devices:
+        if device not in status:
+            raise RuntimeError(f"GPU {device} is absent from nvidia-smi output")
+        memory_mib, utilization = status[device]
+        if memory_mib > 100 or utilization > 5:
+            raise RuntimeError(
+                f"GPU {device} is not empty: {memory_mib} MiB, {utilization}%"
+            )
+
+
 def study_files(data_root: Path, study: str) -> dict[str, Path | str]:
     if study == "001":
         return {
@@ -329,6 +354,7 @@ def main() -> None:
         raise ValueError("--cuda-visible-device must contain physical GPU indices")
     if len(cuda_devices) > 2 or len(set(cuda_devices)) != len(cuda_devices):
         raise ValueError("at most two distinct physical GPU indices are allowed")
+    verify_empty_gpus(cuda_devices)
     if not 1 <= args.detection_workers <= 24:
         raise ValueError("--detection-workers must be in [1, 24]")
     if not 1 <= args.acom_workers <= 8:

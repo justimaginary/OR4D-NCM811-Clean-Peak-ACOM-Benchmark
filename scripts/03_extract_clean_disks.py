@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -98,6 +100,37 @@ def load_noise_manifest(path: Path | None) -> dict | None:
                 h5["read_noise_seed"][:], dtype=np.uint64
             ),
         }
+
+
+def require_one_empty_gpu() -> str:
+    """Verify the one physical GPU exposed to a CUDA detector is idle."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if not visible.isdigit():
+        raise RuntimeError(
+            "CUDA detector runs require CUDA_VISIBLE_DEVICES to contain exactly "
+            "one physical GPU index"
+        )
+    rows = subprocess.check_output(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,memory.used,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        text=True,
+    )
+    status = {}
+    for line in rows.splitlines():
+        fields = [part.strip() for part in line.split(",")]
+        if len(fields) == 3:
+            status[fields[0]] = (int(fields[1]), int(fields[2]))
+    if visible not in status:
+        raise RuntimeError(f"GPU {visible} is absent from nvidia-smi output")
+    memory_mib, utilization = status[visible]
+    if memory_mib > 100 or utilization > 5:
+        raise RuntimeError(
+            f"GPU {visible} is not empty: {memory_mib} MiB, {utilization}%"
+        )
+    return visible
 
 
 def variants(
@@ -251,6 +284,11 @@ def main() -> None:
         )
     if "cuda_xcorr_poly" in detectors and args.compute_backend != "cuda":
         raise ValueError("cuda_xcorr_poly requires --compute-backend cuda")
+    physical_gpu = (
+        require_one_empty_gpu()
+        if args.compute_backend == "cuda"
+        else None
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_path = args.image_file.resolve()
     report_rows: list[dict] = []
@@ -522,6 +560,7 @@ def main() -> None:
         "track": args.track,
         "detectors": detectors,
         "compute_backend": args.compute_backend,
+        "physical_gpu_index": physical_gpu,
         "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
         "noise_manifest": (
             noise_manifest["path"]

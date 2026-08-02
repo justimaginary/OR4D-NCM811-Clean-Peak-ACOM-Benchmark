@@ -94,6 +94,7 @@ reports/local/
 # These are reproducible and become large for the 1,081-pattern full run.
 public/clean_images*.h5
 public/clean_counted_images*.h5
+public/clean_peaks_*.h5
 diagnostics/clean_expectation_*_peaks*.h5
 diagnostics/clean_counted_dose*_peaks*.h5
 diagnostics/clean_image_overlays*/
@@ -125,6 +126,8 @@ diagnostics/clean_v5_*.h5
 diagnostics/clean_v5_response_maps/
 diagnostics/clean_v5_refinement_trajectories/
 reports/v5/full_results/
+reports/v5/acom_full/
+reports/v5/acom_001/
 # Full per-dose/per-repeat V4 details are retained locally but not tracked.
 reports/v4/runs/
 server_artifacts/
