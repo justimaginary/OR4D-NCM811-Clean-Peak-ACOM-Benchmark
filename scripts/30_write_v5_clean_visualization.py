@@ -1518,7 +1518,38 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
  <p class="small muted">因此选择 <b>Disk metric → Recall</b> 时，图中三条线只比较 AutoDisk、DoG‑RGM 和 find_Bragg_disks 的检峰召回率；右侧的 ACOM/Pyxem 曲线是另一层的端到端取向指标。</p>
 </section>
 
- <section class="section method-comparison" aria-labelledby="method-comparison-title">
+<section class="section" aria-labelledby="physics-scope-title">
+ <h2 id="physics-scope-title">V5 图像模型的物理范围 / Physical scope</h2>
+ <p class="section-intro">V5 使用 coherent First‑Born 运动学 CBED。有限厚度通过反射振幅中的形状因子进入图像；该模型不是 multislice，也不包含多重散射。</p>
+ <div class="grid2">
+  <div class="panel">
+   <h3>当前生成中实际使用的因素</h3>
+   <div class="table-wrap"><table><thead><tr><th>因素</th><th>当前设置或实现</th></tr></thead><tbody>
+    <tr><td>晶体与结构因子</td><td>CIF、倒易晶格、结构因子；电子能量 300 kV</td></tr>
+    <tr><td>有限厚度</td><td>5 nm；<code>t·sinc(t·Δk<sub>z</sub>)·exp(iπtΔk<sub>z</sub>)</code></td></tr>
+    <tr><td>会聚束与衍射盘</td><td>0.5 mrad 半角、10% 软边孔径、4× 过采样、亚像素放置和像素积分</td></tr>
+    <tr><td>相干叠加</td><td>先累加复数散射振幅，再计算 <code>|ΣA<sub>g</sub>|²</code></td></tr>
+    <tr><td>倒空间范围</td><td>峰筛选 Kmax = 1.5 Å⁻¹；图像网格 qmax = 1.6 Å⁻¹</td></tr>
+    <tr><td>中心束</td><td>90% 作为 benchmark 参数，散射部分占 10%；不是由 First‑Born 守恒自动推导</td></tr>
+    <tr><td>数据等价性</td><td>数据构建时执行晶体对称性与 Friedel canonicalization</td></tr>
+   </tbody></table></div>
+  </div>
+  <div class="panel">
+   <h3>当前没有加入的因素</h3>
+   <div class="table-wrap"><table><thead><tr><th>因素</th><th>当前状态</th></tr></thead><tbody>
+    <tr><td>多重散射</td><td>未使用 multislice 或 Bloch-wave；不属于当前 Clean V5</td></tr>
+    <tr><td>吸收与非弹性散射</td><td>未实现；中心束耗尽由显式比例参数代替</td></tr>
+    <tr><td>热振动、缺陷、应变</td><td>未实现；使用理想周期晶体结构</td></tr>
+    <tr><td>像差</td><td>defocus = 0、astigmatism = 0，因此代码中的相位项当前不改变图像</td></tr>
+    <tr><td>探测器成像</td><td>PSF、背景、椭圆畸变和饱和均关闭</td></tr>
+    <tr><td>EMPAD 完整响应</td><td>当前只使用 Poisson 计数和高斯读出噪声；电荷扩散、DQE 未进入图像</td></tr>
+   </tbody></table></div>
+  </div>
+ </div>
+ <div class="warning" style="margin-top:12px"><b>V4 与 V5 的厚度差异：</b>V4 的配置中虽然保留了 5 nm 参数，但实际使用的 ACOM‑matched 渲染路径没有调用有限厚度 sinc 因子；V5 才在实际生成的 First‑Born 图像中使用该项。因此 V4 与 V5 的检峰 Recall 不能只归因于电子噪声或厚度变化。</div>
+</section>
+
+<section class="section method-comparison" aria-labelledby="method-comparison-title">
  <h2 id="method-comparison-title">方法横向比较 / Method comparison</h2>
  <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及直接读二维图像的 Pyxem。左图比较最终取向 Top‑1～Top‑5；右图只比较三种检峰器的盘恢复指标。</p>
  <div class="controls">
