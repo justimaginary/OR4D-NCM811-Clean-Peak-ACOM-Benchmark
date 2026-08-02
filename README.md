@@ -162,7 +162,7 @@ See [`docs/CLEAN_IMAGE_PIPELINE.md`](docs/CLEAN_IMAGE_PIPELINE.md) for the
 formulas, HDF5 schema, detector comparison, commands, and current measured
 limitations.
 
-### V5 Clean-E/C and external data root
+### V5 Clean-E/C and the existing server run
 
 V5 keeps the expectation image and the counted observation as separate tracks:
 
@@ -172,48 +172,41 @@ V5 keeps the expectation image and the counted observation as separate tracks:
   electron dose and noise model. It is an observation layer, not a different
   scattering model.
 
-The generated images are stored outside the checkout and were already generated
-on the server. The tracked
-[`reports/v5/MANIFEST.json`](reports/v5/MANIFEST.json) records the canonical
-server-relative paths, sizes, hashes, and the producing commit. A clone checks
-and reuses that artifact root; it does not generate a second V5 dataset:
+The V5 input images, manifests, detector outputs and full candidate files were
+already generated on the server. The canonical data root is
+`/mnt/data/xietianhong/or4d-clean-v5`; the tracked
+[`reports/v5/MANIFEST.json`](reports/v5/MANIFEST.json) records its
+server-relative paths, sizes, hashes, and producing commit. Compact summaries,
+plots, run records and HTML are already retained under `reports/v5`.
 
-```bash
-export OR4D_V5_DATA_ROOT=/mnt/data/$USER/or4d-clean-v5
-./run_clean_v5.sh check all
-OR4D_DETECTOR_BACKEND=cuda CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh detect-e all
-OR4D_ACOM_CUDA=1 CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh acom-e all
-OR4D_PYXEM_TARGET=gpu ./run_clean_v5.sh pyxem all
-CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh clean-c all
+No replacement V5 data-preparation wrapper is required. If a server rerun is
+explicitly needed, use the existing project scripts in their original stages:
+
+```text
+01_generate_orientations.py / 01b_generate_001_study.py
+02b_generate_clean_images.py
+02c_generate_clean_counted_images.py
+02d_generate_clean_dose_expectations.py
+02e_generate_clean_noise_manifest.py
+03_extract_clean_disks.py
+18_write_v5_manifest.py
+23_run_v5_acom_suite.py
+25_run_v5_pyxem_template_matching.py
+31_run_v5_clean_c_autodisk_dog_full.py
+33_run_v5_001_py4_pyxem.py
 ```
 
-The `check` stage is read-only. It verifies the existing server inputs against
-the tracked manifest. For any additional image, detection, ACOM, or Pyxem run,
-set the corresponding CUDA/target variable only
-after checking that one physical GPU is completely idle, and set
-`OR4D_CPU_THREADS` to at most 16. Each Python stage verifies its requested
-GPU before starting and exposes only that one GPU to the child process.
-AutoDisk and DoG-RGM remain CPU methods. The `clean-c` convenience stage
-orchestrates the full AutoDisk and DoG-RGM Clean-C runs; the py4DSTEM
-`find_Bragg_disks` and Pyxem runs remain separate, explicit stages so an
-optional dependency failure cannot silently change the ACOM baseline.
+These scripts read and write the pre-existing server data root; they are not
+replaced by a second local generator. GPU stages must still be launched only on
+an explicitly verified idle card, with the CPU limit required by `AGENTS.md`.
 
-To regenerate the tracked V5 HTML after the external runs complete, first write
-the compact disk-recovery summary and then rebuild the self-contained page:
+To rebuild the tracked V5 HTML from the existing server results, use the
+original report producer:
 
 ```bash
-python scripts/32_summarize_v5_clean_c_disk_recovery.py \
-  --data-root "$OR4D_V5_DATA_ROOT" \
-  --run-record "$OR4D_V5_DATA_ROOT/run_records/v5_clean_c_autodisk_dog_full.json" \
-  --study main --workers 12 \
-  --output reports/v5/pipeline/clean_c_disk_recovery_full.json
 python scripts/30_write_v5_clean_visualization.py \
-  --data-root "$OR4D_V5_DATA_ROOT"
+  --data-root /mnt/data/xietianhong/or4d-clean-v5
 ```
-
-The V5 visualization can therefore be opened from a clone without shipping the
-raw dataset; the external input root is needed only when rebuilding its
-embedded images and intermediate traces.
 
 Run the tests:
 
