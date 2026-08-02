@@ -12,6 +12,7 @@ import time
 from collections import Counter
 from pathlib import Path
 
+import h5py
 import numpy as np
 import py4DSTEM
 from pymatgen.core import Structure
@@ -33,6 +34,7 @@ from or4d_common import (  # noqa: E402
     symmetry_aware_misorientation_deg,
     write_jsonl,
 )
+from topk_evaluation import summarize_topk_errors  # noqa: E402
 
 
 def in_plane_rotation_matrix(phi: float) -> np.ndarray:
@@ -171,6 +173,93 @@ def runtime_summary(seconds: list[float]) -> dict:
     }
 
 
+def match_topk_distinct_zone_axes(
+    crystal,
+    point_list,
+    *,
+    n_best: int,
+    min_number_peaks: int,
+    inversion_symmetry: bool,
+    min_zone_separation_deg: float,
+) -> dict[str, np.ndarray]:
+    """Return ranked ACOM hypotheses from the unchanged input peak list.
+
+    ``Crystal.match_single_pattern(num_matches_return > 1)`` removes peaks
+    explained by each preceding match.  Those outputs are a multi-orientation
+    decomposition, not classification Top-K candidates.  For benchmark Top-K,
+    run the native matcher repeatedly on the same peaks and mask only the
+    previously selected zone-axis neighbourhood in the orientation plan.
+
+    py4DSTEM reduces every zone-axis row to its best in-plane angle and
+    normal/Friedel branch, so these are explicitly *zone-axis-distinct*
+    candidates.  Rank 1 is byte-for-byte the normal native single match.
+    """
+    if n_best < 1:
+        raise ValueError("n_best must be positive")
+    if min_zone_separation_deg <= 0:
+        raise ValueError("min_zone_separation_deg must be positive")
+
+    orientation_ref = crystal.orientation_ref
+    orientation_vecs = np.asarray(crystal.orientation_vecs, dtype=float)
+    excluded = np.zeros(orientation_vecs.shape[0], dtype=bool)
+    restored_rows: list[tuple[np.ndarray, object]] = []
+    matrices: list[np.ndarray] = []
+    correlations: list[float] = []
+    indices: list[np.ndarray] = []
+    mirrors: list[bool] = []
+    angles: list[np.ndarray] = []
+    cosine_limit = float(np.cos(np.deg2rad(min_zone_separation_deg)))
+
+    try:
+        for _ in range(n_best):
+            orientation = crystal.match_single_pattern(
+                bragg_peaks=point_list,
+                num_matches_return=1,
+                min_number_peaks=min_number_peaks,
+                inversion_symmetry=inversion_symmetry,
+                plot_polar=False,
+                plot_corr=False,
+                verbose=False,
+            )
+            correlation = float(np.asarray(orientation.corr)[0])
+            if not np.isfinite(correlation) or correlation <= 0:
+                raise RuntimeError("ACOM exhausted positive Top-K hypotheses")
+            zone_index = int(np.asarray(orientation.inds)[0, 0])
+            matrices.append(np.asarray(orientation.matrix, dtype=float)[0])
+            correlations.append(correlation)
+            indices.append(np.asarray(orientation.inds, dtype=np.int32)[0])
+            mirrors.append(bool(np.asarray(orientation.mirror)[0]))
+            angles.append(np.asarray(orientation.angles, dtype=float)[0])
+
+            cosine = orientation_vecs @ orientation_vecs[zone_index]
+            new_mask = (cosine > cosine_limit) & ~excluded
+            new_indices = np.flatnonzero(new_mask)
+            if new_indices.size == 0:
+                raise RuntimeError(
+                    f"ACOM Top-K failed to exclude zone index {zone_index}"
+                )
+            saved = orientation_ref[new_indices, :, :].copy()
+            restored_rows.append((new_indices, saved))
+            orientation_ref[new_indices, :, :] = 0
+            excluded[new_indices] = True
+    finally:
+        for row_indices, saved in restored_rows:
+            orientation_ref[row_indices, :, :] = saved
+
+    correlations_array = np.asarray(correlations, dtype=float)
+    if np.any(np.diff(correlations_array) > 1e-8):
+        raise RuntimeError(
+            "ACOM Top-K correlations are not monotonically non-increasing"
+        )
+    return {
+        "matrix": np.stack(matrices, axis=0),
+        "correlation": correlations_array,
+        "indices": np.stack(indices, axis=0),
+        "mirror": np.asarray(mirrors, dtype=bool),
+        "angles": np.stack(angles, axis=0),
+    }
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -237,6 +326,14 @@ def parse_args() -> argparse.Namespace:
         help="Exact ACOM per-sample details JSON output path.",
     )
     parser.add_argument(
+        "--candidates-file",
+        type=Path,
+        help=(
+            "HDF5 output containing every returned candidate. Full Top-5 "
+            "runs should place this large artifact under /mnt/data."
+        ),
+    )
+    parser.add_argument(
         "--audit-file",
         type=Path,
         help="Exact orientation-plan audit JSON output path.",
@@ -295,6 +392,17 @@ def main() -> None:
         raise ValueError("ACOM angle steps must be positive")
     if power_intensity_experiment < 0.0 or power_intensity_simulated < 0.0:
         raise ValueError("intensity exponents must be non-negative")
+    num_matches_return = int(acom["num_matches_return"])
+    if num_matches_return != 5:
+        raise ValueError(
+            "The V5 candidate contract requires acom.num_matches_return=5, "
+            f"got {num_matches_return}"
+        )
+    topk_min_zone_separation_deg = float(
+        acom.get("topk_min_zone_separation_deg", 0.01)
+    )
+    if topk_min_zone_separation_deg <= 0:
+        raise ValueError("acom.topk_min_zone_separation_deg must be positive")
     if args.output_tag and not args.output_tag.replace("_", "").isalnum():
         raise ValueError(
             "output tag may contain only letters, numbers, and underscores"
@@ -519,40 +627,85 @@ def main() -> None:
     predictions: list[dict] = []
     details: list[dict] = []
     prediction_seconds: list[float] = []
+    candidate_matrices: list[np.ndarray] = []
+    candidate_correlations: list[np.ndarray] = []
+    candidate_indices: list[np.ndarray] = []
+    candidate_mirrors: list[np.ndarray] = []
+    candidate_angles_deg: list[np.ndarray] = []
+    candidate_strict_errors: list[np.ndarray] = []
+    candidate_friedel_errors: list[np.ndarray] = []
+    candidate_sample_ids: list[str] = []
     for sample_index, sample in enumerate(matched_samples):
         point_list = make_point_list(sample)
         start = time.perf_counter()
-        orientation = crystal.match_single_pattern(
-            bragg_peaks=point_list,
-            num_matches_return=int(acom["num_matches_return"]),
+        candidates = match_topk_distinct_zone_axes(
+            crystal,
+            point_list,
+            n_best=num_matches_return,
             min_number_peaks=min_number_peaks,
             inversion_symmetry=inversion_symmetry,
-            plot_polar=False,
-            plot_corr=False,
-            verbose=False,
+            min_zone_separation_deg=topk_min_zone_separation_deg,
         )
         seconds = time.perf_counter() - start
         prediction_seconds.append(seconds)
 
         sample_id = sample["sample_id"]
         gt = ground_truth[sample_id]
-        matrix_pred = nearest_rotation(
-            np.asarray(orientation.matrix[0], dtype=float)
+        matrices = np.asarray(candidates["matrix"], dtype=float)
+        if matrices.shape != (num_matches_return, 3, 3):
+            raise RuntimeError(
+                f"{sample_id} returned candidate shape {matrices.shape}; "
+                f"expected {(num_matches_return, 3, 3)}"
+            )
+        matrices = np.stack(
+            [nearest_rotation(matrix) for matrix in matrices], axis=0
         )
+        correlations = np.asarray(candidates["correlation"], dtype=float)
+        indices = np.asarray(candidates["indices"], dtype=np.int32)
+        mirrors = np.asarray(candidates["mirror"], dtype=bool)
+        angles_deg = np.degrees(
+            np.asarray(candidates["angles"], dtype=float)
+        )
+        if (
+            correlations.shape != (num_matches_return,)
+            or indices.shape != (num_matches_return, 2)
+            or mirrors.shape != (num_matches_return,)
+            or angles_deg.shape != (num_matches_return, 3)
+        ):
+            raise RuntimeError(f"{sample_id} returned inconsistent Top-5 arrays")
         matrix_gt = np.asarray(
             gt["orientation_matrix_sample_to_crystal"],
             dtype=float,
         )
-        strict_error = symmetry_aware_misorientation_deg(
-            matrix_pred,
-            matrix_gt,
-            symmetries,
+        strict_errors = np.asarray(
+            [
+                symmetry_aware_misorientation_deg(
+                    matrix, matrix_gt, symmetries
+                )
+                for matrix in matrices
+            ],
+            dtype=float,
         )
-        friedel_error = friedel_aware_misorientation_deg(
-            matrix_pred,
-            matrix_gt,
-            symmetries,
+        friedel_errors = np.asarray(
+            [
+                friedel_aware_misorientation_deg(
+                    matrix, matrix_gt, symmetries
+                )
+                for matrix in matrices
+            ],
+            dtype=float,
         )
+        matrix_pred = matrices[0]
+        strict_error = float(strict_errors[0])
+        friedel_error = float(friedel_errors[0])
+        candidate_sample_ids.append(sample_id)
+        candidate_matrices.append(matrices)
+        candidate_correlations.append(correlations)
+        candidate_indices.append(indices)
+        candidate_mirrors.append(mirrors)
+        candidate_angles_deg.append(angles_deg)
+        candidate_strict_errors.append(strict_errors)
+        candidate_friedel_errors.append(friedel_errors)
         predictions.append(
             {
                 "sample_id": sample_id,
@@ -568,11 +721,11 @@ def main() -> None:
                 "probe_axis_id": gt.get("probe_axis_id"),
                 "probe_offset_deg": gt.get("probe_offset_deg"),
                 "num_peaks": int(len(sample["qx"])),
-                "correlation_score": float(orientation.corr[0]),
-                "zone_axis_plan_index": int(orientation.inds[0, 0]),
-                "in_plane_plan_index": int(orientation.inds[0, 1]),
-                "mirror_match": bool(orientation.mirror[0]),
-                "euler_angles_deg": np.degrees(orientation.angles[0]).tolist(),
+                "correlation_score": float(correlations[0]),
+                "zone_axis_plan_index": int(indices[0, 0]),
+                "in_plane_plan_index": int(indices[0, 1]),
+                "mirror_match": bool(mirrors[0]),
+                "euler_angles_deg": angles_deg[0].tolist(),
                 "prediction_seconds": seconds,
                 "strict_misorientation_deg": float(strict_error),
                 "friedel_equivalent_misorientation_deg": float(friedel_error),
@@ -604,6 +757,60 @@ def main() -> None:
     )
     write_jsonl(submission_path, predictions)
 
+    candidates_path = (
+        args.candidates_file.resolve()
+        if args.candidates_file
+        else ROOT / "reports" / f"acom_candidates{output_suffix}.h5"
+    )
+    candidates_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_arrays = {
+        "orientation_matrix_sample_to_crystal": np.asarray(
+            candidate_matrices, dtype=np.float64
+        ),
+        "correlation": np.asarray(candidate_correlations, dtype=np.float32),
+        "plan_index": np.asarray(candidate_indices, dtype=np.int32),
+        "mirror_match": np.asarray(candidate_mirrors, dtype=np.bool_),
+        "euler_angles_deg": np.asarray(
+            candidate_angles_deg, dtype=np.float64
+        ),
+        "strict_misorientation_deg": np.asarray(
+            candidate_strict_errors, dtype=np.float64
+        ),
+        "friedel_equivalent_misorientation_deg": np.asarray(
+            candidate_friedel_errors, dtype=np.float64
+        ),
+    }
+    with h5py.File(candidates_path, "w") as output:
+        output.attrs["schema"] = "or4d-acom-topk-v1"
+        output.attrs["n_best"] = num_matches_return
+        output.attrs["rank_order"] = "algorithm_correlation_order"
+        output.create_dataset(
+            "sample_id",
+            data=np.asarray(
+                candidate_sample_ids, dtype=h5py.string_dtype("utf-8")
+            ),
+        )
+        output.create_dataset(
+            "rank",
+            data=np.arange(1, num_matches_return + 1, dtype=np.int8),
+        )
+        for name, values in candidate_arrays.items():
+            output.create_dataset(
+                name,
+                data=values,
+                chunks=True,
+                compression="gzip",
+                compression_opts=4,
+            )
+
+    friedel_array = candidate_arrays[
+        "friedel_equivalent_misorientation_deg"
+    ]
+    top_k_metrics = summarize_topk_errors(
+        friedel_array,
+        total_input_samples=len(samples),
+    )
+
     config_path = ROOT / "config" / "benchmark.yaml"
     details_output = {
         "dataset_id": config["dataset"]["id"],
@@ -622,6 +829,15 @@ def main() -> None:
         "num_input_samples": len(samples),
         "num_matched_samples": len(matched_samples),
         "num_indexing_failures": len(insufficient_peak_rows),
+        "num_matches_return": num_matches_return,
+        "candidate_definition": (
+            "Ranked zone-axis-distinct ACOM hypotheses. Every rank is matched "
+            "against the unchanged full peak list; only previously selected "
+            "zone-axis neighbourhoods are masked."
+        ),
+        "topk_min_zone_separation_deg": topk_min_zone_separation_deg,
+        "candidate_file": str(candidates_path),
+        "top_k_metrics": top_k_metrics,
         "indexing_failures": insufficient_peak_rows,
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
@@ -670,6 +886,7 @@ def main() -> None:
     )
 
     print(f"Predictions: {submission_path}")
+    print(f"Top-{num_matches_return} candidates: {candidates_path}")
     print(f"Plan audit: {audit_path}")
     print(f"ACOM details: {details_path}")
 

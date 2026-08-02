@@ -79,6 +79,7 @@ def detect_dog_rgm_peaks(
     candidates.sort(key=lambda value: value[2], reverse=True)
     deduplicated: list[tuple[float, float, float]] = []
     spacing = float(config["min_peak_spacing_px"])
+    max_num_peaks = int(config["max_num_peaks"])
     for candidate in candidates:
         if all(
             np.hypot(candidate[0] - kept[0], candidate[1] - kept[1])
@@ -86,7 +87,11 @@ def detect_dog_rgm_peaks(
             for kept in deduplicated
         ):
             deduplicated.append(candidate)
-    candidates = deduplicated[: int(config["max_num_peaks"])]
+            # Score ordering makes later candidates ineligible for the top-N
+            # output once N spatially distinct candidates have been retained.
+            if len(deduplicated) == max_num_peaks:
+                break
+    candidates = deduplicated
     if not candidates:
         raise RuntimeError("DoG scale space found no diffraction disks")
 

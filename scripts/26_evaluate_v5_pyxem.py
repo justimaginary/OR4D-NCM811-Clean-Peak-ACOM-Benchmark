@@ -23,6 +23,12 @@ from or4d_common import (  # noqa: E402
     read_jsonl,
     write_jsonl,
 )
+from topk_evaluation import summarize_topk_errors  # noqa: E402
+from v5_results import (  # noqa: E402
+    aggregate_group_keys,
+    aggregate_topk_error_blocks,
+    group_label,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -56,20 +62,31 @@ def condition_errors(
     ground_truth: np.ndarray,
     symmetries: list[np.ndarray],
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Return raw, crystal-symmetry, and Friedel-aware errors."""
+    """Return [sample, rank] raw, symmetry, and Friedel-aware errors."""
     predicted = np.asarray(predicted, dtype=np.float64)
     ground_truth = np.asarray(ground_truth, dtype=np.float64)
+    if predicted.ndim != 4 or predicted.shape[2:] != (3, 3):
+        raise ValueError(
+            f"expected predicted [sample,rank,3,3], got {predicted.shape}"
+        )
+    if predicted.shape[0] != ground_truth.shape[0]:
+        raise ValueError("prediction and ground-truth sample counts differ")
+    sample_count, rank_count = predicted.shape[:2]
+    predicted_flat = predicted.reshape(sample_count * rank_count, 3, 3)
+    ground_truth_flat = np.repeat(ground_truth, rank_count, axis=0)
     raw = rotation_angles_deg(
-        predicted @ np.swapaxes(ground_truth, -1, -2)
+        predicted_flat @ np.swapaxes(ground_truth_flat, -1, -2)
     )
-    strict = np.full(len(predicted), np.inf, dtype=np.float64)
-    friedel = np.full(len(predicted), np.inf, dtype=np.float64)
+    strict = np.full(len(predicted_flat), np.inf, dtype=np.float64)
+    friedel = np.full(len(predicted_flat), np.inf, dtype=np.float64)
     for symmetry in symmetries:
-        equivalent = np.einsum("ab,nbc->nac", symmetry, ground_truth)
+        equivalent = np.einsum(
+            "ab,nbc->nac", symmetry, ground_truth_flat
+        )
         strict = np.minimum(
             strict,
             rotation_angles_deg(
-                predicted @ np.swapaxes(equivalent, -1, -2)
+                predicted_flat @ np.swapaxes(equivalent, -1, -2)
             ),
         )
         friedel = np.minimum(friedel, strict)
@@ -79,14 +96,16 @@ def condition_errors(
         friedel = np.minimum(
             friedel,
             rotation_angles_deg(
-                predicted @ np.swapaxes(equivalent_friedel, -1, -2)
+                predicted_flat
+                @ np.swapaxes(equivalent_friedel, -1, -2)
             ),
         )
-    invalid = ~np.isfinite(predicted).all(axis=(1, 2))
+    invalid = ~np.isfinite(predicted_flat).all(axis=(1, 2))
     raw[invalid] = np.nan
     strict[invalid] = np.nan
     friedel[invalid] = np.nan
-    return raw, strict, friedel
+    shape = (sample_count, rank_count)
+    return raw.reshape(shape), strict.reshape(shape), friedel.reshape(shape)
 
 
 def aggregate(
@@ -128,7 +147,7 @@ def aggregate(
 
 def labels_for_group(result: h5py.File, name: str) -> list[dict[str, object]]:
     if name == "clean_e":
-        return [{"track": "Clean-E"}]
+        return [{"track": "Clean-E", "input": "expectation_image"}]
     doses = np.asarray(result["dose_electrons"][:], dtype=np.int64)
     if name == "clean_c_noiseless":
         return [
@@ -168,9 +187,15 @@ def main() -> None:
             row["orientation_matrix_sample_to_crystal"], dtype=np.float64
         )
         ground_truth_by_id[str(identifier)] = matrix
+        # Image datasets retain the historical ``clean_`` sample prefix,
+        # whereas the V5 construction manifest calls the same row by its
+        # orientation_id.  Record both exact, deterministic aliases.
         ground_truth_by_id[f"clean_{identifier}"] = matrix
     summaries: list[dict[str, object]] = []
     clean_e_details: list[dict[str, object]] = []
+    aggregate_blocks: dict[
+        tuple[str, str], list[tuple[np.ndarray, int]]
+    ] = {}
     with h5py.File(args.result_file, "r") as result:
         sample_ids = decode(result["sample_id"][:])
         ground_truth = np.stack(
@@ -202,30 +227,57 @@ def main() -> None:
                     predicted, ground_truth, symmetries
                 )
                 row = dict(label)
-                row.update(aggregate(friedel_error, total_samples=len(sample_ids)))
+                row.update(
+                    aggregate(
+                        friedel_error[:, 0],
+                        total_samples=len(sample_ids),
+                    )
+                )
+                row["top_k"] = summarize_topk_errors(
+                    friedel_error,
+                    total_input_samples=len(sample_ids),
+                )
                 row["group"] = group_name
-                row["raw_median_deg"] = float(np.nanmedian(raw))
-                row["strict_median_deg"] = float(np.nanmedian(strict_error))
+                row["raw_median_deg"] = float(np.nanmedian(raw[:, 0]))
+                row["strict_median_deg"] = float(
+                    np.nanmedian(strict_error[:, 0])
+                )
                 row["condition_seconds"] = float(
                     group["condition_seconds"][completion_index]
                 )
                 summaries.append(row)
+                for group_key in aggregate_group_keys(label):
+                    aggregate_blocks.setdefault(group_key, []).append(
+                        (friedel_error, len(sample_ids))
+                    )
                 if group_name == "clean_e":
                     corr = np.asarray(correlations[:], dtype=float)
                     mirror = np.asarray(mirrored[:], dtype=bool)
                     clean_e_details = [
                         {
                             "sample_id": sample_id,
-                            "raw_misorientation_deg": float(raw[index]),
-                            "strict_misorientation_deg": float(strict_error[index]),
-                            "friedel_equivalent_misorientation_deg": float(
-                                friedel_error[index]
-                            ),
-                            "correlation": float(corr[index]),
-                            "mirrored_template": bool(mirror[index]),
-                            "predicted_orientation_matrix_sample_to_crystal": (
-                                predicted[index].tolist()
-                            ),
+                            "candidates": [
+                                {
+                                    "rank": rank + 1,
+                                    "raw_misorientation_deg": float(
+                                        raw[index, rank]
+                                    ),
+                                    "strict_misorientation_deg": float(
+                                        strict_error[index, rank]
+                                    ),
+                                    "friedel_equivalent_misorientation_deg": (
+                                        float(friedel_error[index, rank])
+                                    ),
+                                    "correlation": float(corr[index, rank]),
+                                    "mirrored_template": bool(
+                                        mirror[index, rank]
+                                    ),
+                                    "predicted_orientation_matrix_sample_to_crystal": (
+                                        predicted[index, rank].tolist()
+                                    ),
+                                }
+                                for rank in range(predicted.shape[1])
+                            ],
                         }
                         for index, sample_id in enumerate(sample_ids)
                     ]
@@ -242,6 +294,14 @@ def main() -> None:
             "and the detector-plane Friedel branch."
         ),
         "conditions": summaries,
+        "aggregates": [
+            {
+                **group_label(group_by, key),
+                "num_conditions": len(blocks),
+                "top_k": aggregate_topk_error_blocks(blocks),
+            }
+            for (group_by, key), blocks in sorted(aggregate_blocks.items())
+        ],
     }
     args.summary_output.parent.mkdir(parents=True, exist_ok=True)
     args.summary_output.write_text(

@@ -176,10 +176,10 @@ def match_prepared_batch(
         intensity_transform_function=quarter_power_nonnegative,
         normalize_images=True,
         normalize_templates=True,
-        # Each caller batch is already bounded in memory.  ``None`` preserves
-        # the single navigation chunk after Pyxem promotes a 1-D navigation
-        # axis to [1, N]; explicitly splitting N triggers a Pyxem/Dask chunk
-        # shape mismatch for batches larger than 32.
+        # Keep the complete caller batch in one navigation chunk.  Pyxem
+        # promotes a 1-D navigation axis to [1, N], while its map_blocks
+        # output assumes one navigation block.  Letting Dask choose chunks
+        # splits larger batches and makes that output shape inconsistent.
         chunks=(1, prepared.shape[0], None, None),
         parallel_workers=1 if target == "gpu" else 8,
         target=target,
@@ -188,16 +188,18 @@ def match_prepared_batch(
     )
     elapsed = time.perf_counter() - start
     # A 1-D navigation signal is promoted by Pyxem to shape [1,N].
+    # Preserve the complete candidate axis; slicing ``[..., 0]`` here would
+    # silently turn an n_best=5 experiment back into a Top-1 experiment.
     return {
-        "euler_deg": np.asarray(result["orientation"][0, :, 0], dtype=np.float64),
-        "correlation": np.asarray(result["correlation"][0, :, 0], dtype=np.float64),
+        "euler_deg": np.asarray(result["orientation"][0], dtype=np.float64),
+        "correlation": np.asarray(result["correlation"][0], dtype=np.float64),
         "mirrored": np.asarray(
-            result["mirrored_template"][0, :, 0], dtype=bool
+            result["mirrored_template"][0], dtype=bool
         ),
         "template_index": np.asarray(
-            result["template_index"][0, :, 0], dtype=np.int32
+            result["template_index"][0], dtype=np.int32
         ),
-        "phase_index": np.asarray(result["phase_index"][0, :, 0], dtype=np.int8),
+        "phase_index": np.asarray(result["phase_index"][0], dtype=np.int8),
         "seconds": elapsed,
         "phase_key": phase_key,
     }

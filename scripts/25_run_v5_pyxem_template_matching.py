@@ -32,12 +32,29 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--data-root", type=Path, required=True)
     parser.add_argument("--output-file", type=Path, required=True)
     parser.add_argument(
+        "--study",
+        choices=("main", "001"),
+        default="main",
+        help="Select the 2,048-sample headline set or 512-sample [001] set.",
+    )
+    parser.add_argument(
         "--track",
         choices=("expectation", "clean_c", "all"),
         default="all",
     )
     parser.add_argument("--target", choices=("cpu", "gpu"), default="gpu")
     parser.add_argument("--batch-size", type=int)
+    parser.add_argument("--shard-count", type=int, default=1)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument(
+        "--gpu-already-reserved",
+        action="store_true",
+        help=(
+            "The visible GPU was verified empty once immediately before a "
+            "bounded multi-process shard launch. Never use this to join an "
+            "unrelated or another user's GPU job."
+        ),
+    )
     parser.add_argument(
         "--max-samples",
         type=int,
@@ -51,13 +68,15 @@ def decode(values: np.ndarray) -> list[str]:
     return [value.decode() if isinstance(value, bytes) else str(value) for value in values]
 
 
-def require_one_empty_gpu() -> str:
+def require_one_empty_gpu(*, already_reserved: bool) -> str:
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if not visible.isdigit():
         raise RuntimeError(
             "GPU matching requires CUDA_VISIBLE_DEVICES to contain exactly one "
             "physical GPU index"
         )
+    if already_reserved:
+        return visible
     rows = subprocess.check_output(
         [
             "nvidia-smi",
@@ -84,22 +103,31 @@ def create_result_group(
     name: str,
     condition_shape: tuple[int, ...],
     n: int,
+    n_best: int,
 ) -> h5py.Group:
     group = parent.require_group(name)
     specifications = {
         "orientation_matrix_sample_to_crystal": (
-            condition_shape + (n, 3, 3),
+            condition_shape + (n, n_best, 3, 3),
             np.float64,
             np.nan,
         ),
         "euler_bunge_lab_to_crystal_deg": (
-            condition_shape + (n, 3),
+            condition_shape + (n, n_best, 3),
             np.float64,
             np.nan,
         ),
-        "correlation": (condition_shape + (n,), np.float32, np.nan),
-        "mirrored_template": (condition_shape + (n,), np.bool_, False),
-        "template_index": (condition_shape + (n,), np.int32, -1),
+        "correlation": (condition_shape + (n, n_best), np.float32, np.nan),
+        "mirrored_template": (
+            condition_shape + (n, n_best),
+            np.bool_,
+            False,
+        ),
+        "template_index": (
+            condition_shape + (n, n_best),
+            np.int32,
+            -1,
+        ),
     }
     for dataset_name, (shape, dtype, fillvalue) in specifications.items():
         if dataset_name not in group:
@@ -225,25 +253,42 @@ def counted_reader(
 
 def main() -> None:
     args = parse_args()
+    if args.target == "gpu":
+        # Numba's legacy ctypes driver path segfaults inside Pyxem's CUDA
+        # kernel on the server's RTX 5090 / CUDA 12 stack.  cuda-python 12.9
+        # provides the supported NVIDIA driver binding used by Numba here.
+        os.environ.setdefault("NUMBA_CUDA_USE_NVIDIA_BINDING", "1")
     config = load_config()
     settings = dict(config["clean_image"]["pyxem_template_matching"])
+    n_best = int(settings["n_best"])
+    if n_best != 5:
+        raise ValueError(f"V5 Top-5 run requires n_best=5, got {n_best}")
     batch_size = int(args.batch_size or settings["batch_size"])
     if batch_size <= 0:
         raise ValueError("batch size must be positive")
-    physical_gpu = require_one_empty_gpu() if args.target == "gpu" else None
+    if args.shard_count < 1:
+        raise ValueError("--shard-count must be positive")
+    if not 0 <= args.shard_index < args.shard_count:
+        raise ValueError("--shard-index must be in [0, shard-count)")
+    if args.gpu_already_reserved and args.target != "gpu":
+        raise ValueError("--gpu-already-reserved requires --target gpu")
+    physical_gpu = (
+        require_one_empty_gpu(already_reserved=args.gpu_already_reserved)
+        if args.target == "gpu"
+        else None
+    )
     data_root = args.data_root.resolve()
-    expectation_path = (
-        data_root / "datasets" / "clean_v5_first_born_expectation_2048.h5"
+    prefix = "clean_v5_001_first_born" if args.study == "001" else "clean_v5_first_born"
+    count = 512 if args.study == "001" else 2048
+    expectation_path = data_root / "datasets" / f"{prefix}_expectation_{count}.h5"
+    counted_path = data_root / "datasets" / f"{prefix}_counted_{count}.h5"
+    noiseless_path = data_root / "datasets" / f"{prefix}_dose_noiseless_{count}.h5"
+    noise_name = (
+        "clean_v5_001_instrument_noise_512.h5"
+        if args.study == "001"
+        else "clean_v5_instrument_noise_2048.h5"
     )
-    counted_path = (
-        data_root / "datasets" / "clean_v5_first_born_counted_2048.h5"
-    )
-    noiseless_path = (
-        data_root / "datasets" / "clean_v5_first_born_dose_noiseless_2048.h5"
-    )
-    noise_path = (
-        data_root / "manifests" / "clean_v5_instrument_noise_2048.h5"
-    )
+    noise_path = data_root / "manifests" / noise_name
     for path in (expectation_path, counted_path, noiseless_path, noise_path):
         if not path.is_file():
             raise FileNotFoundError(path)
@@ -279,9 +324,15 @@ def main() -> None:
     mode = "a" if args.resume else "w"
     with h5py.File(args.output_file, mode) as output:
         output.attrs["method"] = "pyxem_accelerated_template_matching"
+        output.attrs["study"] = args.study
         output.attrs["pyxem_version"] = "0.21.0"
         output.attrs["target"] = args.target
         output.attrs["physical_gpu_index"] = physical_gpu or ""
+        output.attrs["numba_cuda_use_nvidia_binding"] = os.environ.get(
+            "NUMBA_CUDA_USE_NVIDIA_BINDING", ""
+        )
+        output.attrs["shard_count"] = args.shard_count
+        output.attrs["shard_index"] = args.shard_index
         output.attrs["settings_json"] = json.dumps(settings, sort_keys=True)
         output.attrs["template_metadata_json"] = json.dumps(
             library_metadata, sort_keys=True
@@ -295,8 +346,16 @@ def main() -> None:
         elif decode(output["sample_id"][:]) != sample_ids:
             raise ValueError("resume output sample IDs differ")
 
-        if args.track in {"expectation", "all"}:
-            group = create_result_group(output, "clean_e", (), sample_count)
+        # Canonical global condition order: Clean-E first, followed by every
+        # Clean-C noiseless and counted condition.  Shards own disjoint
+        # ordinals and therefore never duplicate scientific conditions.
+        condition_ordinal = 0
+        owns_expectation = condition_ordinal % args.shard_count == args.shard_index
+        condition_ordinal += 1
+        if args.track in {"expectation", "all"} and owns_expectation:
+            group = create_result_group(
+                output, "clean_e", (), sample_count, n_best
+            )
             if not args.resume or not bool(group["condition_complete"][0]):
                 with h5py.File(expectation_path, "r") as source:
                     run_condition(
@@ -347,18 +406,30 @@ def main() -> None:
                     )
                     output.attrs["counted_repeats"] = repeats
                 noiseless_group = create_result_group(
-                    output, "clean_c_noiseless", (len(doses),), sample_count
+                    output,
+                    "clean_c_noiseless",
+                    (len(doses),),
+                    sample_count,
+                    n_best,
                 )
                 counted_group = create_result_group(
                     output,
                     "clean_c_counted",
                     (len(doses), len(counted_level_indices), repeats),
                     sample_count,
+                    n_best,
                 )
                 for dose_index, dose in enumerate(doses):
                     condition = (dose_index,)
-                    if not args.resume or not bool(
-                        noiseless_group["condition_complete"][condition]
+                    owns_condition = (
+                        condition_ordinal % args.shard_count == args.shard_index
+                    )
+                    condition_ordinal += 1
+                    if owns_condition and (
+                        not args.resume
+                        or not bool(
+                            noiseless_group["condition_complete"][condition]
+                        )
                     ):
                         print(f"Clean-C noiseless dose={dose}", flush=True)
                         run_condition(
@@ -385,6 +456,13 @@ def main() -> None:
                     ):
                         for repeat in range(repeats):
                             condition = (dose_index, compact_level, repeat)
+                            owns_condition = (
+                                condition_ordinal % args.shard_count
+                                == args.shard_index
+                            )
+                            condition_ordinal += 1
+                            if not owns_condition:
+                                continue
                             if args.resume and bool(
                                 counted_group["condition_complete"][condition]
                             ):
