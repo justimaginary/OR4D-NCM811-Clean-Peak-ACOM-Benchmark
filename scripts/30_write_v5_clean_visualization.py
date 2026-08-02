@@ -1481,8 +1481,8 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 </section>
 
 <section class="summary-banner">
- <span class="scope-badge">先读结论 / Executive summary</span>
- <h2>本页同时回答“盘找得准不准”和“最终取向排得对不对”</h2>
+ <span class="scope-badge">执行摘要 / Executive summary</span>
+ <h2>检峰质量与最终取向质量</h2>
  <p class="section-intro"><b>V5 不是一种新的检峰器。</b>它是本 benchmark 的第五版数据流程：图像模型为 coherent First‑Born 运动学衍射；V4 使用的是与 ACOM 计划匹配的运动学图像。Poisson、noiseless 和 EMPAD‑G2 也不是新的散射模型，而是同一张 V5 期望图经过不同观测层得到的输入。所有百分比直接来自已保存全量结果，不做平滑或结果美化。</p>
  <div class="findings">
   <div class="finding"><span>Headline 高剂量</span><b id="summary-headline">—</b><small>2,048 样本，Top‑5 Acc@2°</small></div>
@@ -1492,12 +1492,12 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 </section>
 
 <section class="section naming-guide" aria-labelledby="naming-guide-title">
- <h2 id="naming-guide-title">名称各自表示什么 / Naming guide</h2>
- <p class="section-intro">页面里有四类名称，分别回答“哪一版 benchmark”“怎样生成图像”“有没有把电子变成计数”“读出端加了什么噪声”。它们不是四个互相竞争的模型。</p>
+ <h2 id="naming-guide-title">版本、图像与观测层 / Versions, image model and observation layers</h2>
+ <p class="section-intro">页面中的名称分为四层：benchmark 版本、图像生成模型、电子计数方式和读出噪声。它们对应数据流程的不同阶段，不是四个互相竞争的模型。</p>
  <div class="grid2">
   <div class="panel">
    <h3>版本与图像模型</h3>
-   <div class="table-wrap"><table><thead><tr><th>名称</th><th>这里实际指什么</th><th>与下一版的主要差别</th></tr></thead><tbody>
+   <div class="table-wrap"><table><thead><tr><th>标签</th><th>定义</th><th>与下一版的主要差别</th></tr></thead><tbody>
     <tr><td>V3</td><td>直接输入 <code>(qₓ,qᵧ,intensity)</code> 峰列表</td><td>没有二维图像形成和自动检峰</td></tr>
     <tr><td>V4</td><td>ACOM‑matched kinematical CBED 图像</td><td>反射集合按旧 ACOM 计划生成；1,081 个取向、3 个剂量档</td></tr>
     <tr><td>V5</td><td>coherent First‑Born kinematical CBED 图像</td><td>有限厚度相干散射、2,048 个 headline 取向、9 个剂量档；检峰器和 ACOM 评价接口保持一致</td></tr>
@@ -1505,7 +1505,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
   </div>
   <div class="panel">
    <h3>Clean‑E、Clean‑C 与观测层</h3>
-   <div class="table-wrap"><table><thead><tr><th>名称</th><th>输入是什么</th><th>是否有随机计数/读出噪声</th></tr></thead><tbody>
+   <div class="table-wrap"><table><thead><tr><th>标签</th><th>输入形式</th><th>计数与噪声</th></tr></thead><tbody>
     <tr><td>Clean‑E</td><td>期望图 <code>P<sub>E</sub>(q)</code>，float32</td><td>没有；用于隔离图像形成和检峰损失</td></tr>
     <tr><td>Clean‑C</td><td>由同一张期望图按电子剂量得到的计数观测</td><td>可以选择下列观测层</td></tr>
     <tr><td>noiseless</td><td><code>I<sub>N</sub>(q)=N<sub>e</sub>P<sub>E</sub>(q)</code></td><td>确定性缩放，不抽样</td></tr>
@@ -1518,7 +1518,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
  <p class="small muted">因此选择 <b>Disk metric → Recall</b> 时，图中三条线只比较 AutoDisk、DoG‑RGM 和 find_Bragg_disks 的检峰召回率；右侧的 ACOM/Pyxem 曲线是另一层的端到端取向指标。</p>
 </section>
 
-<section class="section method-comparison" aria-labelledby="method-comparison-title">
+ <section class="section method-comparison" aria-labelledby="method-comparison-title">
  <h2 id="method-comparison-title">方法横向比较 / Method comparison</h2>
  <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及直接读二维图像的 Pyxem。左图比较最终取向 Top‑1～Top‑5；右图只比较三种检峰器的盘恢复指标。</p>
  <div class="controls">
@@ -1553,16 +1553,16 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
  <p class="chart-note" id="dose-response-note">横轴使用对数刻度；同一观测层、同一数据集，只有电子剂量变化。选择 Disk metric → Recall 时，纵轴是“匹配到的 oracle 盘 / oracle 盘总数”。</p>
 </section>
 
-<section class="section"><h2>先区分三种输入 / Three input tracks</h2>
+<section class="section"><h2>三种输入轨道 / Three input tracks</h2>
  <div class="definitions">
   <article class="definition v3"><span class="tag">V3 · direct peak list</span><h3>直接峰输入</h3><p>输入已经是 <code>(qₓ,qᵧ,intensity)</code> 浮点峰列表。它测试 ACOM 的取向搜索，不测试二维图像形成和检峰。</p><p class="small muted">文件：private/oracle peaks HDF5；ACOM 直接读取 PointList。</p></article>
   <article class="definition e"><span class="tag">Clean‑E · expectation</span><h3>物理期望图</h3><p>由 CIF、取向和 First‑Born 运动学模型得到的 <code>float32 P(q)</code>。没有电子抽样和读出噪声，是图像接口的确定性基线。</p><p class="small muted">目标：隔离图像形成与自动检峰对 ACOM 的影响。</p></article>
-  <article class="definition c"><span class="tag">Clean‑C · counted observation</span><h3>电子计数图</h3><p>从同一张 Clean‑E 图按电子剂量产生 <code>uint32 counts</code>；随后可叠加确定性 EMPAD‑G2 读出噪声。</p><p class="small muted">目标：测量剂量和噪声如何改变检峰与最终取向。</p></article>
+  <article class="definition c"><span class="tag">Clean‑C · counted observation</span><h3>电子计数图</h3><p>从同一张 Clean‑E 图按电子剂量产生 <code>uint32 counts</code>；随后可叠加确定性 EMPAD‑G2 读出噪声。</p><p class="small muted">目标：测量剂量和噪声对检峰及最终取向的影响。</p></article>
  </div>
  <div class="warning" style="margin-top:12px"><b>比较顺序：</b>V3 → Clean‑E 判断图像形成/检峰损失；Clean‑E → Clean‑C 判断电子计数与读出噪声损失。三层不混为一个指标。</div>
 </section>
 
-<section class="section"><h2>二维衍射图如何得到 / Image formation</h2>
+<section class="section"><h2>二维衍射图生成流程 / Image formation</h2>
  <div class="panel">
   <div class="formation">
    <div><b>① CIF + R</b>固定 NCM811 结构和 sample→crystal 取向。</div>
@@ -1630,7 +1630,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </div></details></section>
 
 <section class="section"><details class="fold" open><summary>衍射盘恢复准确率 / Disk-recovery accuracy</summary><div class="fold-body">
- <p class="section-intro">这一层只比较检峰结果与 image‑matched physical oracle，不涉及 ACOM 取向候选。<b>Recall = 匹配到的 oracle 盘数 / oracle 盘总数</b>，回答“真实盘有多少被找到”；Precision = 匹配盘数 / 检出盘总数，回答“检出的盘有多少是真的”。RMSE/P95 判断圆盘中心坐标精修误差；coverage 判断每张图是否至少产生可用检峰结果。</p>
+ <p class="section-intro">这一层只比较检峰结果与 image‑matched physical oracle，不涉及 ACOM 取向候选。<b>Recall = 匹配到的 oracle 盘数 / oracle 盘总数</b>，衡量真实衍射盘的检出比例；Precision = 匹配盘数 / 检出盘总数，衡量检出盘中的真实盘比例。RMSE/P95 判断圆盘中心坐标精修误差；coverage 判断每张图是否至少产生可用检峰结果。</p>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="disk-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>噪声 / Noise</label><select id="disk-noise"></select></div>
@@ -1754,7 +1754,7 @@ Noiseless expected counts: I_N(q)=N_e P(q)
 Counted: n(q) ~ Poisson(N_e P(q))
 Read noise: y(q)=n(q)+Normal(0, σ_level²)
 σ_level = 0.008666… × √(summed frame count) primary-e⁻ RMS/pixel</div></details>
- <details><summary>为什么更多 frames 的 read noise 可能更大</summary><p>这里的变量是“多帧求和后的读出噪声”，每帧独立读出噪声按 √frames 累积；它不是把固定总曝光平均后降低噪声的模型。网页直接展示当前 benchmark 已冻结的定义与实测结果。</p></details>
+ <details><summary>多帧读出噪声定义</summary><p>本 benchmark 使用多帧求和后的读出噪声定义：每帧独立读出噪声按 √frames 累积。该设置不是固定总曝光平均后的降噪模型。网页直接展示当前 benchmark 已冻结的定义与实测结果。</p></details>
  <details><summary>完整运行参数（中英文键名与已保存报告）</summary><p>下面内容直接嵌入生成时读取的 <code>config/benchmark_v5.yaml</code> 相关段落和生成/噪声报告；隐藏仅影响页面排版。</p><pre class="formula parameter-json" id="parameter-json"></pre></details>
 </section>
 
