@@ -1464,6 +1464,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 .image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
 .method-comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.method-comparison-plot{min-width:0}.method-comparison-plot canvas{height:420px}.method-comparison-note{padding:11px 13px;border-left:4px solid var(--blue);background:#eff6ff;border-radius:8px;margin:12px 0}.method-comparison-table td,.method-comparison-table th{text-align:right}.method-comparison-table td:first-child,.method-comparison-table th:first-child{text-align:left}.method-comparison-table td:not(:first-child){font-variant-numeric:tabular-nums}@media(max-width:1100px){.method-comparison-grid{grid-template-columns:1fr}}
 .naming-guide table th:first-child,.naming-guide table td:first-child{white-space:nowrap}.naming-guide table td:nth-child(2){text-align:left}.naming-guide .panel h3{margin-bottom:10px}.recall-definition{margin-top:14px;border-left-color:var(--blue);background:#eff6ff}
+html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.grid2,.grid3,.two-charts,.method-comparison-grid,.case-layout,.comparison-layout,.input-schema,.definitions,.formation,.pipeline,.findings,.controls,.control{min-width:0}.grid2>*,.grid3>*,.two-charts>*,.method-comparison-grid>*,.case-layout>*,.comparison-layout>*,.input-schema>*,.definitions>*,.formation>*,.pipeline>*,.findings>*{min-width:0}pre{max-width:100%;overflow-x:auto}code{overflow-wrap:anywhere}canvas{max-width:100%}.control select{width:min(100%,360px);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:650px){.control{width:100%}.control select{width:100%;min-width:0;max-width:none}}
 </style>
 </head>
 <body><main>
@@ -1513,7 +1514,7 @@ HTML_TEMPLATE = r"""<!doctype html>
    </tbody></table></div>
   </div>
  </div>
- <div class="warning recall-definition"><b>你关心的“检峰 Recall”：</b>先用 image‑matched physical oracle 固定真实衍射盘总数；Recall = 在匹配容差内被找到的 oracle 盘数 ÷ oracle 盘总数。它只衡量“真实盘有没有被检峰器找到”，不是 ACOM 的 Top‑1/Top‑5 取向准确率；Precision 则是匹配盘数 ÷ 检出的盘数。</div>
+ <div class="warning recall-definition"><b>检峰 Recall 的定义：</b>先用 image‑matched physical oracle 固定真实衍射盘总数；Recall = 在匹配容差内被找到的 oracle 盘数 ÷ oracle 盘总数。它只衡量“真实盘有没有被检峰器找到”，不是 ACOM 的 Top‑1/Top‑5 取向准确率；Precision 则是匹配盘数 ÷ 检出的盘数。</div>
  <p class="small muted">因此选择 <b>Disk metric → Recall</b> 时，图中三条线只比较 AutoDisk、DoG‑RGM 和 find_Bragg_disks 的检峰召回率；右侧的 ACOM/Pyxem 曲线是另一层的端到端取向指标。</p>
 </section>
 
