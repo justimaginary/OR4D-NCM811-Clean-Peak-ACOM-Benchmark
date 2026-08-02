@@ -2,9 +2,15 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "$0")" && pwd)
-stage="${1:-prepare}"
+stage="${1:-check}"
 study="${2:-all}"
-data_root="${OR4D_V5_DATA_ROOT:-${ROOT}/../or4d-clean-v5}"
+if [[ -n "${OR4D_V5_DATA_ROOT:-}" ]]; then
+  data_root="${OR4D_V5_DATA_ROOT}"
+elif [[ -d "/mnt/data/${USER:-xietianhong}/or4d-clean-v5" ]]; then
+  data_root="/mnt/data/${USER:-xietianhong}/or4d-clean-v5"
+else
+  data_root="${ROOT}/../or4d-clean-v5"
+fi
 cpu_threads="${OR4D_CPU_THREADS:-8}"
 detector_backend="${OR4D_DETECTOR_BACKEND:-cpu}"
 acom_cuda_args=()
@@ -24,8 +30,8 @@ elif [[ "${OR4D_ACOM_CUDA:-0}" != "0" ]]; then
   exit 2
 fi
 
-if [[ "${stage}" != "prepare" && "${stage}" != "detect-e" && "${stage}" != "acom-e" && "${stage}" != "pyxem" && "${stage}" != "clean-c" && "${stage}" != "report" ]]; then
-  echo "usage: $0 [prepare|detect-e|acom-e|pyxem|clean-c|report] [main|001|all]" >&2
+if [[ "${stage}" != "check" && "${stage}" != "detect-e" && "${stage}" != "acom-e" && "${stage}" != "pyxem" && "${stage}" != "clean-c" && "${stage}" != "report" ]]; then
+  echo "usage: $0 [check|detect-e|acom-e|pyxem|clean-c|report] [main|001|all]" >&2
   exit 2
 fi
 if [[ "${study}" != "main" && "${study}" != "001" && "${study}" != "all" ]]; then
@@ -42,21 +48,18 @@ else
 fi
 
 export OR4D_CONFIG="${ROOT}/config/benchmark_v5.yaml"
-mkdir -p "${data_root}" "${ROOT}/reports/v5"
+mkdir -p "${ROOT}/reports/v5"
 
 case "${stage}" in
-  prepare)
-    # CPU is the portable default.  Set OR4D_V5_BACKEND=cuda and expose one
-    # verified idle GPU when generating the coherent First-Born images on a
-    # server.
-    backend="${OR4D_V5_BACKEND:-cpu}"
-    "${clean_python[@]}" "${ROOT}/scripts/20_prepare_v5_clean.py" \
-      --data-root "${data_root}" --study "${study}" \
-      --backend "${backend}" --cpu-threads "${cpu_threads}"
+  check)
+    # V5 was generated on the server. This stage only checks that the existing
+    # server artifact root matches the tracked manifest; it never writes data.
+    "${clean_python[@]}" "${ROOT}/scripts/20_check_v5_artifacts.py" \
+      --data-root "${data_root}" --study "${study}"
     ;;
   detect-e)
     if [[ "${study}" == "main" || "${study}" == "all" ]]; then
-      [[ -f "${data_root}/datasets/clean_v5_first_born_expectation_2048.h5" ]] || { echo "run '$0 prepare main' first" >&2; exit 1; }
+      [[ -f "${data_root}/datasets/clean_v5_first_born_expectation_2048.h5" ]] || { echo "existing V5 server artifact is missing; run '$0 check main'" >&2; exit 1; }
       "${clean_python[@]}" "${ROOT}/scripts/03_extract_clean_disks.py" \
         --image-file "${data_root}/datasets/clean_v5_first_born_expectation_2048.h5" \
         --track expectation --detector autodisk --detector dog_rgm \
@@ -69,7 +72,7 @@ case "${stage}" in
         --report-output "${data_root}/reports/first_born_disk_detection_expectation_2048_py4dstem.json"
     fi
     if [[ "${study}" == "001" || "${study}" == "all" ]]; then
-      [[ -f "${data_root}/datasets/clean_v5_001_first_born_expectation_512.h5" ]] || { echo "run '$0 prepare 001' first" >&2; exit 1; }
+      [[ -f "${data_root}/datasets/clean_v5_001_first_born_expectation_512.h5" ]] || { echo "existing V5 [001] server artifact is missing; run '$0 check 001'" >&2; exit 1; }
       "${clean_python[@]}" "${ROOT}/scripts/03_extract_clean_disks.py" \
         --image-file "${data_root}/datasets/clean_v5_001_first_born_expectation_512.h5" \
         --track expectation --detector autodisk --detector dog_rgm \
@@ -139,6 +142,6 @@ case "${stage}" in
     ;;
   report)
     echo "Compact V5 summaries are produced by scripts/29_finalize_v5_top5.py and scripts/32_summarize_v5_clean_c_disk_recovery.py." >&2
-    echo "The exact input paths are recorded in ${data_root}/run_records/v5_input_preparation.json." >&2
+    echo "The canonical server artifact paths and hashes are recorded in reports/v5/MANIFEST.json." >&2
     ;;
 esac

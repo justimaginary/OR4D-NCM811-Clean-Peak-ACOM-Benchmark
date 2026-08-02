@@ -172,21 +172,24 @@ V5 keeps the expectation image and the counted observation as separate tracks:
   electron dose and noise model. It is an observation layer, not a different
   scattering model.
 
-The generated images are stored outside the checkout. The preparation command
-also writes `run_records/v5_input_preparation.json`, which records the Git
-commit, configuration, commands, backend, CPU limit, output hashes, and timing:
+The generated images are stored outside the checkout and were already generated
+on the server. The tracked
+[`reports/v5/MANIFEST.json`](reports/v5/MANIFEST.json) records the canonical
+server-relative paths, sizes, hashes, and the producing commit. A clone checks
+and reuses that artifact root; it does not generate a second V5 dataset:
 
 ```bash
 export OR4D_V5_DATA_ROOT=/mnt/data/$USER/or4d-clean-v5
-./run_clean_v5.sh prepare all
+./run_clean_v5.sh check all
 OR4D_DETECTOR_BACKEND=cuda CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh detect-e all
 OR4D_ACOM_CUDA=1 CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh acom-e all
 OR4D_PYXEM_TARGET=gpu ./run_clean_v5.sh pyxem all
 CUDA_VISIBLE_DEVICES=0 ./run_clean_v5.sh clean-c all
 ```
 
-`prepare` is CPU-portable by default. For image generation, py4DSTEM detection,
-ACOM, or Pyxem on a server, set the corresponding CUDA/target variable only
+The `check` stage is read-only. It verifies the existing server inputs against
+the tracked manifest. For any additional image, detection, ACOM, or Pyxem run,
+set the corresponding CUDA/target variable only
 after checking that one physical GPU is completely idle, and set
 `OR4D_CPU_THREADS` to at most 16. Each Python stage verifies its requested
 GPU before starting and exposes only that one GPU to the child process.
