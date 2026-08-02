@@ -13,7 +13,9 @@ import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v4"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402

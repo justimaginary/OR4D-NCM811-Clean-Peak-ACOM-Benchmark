@@ -5,6 +5,7 @@ import argparse
 import gzip
 import io
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -16,7 +17,9 @@ import py4DSTEM
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v3"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from coordinate_trace import (  # noqa: E402

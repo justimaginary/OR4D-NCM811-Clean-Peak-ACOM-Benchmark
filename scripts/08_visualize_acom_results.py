@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import sys
 from pathlib import Path
 
@@ -12,7 +13,9 @@ import py4DSTEM
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v3"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402

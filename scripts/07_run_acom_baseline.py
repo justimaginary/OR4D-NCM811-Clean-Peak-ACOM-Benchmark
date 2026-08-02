@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -19,7 +20,9 @@ from pymatgen.core import Structure
 from scipy.spatial import cKDTree
 
 ROOT = Path(__file__).resolve().parents[1]
-V3_REPORT_DIR = ROOT / "reports" / "v3"
+V3_REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402

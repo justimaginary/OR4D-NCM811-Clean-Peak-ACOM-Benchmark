@@ -11,6 +11,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -21,6 +22,9 @@ from PIL import Image
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V5_DIR", ROOT / "reports" / "v5")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_counting import add_gaussian_read_noise  # noqa: E402
@@ -43,53 +47,53 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--acom-summary",
         type=Path,
-        default=ROOT / "reports/v5/topk/V5_ACOM_TOP5_FULL_SUMMARY.json",
+        default=REPORT_DIR / "topk/V5_ACOM_TOP5_FULL_SUMMARY.json",
     )
     parser.add_argument(
         "--pyxem-summary",
         type=Path,
-        default=ROOT / "reports/v5/topk/V5_PYXEM_TOP5_FULL_SUMMARY.json",
+        default=REPORT_DIR / "topk/V5_PYXEM_TOP5_FULL_SUMMARY.json",
     )
     parser.add_argument(
         "--disk-recovery-summary",
         type=Path,
-        default=ROOT / "reports/v5/pipeline/clean_c_disk_recovery_full.json",
+        default=REPORT_DIR / "pipeline/clean_c_disk_recovery_full.json",
     )
     parser.add_argument(
         "--study-001-acom-summary",
         type=Path,
         default=(
-            ROOT
-            / "reports/v5/study_001/topk/V5_001_ACOM_TOP5_FULL_SUMMARY.json"
+            REPORT_DIR
+            / "study_001/topk/V5_001_ACOM_TOP5_FULL_SUMMARY.json"
         ),
     )
     parser.add_argument(
         "--study-001-pyxem-summary",
         type=Path,
         default=(
-            ROOT
-            / "reports/v5/study_001/topk/V5_001_PYXEM_TOP5_FULL_SUMMARY.json"
+            REPORT_DIR
+            / "study_001/topk/V5_001_PYXEM_TOP5_FULL_SUMMARY.json"
         ),
     )
     parser.add_argument(
         "--study-001-pyxem-details",
         type=Path,
         default=(
-            ROOT
-            / "reports/v5/study_001/topk/V5_001_PYXEM_CLEAN_E_DETAILS.jsonl"
+            REPORT_DIR
+            / "study_001/topk/V5_001_PYXEM_CLEAN_E_DETAILS.jsonl"
         ),
     )
     parser.add_argument(
         "--study-001-disk-recovery-summary",
         type=Path,
         default=(
-            ROOT / "reports/v5/study_001/clean_c_disk_recovery_full.json"
+            REPORT_DIR / "study_001/clean_c_disk_recovery_full.json"
         ),
     )
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html",
+        default=REPORT_DIR / "ACOM_CLEAN_V5_VISUALIZATION.html",
     )
     return parser.parse_args()
 
@@ -1250,19 +1254,16 @@ def build_payload(args: argparse.Namespace) -> dict:
         args.study_001_disk_recovery_summary.resolve()
     )
     generation = load_json(
-        ROOT
-        / "reports/v5/pipeline/first_born_generation_2048.json"
+        REPORT_DIR / "pipeline/first_born_generation_2048.json"
     )
     noise_report = load_json(
-        ROOT / "reports/v5/pipeline/instrument_noise_manifest_2048.json"
+        REPORT_DIR / "pipeline/instrument_noise_manifest_2048.json"
     )
     study_001 = load_json(
-        ROOT
-        / "reports/v5/study_001/clean_v5_001_evaluation_expectation_512.json"
+        REPORT_DIR / "study_001/clean_v5_001_evaluation_expectation_512.json"
     )
     study_001_manifest = load_json(
-        ROOT
-        / "reports/v5/study_001/clean_v5_001_manifest_summary.json"
+        REPORT_DIR / "study_001/clean_v5_001_manifest_summary.json"
     )
     study_001_topk_groups = build_study_001_topk_groups(
         args.data_root.resolve(), args.study_001_pyxem_details.resolve()

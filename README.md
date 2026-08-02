@@ -36,13 +36,37 @@ regenerate the pages. The external run manifest records the Git commit,
 configuration, commands, backend, CPU limit, output hashes, and timing, so a
 generated data root can be checked against the exact checkout that produced it.
 
-After cloning, create the single Clean environment and run the versioned
-entrypoints below. No generated HDF5 file is required for a fresh clone:
+After cloning, create the single Clean environment. The tracked reports and
+self-contained HTML files can be inspected without generated HDF5 files.
+Re-running V3/V4 generates their ignored working data; a V5 full rerun reuses
+the existing external server data root described below.
 
 ```bash
 git clone <repository-url>
 cd OR4D-NCM811-smoke-v0
 conda env create -f environment-clean.yml   # environment name: or4d-clean
+```
+
+Machine-dependent paths are centralized in
+[`config/runtime_paths.json`](config/runtime_paths.json). The versioned shell
+entrypoints resolve the `or4d-clean` Python executable from that file instead
+of assuming whichever `conda` happens to be first on `PATH`. They also resolve
+the V3/V4/V5 report directories from the repository root. The following
+environment variables override the checked-in defaults without editing code:
+
+```text
+OR4D_CLEAN_PYTHON       absolute path to or4d-clean/bin/python
+OR4D_V5_DATA_ROOT       V5 external data root on a non-server machine
+OR4D_REPORT_V3_DIR      optional V3 report-directory override
+OR4D_REPORT_V4_DIR      optional V4 report-directory override
+OR4D_REPORT_V5_DIR      optional V5 report-directory override
+OR4D_RUNTIME_PATHS_FILE alternate runtime_paths.json
+```
+
+Inspect the paths that will be used before a run:
+
+```bash
+python3 scripts/00_resolve_runtime_paths.py show
 ```
 
 The dynamical environment is retained as historical project scaffolding; the
@@ -87,7 +111,7 @@ conda env create -f environment-dynamical.yml
 Run the complete Clean-Peak benchmark and ACOM sweep:
 
 ```bash
-conda run -n or4d-clean ./run_clean_acom.sh
+./run_clean_acom.sh
 ```
 
 The pipeline runs:
@@ -123,21 +147,21 @@ This path does not overwrite the accepted Clean-Peak v3 files. Run its 17-case
 regression set first:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh smoke
+./run_clean_image_acom.sh smoke
 ```
 
 The corrected 17-case smoke passes. The 1,081-pattern peak stage has also been
 run. Run or reproduce only that stage with:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh full peaks
+./run_clean_image_acom.sh full peaks
 ```
 
 After reviewing the peak report, continue from the existing detector outputs
 without regenerating the images:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh full acom
+./run_clean_image_acom.sh full acom
 ```
 
 The image run freezes the old analytic input locally as
@@ -179,6 +203,19 @@ already generated on the server. The canonical data root is
 server-relative paths, sizes, hashes, and producing commit. Compact summaries,
 plots, run records and HTML are already retained under `reports/v5`.
 
+Resolve that location rather than embedding it in a command:
+
+```bash
+v5_data_root=$(python3 scripts/00_resolve_runtime_paths.py \
+  v5-data-root --must-exist)
+```
+
+On another machine, set `OR4D_V5_DATA_ROOT` to a verified copy of the same
+directory. The artifact sizes and SHA-256 values in `reports/v5/MANIFEST.json`
+identify the canonical data. Its `git_commit` and `config_files` hashes record
+the exact data-generation state; later Top-5 and Pyxem settings extend the
+evaluation configuration without changing those frozen image artifacts.
+
 No replacement V5 data-preparation wrapper is required. If a server rerun is
 explicitly needed, use the existing project scripts in their original stages:
 
@@ -204,15 +241,21 @@ To rebuild the tracked V5 HTML from the existing server results, use the
 original report producer:
 
 ```bash
-python scripts/30_write_v5_clean_visualization.py \
-  --data-root /mnt/data/xietianhong/or4d-clean-v5
+clean_python=$(python3 scripts/00_resolve_runtime_paths.py clean-python)
+v5_data_root=$(python3 scripts/00_resolve_runtime_paths.py \
+  v5-data-root --must-exist)
+export OR4D_REPORT_V5_DIR=$(python3 scripts/00_resolve_runtime_paths.py \
+  report-dir --version v5)
+"${clean_python}" scripts/30_write_v5_clean_visualization.py \
+  --data-root "${v5_data_root}"
 ```
 
 Run the tests:
 
 ```bash
-conda run -n or4d-clean \
-  python -m unittest discover -s tests -p 'test_*.py'
+clean_python=$(python3 scripts/00_resolve_runtime_paths.py clean-python)
+PYTHONPATH=src "${clean_python}" -m unittest discover \
+  -s tests -p 'test_*.py'
 ```
 
 Print one complete coordinate trace:

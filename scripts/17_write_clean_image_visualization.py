@@ -6,6 +6,7 @@ import base64
 import gzip
 import io
 import json
+import os
 from pathlib import Path
 
 import h5py
@@ -14,8 +15,12 @@ import yaml
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v4"
-V3_REPORT_DIR = ROOT / "reports" / "v3"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
+V3_REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 OUTPUT = REPORT_DIR / "CLEAN_IMAGE_ACOM_VISUALIZATION.html"
 IMAGE_FILE = ROOT / "public" / "clean_images.h5"
 COUNTED_FILE = ROOT / "public" / "clean_counted_images.h5"

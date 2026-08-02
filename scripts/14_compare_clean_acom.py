@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -10,7 +11,9 @@ import numpy as np
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v4"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402

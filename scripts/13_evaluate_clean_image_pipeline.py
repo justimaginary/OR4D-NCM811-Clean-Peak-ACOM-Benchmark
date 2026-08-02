@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import sys
 from pathlib import Path
@@ -13,7 +14,9 @@ import numpy as np
 from scipy.optimize import linear_sum_assignment
 
 ROOT = Path(__file__).resolve().parents[1]
-REPORT_DIR = ROOT / "reports" / "v4"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from clean_counting import add_gaussian_read_noise  # noqa: E402

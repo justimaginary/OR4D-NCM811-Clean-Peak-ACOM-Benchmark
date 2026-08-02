@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -20,7 +21,9 @@ from or4d_common import (  # noqa: E402
 
 CONFIG_PATH = ROOT / "config" / "benchmark.yaml"
 TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
-REPORT_DIR = ROOT / "reports" / "v3"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 DETAILS_PATH = REPORT_DIR / "acom_clean_details.json"
 PLAN_AUDIT_PATH = REPORT_DIR / "acom_plan_audit.json"
 OUTPUT_PATH = REPORT_DIR / "ACOM_COORDINATE_VISUALIZATION.html"
