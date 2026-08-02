@@ -100,6 +100,13 @@ def main() -> None:
             "track": "clean",
         }
         for field in (
+            "raw_orientation_matrix_sample_to_crystal",
+            "canonical_quaternion_wxyz",
+            "orientation_class_id",
+            "canonical_crystal_symmetry_index",
+            "canonical_friedel_branch_index",
+            "canonical_friedel_used",
+            "canonicalization_residual_deg",
             "quaternion_wxyz",
             "sequence_candidate_index",
             "sequence_index",
@@ -170,7 +177,9 @@ def main() -> None:
     with h5py.File(ROOT / "diagnostics" / "clean_reflections.h5", "w") as h5:
         h5.create_dataset("reflections", data=diag, compression="gzip")
 
-    with (ROOT / "reports" / "clean_versions.json").open("w", encoding="utf-8") as f:
+    report_path = ROOT / "reports" / "common" / "clean_versions.json"
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    with report_path.open("w", encoding="utf-8") as f:
         json.dump({"py4DSTEM": py4DSTEM.__version__}, f, indent=2)
 
     print("Clean-Peak dataset finished.")

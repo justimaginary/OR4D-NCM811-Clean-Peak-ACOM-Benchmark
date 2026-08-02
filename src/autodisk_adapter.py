@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
-from scipy.ndimage import map_coordinates
+from scipy.ndimage import map_coordinates, spline_filter
 from scipy.signal import fftconvolve
 from skimage.feature import blob_log
 
@@ -88,9 +88,31 @@ def _sample_bilinear(image: np.ndarray, rows: np.ndarray, cols: np.ndarray) -> n
     )
 
 
+def _sample_cubic(
+    image: np.ndarray,
+    rows: np.ndarray,
+    cols: np.ndarray,
+    *,
+    prefilter: bool = True,
+) -> np.ndarray:
+    """Sample a smooth response map without pinning maxima to integer pixels."""
+    return map_coordinates(
+        image,
+        [rows, cols],
+        order=3,
+        mode="constant",
+        cval=0.0,
+        prefilter=prefilter,
+    )
+
+
 def _deduplicate_candidates(
-    candidates: list[tuple[float, float, float]], min_spacing_px: float
+    candidates: list[tuple[float, float, float]],
+    min_spacing_px: float,
+    max_num_peaks: int | None = None,
 ) -> list[tuple[float, float, float]]:
+    if max_num_peaks is not None and max_num_peaks <= 0:
+        raise ValueError("max_num_peaks must be positive")
     kept: list[tuple[float, float, float]] = []
     for candidate in sorted(candidates, key=lambda row: row[2], reverse=True):
         if all(
@@ -99,6 +121,12 @@ def _deduplicate_candidates(
             for row in kept
         ):
             kept.append(candidate)
+            # Candidates are processed from highest to lowest score. Once the
+            # requested output size is reached, no remaining candidate can
+            # enter the retained top-N set, so continuing the O(N^2) spacing
+            # scan cannot change the result.
+            if max_num_peaks is not None and len(kept) == max_num_peaks:
+                break
     return kept
 
 
@@ -156,8 +184,10 @@ def detect_autodisk_peaks(
         score = float(_sample_bilinear(correlation, np.asarray([row]), np.asarray([col]))[0])
         candidates.append((float(row), float(col), score))
     candidates = _deduplicate_candidates(
-        candidates, float(config["min_peak_spacing_px"])
-    )[: int(config["max_num_peaks"])]
+        candidates,
+        float(config["min_peak_spacing_px"]),
+        int(config["max_num_peaks"]),
+    )
     if not candidates:
         raise RuntimeError("AutoDisk LoG stage found no diffraction disks")
 
@@ -168,6 +198,7 @@ def detect_autodisk_peaks(
         outer_fraction=float(config["rgm_outer_radius_fraction"]),
     )
     rgm_map = fftconvolve(processed, rgm_kernel[::-1, ::-1], mode="same")
+    rgm_spline = spline_filter(rgm_map, order=3)
     search_radius = float(config["rgm_search_radius_px"])
     search_step = float(config["rgm_search_step_px"])
     offsets = np.arange(-search_radius, search_radius + 0.5 * search_step, search_step)
@@ -188,7 +219,9 @@ def detect_autodisk_peaks(
         dy, dx = np.meshgrid(offsets, offsets, indexing="ij")
         sample_rows = initial_row + dy.ravel()
         sample_cols = initial_col + dx.ravel()
-        scores = _sample_bilinear(rgm_map, sample_rows, sample_cols)
+        scores = _sample_cubic(
+            rgm_spline, sample_rows, sample_cols, prefilter=False
+        )
         best = int(np.argmax(scores))
         row = float(sample_rows[best])
         col = float(sample_cols[best])

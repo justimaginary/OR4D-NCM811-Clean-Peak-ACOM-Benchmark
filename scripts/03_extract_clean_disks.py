@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -11,11 +13,20 @@ import h5py
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from autodisk_adapter import detect_autodisk_peaks  # noqa: E402
+from clean_counting import add_gaussian_read_noise  # noqa: E402
 from or4d_common import load_config, write_peak_h5  # noqa: E402
-from py4dstem_disk_adapter import detect_py4dstem_bragg_disks  # noqa: E402
+from py4dstem_disk_adapter import (  # noqa: E402
+    detect_py4dstem_bragg_disks,
+    detect_py4dstem_bragg_disks_batch,
+)
+from dog_rgm_disk_adapter import detect_dog_rgm_peaks  # noqa: E402
+from cuda_xcorr_disk_adapter import detect_cuda_xcorr_poly_batch  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -24,18 +35,43 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--image-file", type=Path, required=True)
     parser.add_argument(
-        "--track", choices=("expectation", "counted"), required=True
+        "--track",
+        choices=("expectation", "dose_noiseless", "counted"),
+        required=True,
     )
     parser.add_argument(
         "--detector",
         action="append",
-        choices=("autodisk", "py4dstem"),
+        choices=("autodisk", "py4dstem", "dog_rgm", "cuda_xcorr_poly"),
         help="Detector to run; default runs both.",
     )
     parser.add_argument("--dose-index", type=int, action="append")
     parser.add_argument("--repeat", type=int, action="append")
     parser.add_argument(
+        "--noise-manifest",
+        type=Path,
+        help="Independent detector-noise levels and deterministic seeds.",
+    )
+    parser.add_argument(
+        "--noise-level",
+        action="append",
+        help="Noise level ID from --noise-manifest; repeat to select levels.",
+    )
+    parser.add_argument(
+        "--compute-backend",
+        choices=("cpu", "cuda"),
+        default="cpu",
+        help="CUDA uses py4DSTEM's batched GPU implementation and requires --detector py4dstem.",
+    )
+    parser.add_argument(
         "--output-dir", type=Path, default=ROOT / "diagnostics"
+    )
+    parser.add_argument("--report-output", type=Path)
+    parser.add_argument(
+        "--progress-every",
+        type=int,
+        default=50,
+        help="Print one progress row every N samples (default: 50).",
     )
     return parser.parse_args()
 
@@ -44,7 +80,66 @@ def decode_ids(values: np.ndarray) -> list[str]:
     return [value.decode() if isinstance(value, bytes) else str(value) for value in values]
 
 
-def variants(h5: h5py.File, args: argparse.Namespace) -> list[dict]:
+def load_noise_manifest(path: Path | None) -> dict | None:
+    if path is None:
+        return None
+    with h5py.File(path.resolve(), "r") as h5:
+        return {
+            "path": str(path.resolve()),
+            "sample_id": decode_ids(h5["sample_id"][:]),
+            "dose_electrons": np.asarray(
+                h5["dose_electrons"][:], dtype=np.int64
+            ),
+            "noise_level_id": decode_ids(h5["noise_level_id"][:]),
+            "poisson_shot_noise_enabled": np.asarray(
+                h5["poisson_shot_noise_enabled"][:], dtype=bool
+            ),
+            "read_noise_sigma": np.asarray(
+                h5["read_noise_sigma_primary_e_rms_per_pixel"][:],
+                dtype=float,
+            ),
+            "read_noise_seed": np.asarray(
+                h5["read_noise_seed"][:], dtype=np.uint64
+            ),
+        }
+
+
+def require_one_empty_gpu() -> str:
+    """Verify the one physical GPU exposed to a CUDA detector is idle."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if not visible.isdigit():
+        raise RuntimeError(
+            "CUDA detector runs require CUDA_VISIBLE_DEVICES to contain exactly "
+            "one physical GPU index"
+        )
+    rows = subprocess.check_output(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,memory.used,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        text=True,
+    )
+    status = {}
+    for line in rows.splitlines():
+        fields = [part.strip() for part in line.split(",")]
+        if len(fields) == 3:
+            status[fields[0]] = (int(fields[1]), int(fields[2]))
+    if visible not in status:
+        raise RuntimeError(f"GPU {visible} is absent from nvidia-smi output")
+    memory_mib, utilization = status[visible]
+    if memory_mib > 100 or utilization > 5:
+        raise RuntimeError(
+            f"GPU {visible} is not empty: {memory_mib} MiB, {utilization}%"
+        )
+    return visible
+
+
+def variants(
+    h5: h5py.File,
+    args: argparse.Namespace,
+    noise_manifest: dict | None,
+) -> list[dict]:
     if args.track == "expectation":
         return [
             {
@@ -53,47 +148,149 @@ def variants(h5: h5py.File, args: argparse.Namespace) -> list[dict]:
                 "dose_electrons": None,
                 "dose_index": None,
                 "repeat": None,
+                "noise_level_id": "none",
+                "read_noise_sigma": 0.0,
             }
         ]
     doses = np.asarray(h5["dose_electrons"][:], dtype=np.int64)
+    if args.track == "dose_noiseless":
+        dataset = h5["images/expected_counts"]
+        dose_indices = args.dose_index or list(range(len(doses)))
+        return [
+            {
+                "name": f"dose{int(doses[dose_index])}_noise_noiseless",
+                "dataset": dataset,
+                "dose_electrons": int(doses[dose_index]),
+                "dose_index": dose_index,
+                "repeat": None,
+                "noise_level_id": "noiseless",
+                "read_noise_sigma": 0.0,
+            }
+            for dose_index in dose_indices
+        ]
     dataset = h5["images/counts"]
     dose_indices = args.dose_index or list(range(len(doses)))
     repeats = args.repeat or list(range(dataset.shape[2]))
+    if noise_manifest is not None:
+        if decode_ids(h5["sample_id"][:]) != noise_manifest["sample_id"]:
+            raise ValueError("noise manifest sample IDs do not match images")
+        if not np.array_equal(doses, noise_manifest["dose_electrons"]):
+            raise ValueError("noise manifest doses do not match images")
+        available_levels = noise_manifest["noise_level_id"]
+        selected_levels = args.noise_level or [
+            level for level in available_levels if level != "noiseless"
+        ]
+        unknown = sorted(set(selected_levels) - set(available_levels))
+        if unknown:
+            raise ValueError(f"unknown noise levels: {unknown}")
+        if "noiseless" in selected_levels:
+            raise ValueError(
+                "use --track dose_noiseless for the noiseless level"
+            )
+    else:
+        if args.noise_level:
+            raise ValueError("--noise-level requires --noise-manifest")
+        selected_levels = ["poisson_only"]
     result = []
     for dose_index in dose_indices:
         if not 0 <= dose_index < len(doses):
             raise IndexError(f"dose index {dose_index} is out of range")
-        for repeat in repeats:
-            if not 0 <= repeat < dataset.shape[2]:
-                raise IndexError(f"repeat {repeat} is out of range")
-            result.append(
-                {
-                    "name": f"counted_dose{int(doses[dose_index])}_repeat{repeat}",
-                    "dataset": dataset,
-                    "dose_electrons": int(doses[dose_index]),
-                    "dose_index": dose_index,
-                    "repeat": repeat,
-                }
+        for level_id in selected_levels:
+            level_index = (
+                noise_manifest["noise_level_id"].index(level_id)
+                if noise_manifest is not None
+                else None
             )
+            for repeat in repeats:
+                if not 0 <= repeat < dataset.shape[2]:
+                    raise IndexError(f"repeat {repeat} is out of range")
+                result.append(
+                    {
+                        "name": (
+                            (
+                                f"dose{int(doses[dose_index])}_noise_"
+                                f"{level_id}_repeat{repeat}"
+                            )
+                            if noise_manifest is not None
+                            else (
+                                f"counted_dose{int(doses[dose_index])}"
+                                f"_repeat{repeat}"
+                            )
+                        ),
+                        "dataset": dataset,
+                        "dose_electrons": int(doses[dose_index]),
+                        "dose_index": dose_index,
+                        "repeat": repeat,
+                        "noise_level_id": level_id,
+                        "noise_level_index": level_index,
+                        "read_noise_sigma": (
+                            float(noise_manifest["read_noise_sigma"][level_index])
+                            if noise_manifest is not None
+                            else 0.0
+                        ),
+                    }
+                )
     return result
 
 
-def read_image(variant: dict, sample_index: int) -> np.ndarray:
+def read_image(
+    variant: dict,
+    sample_index: int,
+    noise_manifest: dict | None,
+) -> np.ndarray:
     if variant["dose_index"] is None:
         return np.asarray(variant["dataset"][sample_index], dtype=np.float32)
-    return np.asarray(
+    if variant["repeat"] is None:
+        return np.asarray(
+            variant["dataset"][sample_index, variant["dose_index"]],
+            dtype=np.float32,
+        )
+    image = np.asarray(
         variant["dataset"][
             sample_index, variant["dose_index"], variant["repeat"]
         ],
         dtype=np.float32,
     )
+    if noise_manifest is None or variant["read_noise_sigma"] == 0.0:
+        return image
+    seed = int(
+        noise_manifest["read_noise_seed"][
+            sample_index,
+            variant["dose_index"],
+            variant["noise_level_index"],
+            variant["repeat"],
+        ]
+    )
+    return add_gaussian_read_noise(
+        image,
+        variant["read_noise_sigma"],
+        np.random.default_rng(seed),
+    )
 
 
 def main() -> None:
     args = parse_args()
+    if args.progress_every <= 0:
+        raise ValueError("--progress-every must be positive")
     config = load_config()
     image_cfg = config["clean_image"]
-    detectors = args.detector or ["autodisk", "py4dstem"]
+    noise_manifest = load_noise_manifest(args.noise_manifest)
+    detectors = args.detector or ["autodisk", "py4dstem", "dog_rgm"]
+    if args.compute_backend == "cuda" and detectors not in (
+        ["py4dstem"],
+        ["cuda_xcorr_poly"],
+    ):
+        raise ValueError(
+            "--compute-backend cuda requires exactly one CUDA detector; "
+            "AutoDisk and DoG-RGM remain CPU methods"
+        )
+    if "cuda_xcorr_poly" in detectors and args.compute_backend != "cuda":
+        raise ValueError("cuda_xcorr_poly requires --compute-backend cuda")
+    physical_gpu = (
+        require_one_empty_gpu()
+        if args.compute_backend == "cuda"
+        else None
+    )
     args.output_dir.mkdir(parents=True, exist_ok=True)
     source_path = args.image_file.resolve()
     report_rows: list[dict] = []
@@ -127,13 +324,55 @@ def main() -> None:
             )
         )
 
-        for variant in variants(h5, args):
+        for variant in variants(h5, args, noise_manifest):
             for detector_name in detectors:
                 samples: list[dict] = []
                 failures: list[dict] = []
                 timings: list[float] = []
+                batch_results = None
+                batch_seconds = None
+                if (
+                    detector_name in ("py4dstem", "cuda_xcorr_poly")
+                    and args.compute_backend == "cuda"
+                ):
+                    images = np.stack(
+                        [
+                            read_image(
+                                variant, sample_index, noise_manifest
+                            )
+                            for sample_index in range(len(sample_ids))
+                        ]
+                    )
+                    batch_started = time.perf_counter()
+                    batch_results = (
+                        detect_py4dstem_bragg_disks_batch(
+                            images,
+                            qx_axis,
+                            qy_axis,
+                            vacuum_probe,
+                            image_cfg["py4dstem_find_bragg_disks"],
+                            k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                            central_exclusion_Ainv=central_exclusion,
+                            cuda=True,
+                        )
+                        if detector_name == "py4dstem"
+                        else detect_cuda_xcorr_poly_batch(
+                            images,
+                            qx_axis,
+                            qy_axis,
+                            vacuum_probe,
+                            image_cfg["cuda_xcorr_poly"],
+                            k_max_Ainv=float(config["common"]["k_max_Ainv"]),
+                            central_exclusion_Ainv=central_exclusion,
+                        )
+                    )
+                    batch_seconds = time.perf_counter() - batch_started
                 for sample_index, sample_id in enumerate(sample_ids):
-                    image = read_image(variant, sample_index)
+                    image = (
+                        None
+                        if batch_results is not None
+                        else read_image(variant, sample_index, noise_manifest)
+                    )
                     started = time.perf_counter()
                     try:
                         if detector_name == "autodisk":
@@ -146,21 +385,67 @@ def main() -> None:
                                 k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                                 central_exclusion_Ainv=central_exclusion,
                             )
+                            peak_diagnostics = {
+                                "initial_row_px": result.initial_row_px,
+                                "initial_col_px": result.initial_col_px,
+                                "refined_row_px": result.refined_row_px,
+                                "refined_col_px": result.refined_col_px,
+                                "correlation_score": result.correlation_score,
+                                "rgm_score": result.rgm_score,
+                            }
+                        elif detector_name in ("py4dstem", "cuda_xcorr_poly"):
+                            result = (
+                                batch_results[sample_index]
+                                if batch_results is not None
+                                else detect_py4dstem_bragg_disks(
+                                    image,
+                                    qx_axis,
+                                    qy_axis,
+                                    vacuum_probe,
+                                    image_cfg["py4dstem_find_bragg_disks"],
+                                    k_max_Ainv=float(
+                                        config["common"]["k_max_Ainv"]
+                                    ),
+                                    central_exclusion_Ainv=central_exclusion,
+                                )
+                            )
+                            if isinstance(result, Exception):
+                                raise result
+                            peak_diagnostics = {
+                                "refined_row_px": result.row_px,
+                                "refined_col_px": result.col_px,
+                                "correlation_score": result.correlation_intensity,
+                            }
                         else:
-                            result = detect_py4dstem_bragg_disks(
+                            result = detect_dog_rgm_peaks(
                                 image,
                                 qx_axis,
                                 qy_axis,
                                 vacuum_probe,
-                                image_cfg["py4dstem_find_bragg_disks"],
+                                image_cfg["dog_rgm"],
                                 k_max_Ainv=float(config["common"]["k_max_Ainv"]),
                                 central_exclusion_Ainv=central_exclusion,
                             )
+                            peak_diagnostics = {
+                                "initial_row_px": result.initial_row_px,
+                                "initial_col_px": result.initial_col_px,
+                                "refined_row_px": result.refined_row_px,
+                                "refined_col_px": result.refined_col_px,
+                                "dog_score": result.dog_score,
+                                "rgm_score": result.rgm_score,
+                            }
                         sample = {
                             "sample_id": sample_id,
                             "qx": result.qx_Ainv,
                             "qy": result.qy_Ainv,
                             "intensity": result.intensity,
+                            "peak_diagnostics": peak_diagnostics,
+                            "sample_metadata": {
+                                "detection_status": "ok",
+                                "failure_type": "",
+                                "failure_message": "",
+                                "runtime_seconds": 0.0,
+                            },
                         }
                     except Exception as error:
                         failures.append(
@@ -175,15 +460,31 @@ def main() -> None:
                             "qx": np.empty(0, dtype=np.float32),
                             "qy": np.empty(0, dtype=np.float32),
                             "intensity": np.empty(0, dtype=np.float32),
+                            "peak_diagnostics": {},
+                            "sample_metadata": {
+                                "detection_status": "failed",
+                                "failure_type": type(error).__name__,
+                                "failure_message": str(error),
+                                "runtime_seconds": 0.0,
+                            },
                         }
                     elapsed = time.perf_counter() - started
+                    if batch_seconds is not None:
+                        elapsed += batch_seconds / len(sample_ids)
+                    sample["sample_metadata"]["runtime_seconds"] = elapsed
                     timings.append(elapsed)
                     samples.append(sample)
-                    print(
-                        f"{variant['name']} {detector_name} "
-                        f"{sample_index + 1}/{len(sample_ids)} {sample_id}: "
-                        f"peaks={len(sample['qx'])}, seconds={elapsed:.3f}"
-                    )
+                    if (
+                        (sample_index + 1) % args.progress_every == 0
+                        or sample_index + 1 == len(sample_ids)
+                        or sample["sample_metadata"]["detection_status"] != "ok"
+                    ):
+                        print(
+                            f"{variant['name']} {detector_name} "
+                            f"{sample_index + 1}/{len(sample_ids)} {sample_id}: "
+                            f"peaks={len(sample['qx'])}, seconds={elapsed:.3f}",
+                            flush=True,
+                        )
 
                 suffix = "_smoke" if "smoke" in source_path.stem else ""
                 output = (
@@ -196,6 +497,7 @@ def main() -> None:
                 attrs = {
                     "track": f"clean_{variant['name']}",
                     "detector": detector_name,
+                    "compute_backend": args.compute_backend,
                     "source_image_file": str(source_path),
                     "dose_electrons": variant["dose_electrons"]
                     if variant["dose_electrons"] is not None
@@ -203,13 +505,31 @@ def main() -> None:
                     "repeat": variant["repeat"]
                     if variant["repeat"] is not None
                     else "not_applicable",
+                    "noise_level_id": variant["noise_level_id"],
+                    "read_noise_sigma_primary_e_rms_per_pixel": variant[
+                        "read_noise_sigma"
+                    ],
+                    "noise_manifest": (
+                        noise_manifest["path"]
+                        if noise_manifest is not None
+                        else "not_applicable"
+                    ),
                     "coordinate_units": "1/angstrom",
+                    "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
                     "forward_model": forward_model,
                     "central_exclusion_Ainv": central_exclusion,
                     "detector_config": image_cfg[
                         "autodisk"
                         if detector_name == "autodisk"
-                        else "py4dstem_find_bragg_disks"
+                        else (
+                            "py4dstem_find_bragg_disks"
+                            if detector_name == "py4dstem"
+                            else (
+                                "dog_rgm"
+                                if detector_name == "dog_rgm"
+                                else "cuda_xcorr_poly"
+                            )
+                        )
                     ],
                 }
                 write_peak_h5(output, samples, attrs)
@@ -218,6 +538,12 @@ def main() -> None:
                     {
                         "variant": variant["name"],
                         "detector": detector_name,
+                        "compute_backend": args.compute_backend,
+                        "dose_electrons": variant["dose_electrons"],
+                        "noise_level_id": variant["noise_level_id"],
+                        "read_noise_sigma_primary_e_rms_per_pixel": variant[
+                            "read_noise_sigma"
+                        ],
                         "output": str(output),
                         "num_samples": len(samples),
                         "num_failures": len(failures),
@@ -235,12 +561,24 @@ def main() -> None:
         "source_image_file": str(source_path),
         "track": args.track,
         "detectors": detectors,
+        "compute_backend": args.compute_backend,
+        "physical_gpu_index": physical_gpu,
+        "k_max_Ainv": float(config["common"]["k_max_Ainv"]),
+        "noise_manifest": (
+            noise_manifest["path"]
+            if noise_manifest is not None
+            else None
+        ),
         "runs": report_rows,
     }
     suffix = "_smoke" if "smoke" in source_path.stem else ""
-    report_path = ROOT / "reports" / (
-        f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
+    report_path = (
+        args.report_output.resolve()
+        if args.report_output is not None
+        else REPORT_DIR
+        / f"clean_disk_detection_{args.track}{model_suffix}{suffix}.json"
     )
+    report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Detection report: {report_path}")
 

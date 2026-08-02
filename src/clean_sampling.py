@@ -6,6 +6,7 @@ from typing import Any
 import numpy as np
 
 from or4d_common import (
+    canonicalize_clean_orientation,
     friedel_aware_misorientation_deg,
     low_discrepancy_so3_quaternion,
     make_orientation_matrix,
@@ -42,6 +43,20 @@ def _append_unique(
     if any(existing["orientation_id"] == orientation_id for existing in records):
         raise ValueError(f"Duplicate orientation_id: {orientation_id}")
 
+    orientation_class_id = record.get("orientation_class_id")
+    if orientation_class_id is not None:
+        if any(
+            existing.get("orientation_class_id") == orientation_class_id
+            for existing in records
+        ):
+            raise ValueError(
+                f"{orientation_id} duplicates an earlier canonical "
+                "Clean orientation class."
+            )
+        record["nearest_previous_clean_equivalent_misorientation_deg"] = None
+        records.append(record)
+        return
+
     matrix = np.asarray(record["orientation_matrix_sample_to_crystal"], dtype=float)
     minimum = _minimum_clean_equivalent_distance(matrix, records, symmetries)
     if minimum is not None and minimum <= duplicate_tolerance_deg:
@@ -57,6 +72,8 @@ def _manual_records(
     config: dict[str, Any],
     lattice_matrix: np.ndarray,
 ) -> list[dict[str, Any]]:
+    if not config.get("legacy_manual", {}).get("enabled", True):
+        return []
     records: list[dict[str, Any]] = []
     for item in config["orientations"]:
         matrix = make_orientation_matrix(
@@ -203,6 +220,39 @@ def build_clean_orientation_records(
         *_headline_core_records(config),
         *_acom_probe_records(config, lattice_matrix),
     ]
+    if config["clean_sampling"]["headline_core"].get(
+        "canonicalize_friedel", False
+    ):
+        for record in candidates:
+            raw = np.asarray(
+                record["orientation_matrix_sample_to_crystal"], dtype=float
+            )
+            canonical = canonicalize_clean_orientation(raw, symmetries)
+            record["raw_orientation_matrix_sample_to_crystal"] = raw.tolist()
+            record["orientation_matrix_sample_to_crystal"] = canonical[
+                "canonical_matrix"
+            ].tolist()
+            record["canonical_quaternion_wxyz"] = canonical[
+                "canonical_quaternion_wxyz"
+            ].tolist()
+            record["orientation_class_id"] = canonical[
+                "orientation_class_key"
+            ]
+            record["canonical_crystal_symmetry_index"] = int(
+                canonical["crystal_symmetry_index"]
+            )
+            record["canonical_friedel_branch_index"] = int(
+                canonical["friedel_branch_index"]
+            )
+            record["canonical_friedel_used"] = bool(
+                canonical["friedel_used"]
+            )
+            record["canonicalization_residual_deg"] = float(
+                canonical["canonicalization_residual_deg"]
+            )
+            record["beam_direction_crystal_cartesian"] = canonical[
+                "canonical_matrix"
+            ][:, 2].tolist()
     records: list[dict[str, Any]] = []
     for record in candidates:
         _append_unique(
@@ -215,6 +265,7 @@ def build_clean_orientation_records(
     expected_counts = {
         str(role): int(count)
         for role, count in config["dataset"]["expected_sample_counts"].items()
+        if int(count) > 0
     }
     actual_counts = Counter(record["sample_role"] for record in records)
     if dict(actual_counts) != expected_counts:

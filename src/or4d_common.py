@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -13,10 +14,42 @@ def project_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def load_config() -> dict[str, Any]:
-    path = project_root() / "config" / "benchmark.yaml"
-    with path.open("r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    result = dict(base)
+    for key, value in override.items():
+        if (
+            key in result
+            and isinstance(result[key], dict)
+            and isinstance(value, dict)
+        ):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
+def load_config(path: Path | str | None = None) -> dict[str, Any]:
+    """Load the frozen base config and, optionally, a version overlay.
+
+    ``OR4D_CONFIG`` is intentionally a path rather than a version name so every
+    run manifest can record and hash the exact file that changed the defaults.
+    """
+    base_path = project_root() / "config" / "benchmark.yaml"
+    with base_path.open("r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+    selected = path or os.environ.get("OR4D_CONFIG")
+    if selected is None:
+        return config
+    overlay_path = Path(selected)
+    if not overlay_path.is_absolute():
+        overlay_path = project_root() / overlay_path
+    if overlay_path.resolve() == base_path.resolve():
+        return config
+    with overlay_path.open("r", encoding="utf-8") as f:
+        overlay = yaml.safe_load(f)
+    if not isinstance(overlay, dict):
+        raise ValueError(f"Config overlay must contain a mapping: {overlay_path}")
+    return _deep_merge(config, overlay)
 
 
 def cif_path(config: dict[str, Any]) -> Path:
@@ -86,6 +119,18 @@ def quaternion_wxyz_to_matrix(quaternion_wxyz: Iterable[float]) -> np.ndarray:
         dtype=float,
     )
     return nearest_rotation(R)
+
+
+def matrix_to_quaternion_wxyz(matrix: np.ndarray) -> np.ndarray:
+    """Convert a proper rotation matrix to a canonical-sign quaternion."""
+    from scipy.spatial.transform import Rotation
+
+    matrix = nearest_rotation(np.asarray(matrix, dtype=float))
+    quaternion = Rotation.from_matrix(matrix).as_quat(scalar_first=True)
+    nonzero = np.flatnonzero(np.abs(quaternion) > 1e-14)
+    if len(nonzero) and quaternion[nonzero[0]] < 0.0:
+        quaternion = -quaternion
+    return quaternion / np.linalg.norm(quaternion)
 
 
 def low_discrepancy_so3_quaternion(index: int, offset: float = 0.0) -> np.ndarray:
@@ -203,6 +248,70 @@ FRIEDEL_SAMPLE_ROTATION = np.diag([-1.0, -1.0, 1.0])
 ACOM_MIRROR_SAMPLE_ROTATION = np.diag([1.0, -1.0, -1.0])
 
 
+def canonicalize_clean_orientation(
+    matrix: np.ndarray,
+    symmetry_rotations: Iterable[np.ndarray],
+    *,
+    decimals: int = 12,
+) -> dict[str, Any]:
+    """Choose one deterministic representative of a Clean orientation class.
+
+    The class contains every ``S @ R @ F`` for proper crystal symmetries ``S``
+    and the two detector-plane Friedel branches ``F``.  The representative is
+    selected by a canonical-sign quaternion key, making construction
+    independent of which equivalent raw matrix was sampled.
+    """
+    raw = nearest_rotation(np.asarray(matrix, dtype=float))
+    symmetries = [
+        nearest_rotation(np.asarray(symmetry, dtype=float))
+        for symmetry in symmetry_rotations
+    ]
+    candidates: list[dict[str, Any]] = []
+    friedel_branches = (np.eye(3), FRIEDEL_SAMPLE_ROTATION)
+    for symmetry_index, proper_symmetry in enumerate(symmetries):
+        for friedel_index, friedel in enumerate(friedel_branches):
+            equivalent = nearest_rotation(proper_symmetry @ raw @ friedel)
+            quaternion = matrix_to_quaternion_wxyz(equivalent)
+            key = tuple(np.round(quaternion, decimals=decimals).tolist())
+            candidates.append(
+                {
+                    "key": key,
+                    "matrix": equivalent,
+                    "quaternion_wxyz": quaternion,
+                    "crystal_symmetry_index": symmetry_index,
+                    "friedel_branch_index": friedel_index,
+                    "friedel_used": bool(friedel_index),
+                }
+            )
+    if not candidates:
+        raise ValueError("At least one proper crystal symmetry is required.")
+    selected = max(candidates, key=lambda item: item["key"])
+    canonical = selected["matrix"]
+    return {
+        "raw_matrix": raw,
+        "canonical_matrix": canonical,
+        "canonical_quaternion_wxyz": selected["quaternion_wxyz"],
+        "orientation_class_key": ",".join(
+            f"{value:.{decimals}f}" for value in selected["key"]
+        ),
+        "crystal_symmetry_index": selected["crystal_symmetry_index"],
+        "friedel_branch_index": selected["friedel_branch_index"],
+        "friedel_used": selected["friedel_used"],
+        "canonicalization_residual_deg": float(
+            rotation_angle_deg(
+                canonical
+                @ (
+                    nearest_rotation(
+                        symmetries[selected["crystal_symmetry_index"]]
+                    )
+                    @ raw
+                    @ friedel_branches[selected["friedel_branch_index"]]
+                ).T
+            )
+        ),
+    }
+
+
 def friedel_aware_misorientation_deg(
     R_a: np.ndarray,
     R_b: np.ndarray,
@@ -300,6 +409,23 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
     qy_parts: list[np.ndarray] = []
     intensity_parts: list[np.ndarray] = []
     sample_ids: list[str] = []
+    peak_diagnostic_keys = sorted(
+        {
+            key
+            for sample in samples
+            for key in sample.get("peak_diagnostics", {})
+        }
+    )
+    peak_diagnostic_parts: dict[str, list[np.ndarray]] = {
+        key: [] for key in peak_diagnostic_keys
+    }
+    sample_metadata_keys = sorted(
+        {
+            key
+            for sample in samples
+            for key in sample.get("sample_metadata", {})
+        }
+    )
 
     for sample in samples:
         sample_ids.append(str(sample["sample_id"]))
@@ -311,6 +437,18 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
         qx_parts.append(qx)
         qy_parts.append(qy)
         intensity_parts.append(intensity)
+        for key in peak_diagnostic_keys:
+            values = sample.get("peak_diagnostics", {}).get(key)
+            if values is None:
+                array = np.full(len(qx), np.nan, dtype=np.float32)
+            else:
+                array = np.asarray(values, dtype=np.float32)
+                if len(array) != len(qx):
+                    raise ValueError(
+                        f"Peak diagnostic {key} length mismatch for "
+                        f"{sample['sample_id']}"
+                    )
+            peak_diagnostic_parts[key].append(array)
         offsets.append(offsets[-1] + len(qx))
 
     qx_all = np.concatenate(qx_parts) if qx_parts else np.empty(0, dtype=np.float32)
@@ -328,6 +466,30 @@ def write_peak_h5(path: Path, samples: list[dict[str, Any]], attrs: dict[str, An
         peaks.create_dataset("qy", data=qy_all, compression="gzip")
         peaks.create_dataset("intensity", data=i_all, compression="gzip")
         peaks.create_dataset("offsets", data=np.asarray(offsets, dtype=np.int64))
+        if peak_diagnostic_keys:
+            diagnostics = peaks.create_group("diagnostics")
+            for key in peak_diagnostic_keys:
+                values = np.concatenate(peak_diagnostic_parts[key])
+                diagnostics.create_dataset(key, data=values, compression="gzip")
+        if sample_metadata_keys:
+            metadata = h5.create_group("sample_diagnostics")
+            for key in sample_metadata_keys:
+                values = [
+                    sample.get("sample_metadata", {}).get(key, "")
+                    for sample in samples
+                ]
+                if any(isinstance(value, str) for value in values):
+                    metadata.create_dataset(
+                        key,
+                        data=np.asarray(
+                            [str(value) for value in values],
+                            dtype=h5py.string_dtype("utf-8"),
+                        ),
+                    )
+                else:
+                    metadata.create_dataset(
+                        key, data=np.asarray(values, dtype=np.float64)
+                    )
         for key, value in attrs.items():
             if isinstance(value, (dict, list, tuple)):
                 h5.attrs[key] = json.dumps(value, ensure_ascii=False)

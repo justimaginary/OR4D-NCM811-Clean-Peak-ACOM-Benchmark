@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+from py4DSTEM import DataCube
 from py4DSTEM.braggvectors import find_Bragg_disks
 
 from autodisk_adapter import measure_vacuum_probe
@@ -19,52 +20,34 @@ class Py4DSTEMDiskResult:
     correlation_intensity: np.ndarray
 
 
-def detect_py4dstem_bragg_disks(
-    image: np.ndarray,
-    qx_axis_Ainv: np.ndarray,
-    qy_axis_Ainv: np.ndarray,
+def _normalize_detection_images(
+    images: np.ndarray, config: dict[str, Any]
+) -> np.ndarray:
+    mode = str(config.get("normalize_for_detection", "none"))
+    values = np.asarray(images, dtype=np.float32)
+    if mode == "none":
+        return values
+    if mode != "max":
+        raise ValueError(f"unsupported py4DSTEM detection normalization: {mode}")
+    maxima = values.reshape(values.shape[:-2] + (-1,)).max(axis=-1)
+    if np.any(maxima <= 0.0):
+        raise ValueError("cannot max-normalize a non-positive diffraction image")
+    return values / maxima[..., None, None]
+
+
+def _postprocess_py4dstem_peaks(
+    raw: np.ndarray,
+    peak_data: np.ndarray,
+    qx_axis: np.ndarray,
+    qy_axis: np.ndarray,
     vacuum_probe: np.ndarray,
     config: dict[str, Any],
     *,
     k_max_Ainv: float,
     central_exclusion_Ainv: float,
 ) -> Py4DSTEMDiskResult:
-    """Run py4DSTEM's public ``find_Bragg_disks`` on one diffraction image.
-
-    py4DSTEM calls detector-array axis 0 ``qx`` and axis 1 ``qy``. This
-    benchmark instead calls the horizontal physical coordinate qx and the
-    upward vertical coordinate qy, so the returned pixel fields are mapped
-    explicitly rather than copied by name.
-    """
-    raw = np.maximum(np.asarray(image, dtype=float), 0.0)
-    # py4DSTEM's FFT correlation expects the template origin at array index 0.
-    template = np.fft.ifftshift(
-        np.maximum(np.asarray(vacuum_probe, dtype=float), 0.0)
-    )
-    qx_axis = np.asarray(qx_axis_Ainv, dtype=float)
-    qy_axis = np.asarray(qy_axis_Ainv, dtype=float)
-    if raw.ndim != 2 or raw.shape != template.shape:
-        raise ValueError("image and vacuum_probe must be same-shape 2D arrays")
-    if raw.shape != (len(qy_axis), len(qx_axis)):
-        raise ValueError("image shape does not match q axes")
-
-    peaks = find_Bragg_disks(
-        data=raw,
-        template=template,
-        corrPower=float(config["corr_power"]),
-        sigma_cc=float(config["sigma_cc"]),
-        subpixel=str(config["subpixel"]),
-        upsample_factor=int(config["upsample_factor"]),
-        minRelativeIntensity=float(config["min_relative_intensity"]),
-        minPeakSpacing=float(config["min_peak_spacing_px"]),
-        edgeBoundary=int(config["edge_boundary_px"]),
-        maxNumPeaks=int(config["max_num_peaks"]),
-    )
-    data = peaks.data
-    row = np.asarray(data["qx"], dtype=float)
-    col = np.asarray(data["qy"], dtype=float)
-    # FFT peak coordinates are referenced to floor(N/2), whereas this
-    # benchmark places the beam at (N-1)/2 for even-sized arrays.
+    row = np.asarray(peak_data["qx"], dtype=float)
+    col = np.asarray(peak_data["qy"], dtype=float)
     physical_zero_col = float(
         np.interp(0.0, qx_axis, np.arange(len(qx_axis), dtype=float))
     )
@@ -77,7 +60,7 @@ def detect_py4dstem_bragg_disks(
     )
     col -= raw.shape[1] // 2 - physical_zero_col
     row -= raw.shape[0] // 2 - physical_zero_row
-    correlation = np.asarray(data["intensity"], dtype=float)
+    correlation = np.asarray(peak_data["intensity"], dtype=float)
     qx = np.interp(col, np.arange(len(qx_axis), dtype=float), qx_axis)
     qy = np.interp(row, np.arange(len(qy_axis), dtype=float), qy_axis)
     radius = np.hypot(qx, qy)
@@ -133,3 +116,118 @@ def detect_py4dstem_bragg_disks(
         col_px=col[order].astype(np.float32),
         correlation_intensity=correlation[order].astype(np.float32),
     )
+
+
+def detect_py4dstem_bragg_disks(
+    image: np.ndarray,
+    qx_axis_Ainv: np.ndarray,
+    qy_axis_Ainv: np.ndarray,
+    vacuum_probe: np.ndarray,
+    config: dict[str, Any],
+    *,
+    k_max_Ainv: float,
+    central_exclusion_Ainv: float,
+) -> Py4DSTEMDiskResult:
+    """Run py4DSTEM's public ``find_Bragg_disks`` on one diffraction image.
+
+    py4DSTEM calls detector-array axis 0 ``qx`` and axis 1 ``qy``. This
+    benchmark instead calls the horizontal physical coordinate qx and the
+    upward vertical coordinate qy, so the returned pixel fields are mapped
+    explicitly rather than copied by name.
+    """
+    raw = np.maximum(np.asarray(image, dtype=float), 0.0)
+    # py4DSTEM's FFT correlation expects the template origin at array index 0.
+    template = np.fft.ifftshift(
+        np.maximum(np.asarray(vacuum_probe, dtype=float), 0.0)
+    )
+    qx_axis = np.asarray(qx_axis_Ainv, dtype=float)
+    qy_axis = np.asarray(qy_axis_Ainv, dtype=float)
+    if raw.ndim != 2 or raw.shape != template.shape:
+        raise ValueError("image and vacuum_probe must be same-shape 2D arrays")
+    if raw.shape != (len(qy_axis), len(qx_axis)):
+        raise ValueError("image shape does not match q axes")
+
+    detection_raw = _normalize_detection_images(raw, config)
+    peaks = find_Bragg_disks(
+        data=detection_raw,
+        template=template,
+        corrPower=float(config["corr_power"]),
+        sigma_cc=float(config["sigma_cc"]),
+        subpixel=str(config["subpixel"]),
+        upsample_factor=int(config["upsample_factor"]),
+        minAbsoluteIntensity=float(config.get("min_absolute_intensity", 0.0)),
+        minRelativeIntensity=float(config["min_relative_intensity"]),
+        minPeakSpacing=float(config["min_peak_spacing_px"]),
+        edgeBoundary=int(config["edge_boundary_px"]),
+        maxNumPeaks=int(config["max_num_peaks"]),
+    )
+    return _postprocess_py4dstem_peaks(
+        raw,
+        peaks.data,
+        qx_axis,
+        qy_axis,
+        vacuum_probe,
+        config,
+        k_max_Ainv=k_max_Ainv,
+        central_exclusion_Ainv=central_exclusion_Ainv,
+    )
+
+
+def detect_py4dstem_bragg_disks_batch(
+    images: np.ndarray,
+    qx_axis_Ainv: np.ndarray,
+    qy_axis_Ainv: np.ndarray,
+    vacuum_probe: np.ndarray,
+    config: dict[str, Any],
+    *,
+    k_max_Ainv: float,
+    central_exclusion_Ainv: float,
+    cuda: bool,
+) -> list[Py4DSTEMDiskResult | Exception]:
+    """Run py4DSTEM on an image stack, using its batched CUDA path when requested."""
+    raw = np.maximum(np.asarray(images, dtype=np.float32), 0.0)
+    qx_axis = np.asarray(qx_axis_Ainv, dtype=float)
+    qy_axis = np.asarray(qy_axis_Ainv, dtype=float)
+    probe = np.maximum(np.asarray(vacuum_probe, dtype=float), 0.0)
+    if raw.ndim != 3 or raw.shape[1:] != probe.shape:
+        raise ValueError("images must be [N, row, col] and match vacuum_probe")
+    if raw.shape[1:] != (len(qy_axis), len(qx_axis)):
+        raise ValueError("image shape does not match q axes")
+    template = np.fft.ifftshift(probe)
+    detection_raw = _normalize_detection_images(raw, config)
+    datacube = DataCube(data=detection_raw[:, None, :, :])
+    vectors = find_Bragg_disks(
+        data=datacube,
+        template=template,
+        corrPower=float(config["corr_power"]),
+        sigma_cc=float(config["sigma_cc"]),
+        subpixel=str(config["subpixel"]),
+        upsample_factor=int(config["upsample_factor"]),
+        minAbsoluteIntensity=float(config.get("min_absolute_intensity", 0.0)),
+        minRelativeIntensity=float(config["min_relative_intensity"]),
+        minPeakSpacing=float(config["min_peak_spacing_px"]),
+        edgeBoundary=int(config["edge_boundary_px"]),
+        maxNumPeaks=int(config["max_num_peaks"]),
+        CUDA=bool(cuda),
+        CUDA_batched=bool(cuda),
+    )
+    results: list[Py4DSTEMDiskResult | Exception] = []
+    for index in range(len(raw)):
+        try:
+            result = _postprocess_py4dstem_peaks(
+                raw[index],
+                vectors.raw[index, 0].data,
+                qx_axis,
+                qy_axis,
+                probe,
+                config,
+                k_max_Ainv=k_max_Ainv,
+                central_exclusion_Ainv=central_exclusion_Ainv,
+            )
+        except Exception as error:
+            # A detector-level failure belongs to this diffraction pattern,
+            # not to the complete CUDA batch.  The caller persists it as an
+            # empty peak list plus the exact exception type/message.
+            result = error
+        results.append(result)
+    return results

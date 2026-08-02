@@ -2,14 +2,76 @@
 
 > **Note**
 >
-> Currently, only the Clean-Peak track has been evaluated. For more details,
-> see [OR4D NCM811 Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
+> V3 is the direct peak-input baseline. V4 and V5 add the Clean diffraction
+> image and dose/noise observation tracks; their compact results and pages are
+> included below. For the original benchmark contract, see [OR4D NCM811
+> Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
 
 > **Status**
 >
-> Clean-Peak v3 is the only evaluated track. It tests matched-model
-> orientation recovery from ideal kinematical diffraction peaks; it does not
+> All three versions are Clean, matched-model synthetic benchmarks. They test
+> kinematical orientation recovery and detector robustness; they do not
 > establish performance on experimental data or dynamical diffraction.
+
+## Clone, data, and reproducibility
+
+The Git checkout is intentionally code-and-results only. It contains the
+source CIF, YAML configurations, generation/detection/indexing scripts, tests,
+compact JSON/JSONL summaries, figures, PDFs, and self-contained HTML
+snapshots. Generated peak tables, orientation manifests, diffraction images,
+count images, detector-peak HDF5 files, and per-sample caches are not stored in
+Git. They are written to an external data root (on the server use
+`/mnt/data/$USER/or4d-clean-v5`; locally set `OR4D_V5_DATA_ROOT` to another
+directory).
+
+The small V3 public peak table (`public/clean_peaks.h5`) and the compact
+reflection table (`diagnostics/clean_reflections.h5`) are deliberate exceptions:
+they are tracked because they are part of the direct-peak baseline and are
+useful when rebuilding the V3 coordinate page. V4/V5 raw image stacks and
+full detector caches remain external.
+
+Small summaries, audit tables, representative overlays, and HTML payloads
+remain under `reports/` and are tracked because they are needed to inspect and
+regenerate the pages. The external run manifest records the Git commit,
+configuration, commands, backend, CPU limit, output hashes, and timing, so a
+generated data root can be checked against the exact checkout that produced it.
+
+After cloning, create the single Clean environment. The tracked reports and
+self-contained HTML files can be inspected without generated HDF5 files.
+Re-running V3/V4 generates their ignored working data; a V5 full rerun reuses
+the existing external server data root described below.
+
+```bash
+git clone <repository-url>
+cd OR4D-NCM811-smoke-v0
+conda env create -f environment-clean.yml   # environment name: or4d-clean
+```
+
+Machine-dependent paths are centralized in
+[`config/runtime_paths.json`](config/runtime_paths.json). The versioned shell
+entrypoints resolve the `or4d-clean` Python executable from that file instead
+of assuming whichever `conda` happens to be first on `PATH`. They also resolve
+the V3/V4/V5 report directories from the repository root. The following
+environment variables override the checked-in defaults without editing code:
+
+```text
+OR4D_CLEAN_PYTHON       absolute path to or4d-clean/bin/python
+OR4D_V5_DATA_ROOT       V5 external data root on a non-server machine
+OR4D_REPORT_V3_DIR      optional V3 report-directory override
+OR4D_REPORT_V4_DIR      optional V4 report-directory override
+OR4D_REPORT_V5_DIR      optional V5 report-directory override
+OR4D_RUNTIME_PATHS_FILE alternate runtime_paths.json
+```
+
+Inspect the paths that will be used before a run:
+
+```bash
+python3 scripts/00_resolve_runtime_paths.py show
+```
+
+The dynamical environment is retained as historical project scaffolding; the
+current reproducible V3/V4/V5 experiments are Clean-only and do not run
+multislice.
 
 This repository builds a synthetic NCM811 orientation benchmark and evaluates a
 py4DSTEM ACOM baseline using one shared contract:
@@ -49,7 +111,7 @@ conda env create -f environment-dynamical.yml
 Run the complete Clean-Peak benchmark and ACOM sweep:
 
 ```bash
-conda run -n or4d-clean ./run_clean_acom.sh
+./run_clean_acom.sh
 ```
 
 The pipeline runs:
@@ -85,21 +147,21 @@ This path does not overwrite the accepted Clean-Peak v3 files. Run its 17-case
 regression set first:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh smoke
+./run_clean_image_acom.sh smoke
 ```
 
 The corrected 17-case smoke passes. The 1,081-pattern peak stage has also been
 run. Run or reproduce only that stage with:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh full peaks
+./run_clean_image_acom.sh full peaks
 ```
 
 After reviewing the peak report, continue from the existing detector outputs
 without regenerating the images:
 
 ```bash
-conda run -n or4d-clean ./run_clean_image_acom.sh full acom
+./run_clean_image_acom.sh full acom
 ```
 
 The image run freezes the old analytic input locally as
@@ -124,11 +186,76 @@ See [`docs/CLEAN_IMAGE_PIPELINE.md`](docs/CLEAN_IMAGE_PIPELINE.md) for the
 formulas, HDF5 schema, detector comparison, commands, and current measured
 limitations.
 
+### V5 Clean-E/C and the existing server run
+
+V5 keeps the expectation image and the counted observation as separate tracks:
+
+- **Clean-E (expectation)** is the deterministic float32 kinematical
+  First-Born expectation image before electron counting.
+- **Clean-C (counted)** samples that same expectation with the configured
+  electron dose and noise model. It is an observation layer, not a different
+  scattering model.
+
+The V5 input images, manifests, detector outputs and full candidate files were
+already generated on the server. The canonical data root is
+`/mnt/data/xietianhong/or4d-clean-v5`; the tracked
+[`reports/v5/MANIFEST.json`](reports/v5/MANIFEST.json) records its
+server-relative paths, sizes, hashes, and producing commit. Compact summaries,
+plots, run records and HTML are already retained under `reports/v5`.
+
+Resolve that location rather than embedding it in a command:
+
+```bash
+v5_data_root=$(python3 scripts/00_resolve_runtime_paths.py \
+  v5-data-root --must-exist)
+```
+
+On another machine, set `OR4D_V5_DATA_ROOT` to a verified copy of the same
+directory. The artifact sizes and SHA-256 values in `reports/v5/MANIFEST.json`
+identify the canonical data. Its `git_commit` and `config_files` hashes record
+the exact data-generation state; later Top-5 and Pyxem settings extend the
+evaluation configuration without changing those frozen image artifacts.
+
+No replacement V5 data-preparation wrapper is required. If a server rerun is
+explicitly needed, use the existing project scripts in their original stages:
+
+```text
+01_generate_orientations.py / 01b_generate_001_study.py
+02b_generate_clean_images.py
+02c_generate_clean_counted_images.py
+02d_generate_clean_dose_expectations.py
+02e_generate_clean_noise_manifest.py
+03_extract_clean_disks.py
+18_write_v5_manifest.py
+23_run_v5_acom_suite.py
+25_run_v5_pyxem_template_matching.py
+31_run_v5_clean_c_autodisk_dog_full.py
+33_run_v5_001_py4_pyxem.py
+```
+
+These scripts read and write the pre-existing server data root; they are not
+replaced by a second local generator. GPU stages must still be launched only on
+an explicitly verified idle card, with the CPU limit required by `AGENTS.md`.
+
+To rebuild the tracked V5 HTML from the existing server results, use the
+original report producer:
+
+```bash
+clean_python=$(python3 scripts/00_resolve_runtime_paths.py clean-python)
+v5_data_root=$(python3 scripts/00_resolve_runtime_paths.py \
+  v5-data-root --must-exist)
+export OR4D_REPORT_V5_DIR=$(python3 scripts/00_resolve_runtime_paths.py \
+  report-dir --version v5)
+"${clean_python}" scripts/30_write_v5_clean_visualization.py \
+  --data-root "${v5_data_root}"
+```
+
 Run the tests:
 
 ```bash
-conda run -n or4d-clean \
-  python -m unittest discover -s tests -p 'test_*.py'
+clean_python=$(python3 scripts/00_resolve_runtime_paths.py clean-python)
+PYTHONPATH=src "${clean_python}" -m unittest discover \
+  -s tests -p 'test_*.py'
 ```
 
 Print one complete coordinate trace:
@@ -145,11 +272,11 @@ in `diagnostics/clean_coordinate_trace.jsonl.gz`.
 ## Interactive HTML
 
 The frozen v3 coordinate page remains available. Open
-[`reports/ACOM_COORDINATE_VISUALIZATION.html`](reports/ACOM_COORDINATE_VISUALIZATION.html)
+[`reports/v3/ACOM_COORDINATE_VISUALIZATION.html`](reports/v3/ACOM_COORDINATE_VISUALIZATION.html)
 directly in a browser:
 
 ```bash
-open reports/ACOM_COORDINATE_VISUALIZATION.html
+open reports/v3/ACOM_COORDINATE_VISUALIZATION.html
 ```
 
 The self-contained page includes:
@@ -176,10 +303,10 @@ conda run -n or4d-clean \
 ```
 
 The full image-first comparison is
-[`reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html`](reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html):
+[`reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html`](reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html):
 
 ```bash
-open reports/CLEAN_IMAGE_ACOM_VISUALIZATION.html
+open reports/v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html
 ```
 
 It keeps the v3 direct-peak results, parameters, matrices, HKL tables, and
@@ -198,6 +325,20 @@ conda run -n or4d-clean \
   python scripts/17_write_clean_image_visualization.py
 ```
 
+The v5 dose/noise/Top-5 comparison is
+[`reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html`](reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html):
+
+```bash
+open reports/v5/ACOM_CLEAN_V5_VISUALIZATION.html
+```
+
+It shows the full Clean-E and Clean-C result grid, Top-1 through Top-5
+success curves, Acc@1°/2°/5°, median/P95 error, indexing coverage,
+ACOM-versus-Pyxem comparisons, real input images and peak overlays, and
+per-sample `HKL → B → g_crystal → g_sample → q` intermediate variables.
+The three HTML pages link to one another. See
+[`reports/README.md`](reports/README.md) for the result-directory layout.
+
 ## Report
 
 The 44-page static report is
@@ -212,24 +353,27 @@ this repository.
 Machine-readable results and the generated Markdown report are under
 [`reports/`](reports/), including:
 
-- `ACOM_CLEAN_REPORT.md`: generated numerical report;
-- `ACOM_COORDINATE_ANALYSIS.md`: coordinate and peak-level audit;
-- `acom_clean_evaluation*.json`: symmetry/Friedel-aware metrics;
-- `acom_clean_details*.json`: per-sample ACOM diagnostics;
-- `acom_plan_audit*.json`: orientation-plan metadata.
+- `reports/v3/ACOM_CLEAN_REPORT.md`: generated numerical report;
+- `reports/v3/ACOM_COORDINATE_ANALYSIS.md`: coordinate and peak-level audit;
+- `reports/v3/acom_clean_evaluation*.json`: symmetry/Friedel-aware metrics;
+- `reports/v3/acom_clean_details*.json`: per-sample ACOM diagnostics;
+- `reports/v3/acom_plan_audit*.json`: orientation-plan metadata.
 
 
 ## Repository layout
 
 ```text
 config/       benchmark, Clean, ACOM, and evaluation parameters
-data/         NCM811 CIF and generated metadata
-public/       participant-visible peak sets
-private/      orientations and hidden ground truth
+data/         tracked NCM811 CIF and small source metadata
+public/       tracked V3 peaks; generated V4/V5 image HDF5 is ignored
+private/      generated orientations and hidden ground truth (ignored)
 submissions/  ACOM predictions and submission examples
-diagnostics/  HKL reflections and complete coordinate traces
+diagnostics/  tracked compact reflections/traces/overlays; large HDF5 ignored
 reports/      metrics, figures, analyses, and interactive HTML
 scripts/      generation, prediction, evaluation, and reporting tools
+<external root>/datasets      generated V4/V5 images and count images
+<external root>/intermediates generated detector peaks and traces
+<external root>/run_records   command, hash, and environment manifests
 ```
 
 See [`docs/CLEAN_BENCHMARK_V3.md`](docs/CLEAN_BENCHMARK_V3.md) for the detailed
@@ -244,5 +388,9 @@ sampling and evaluation contract.
 - A 2° plan is more accurate than a 4° plan but uses approximately eight times
   as many orientation seeds and substantially more runtime.
 - Grid probes are diagnostic only and must not be mixed into headline metrics.
+- The proposed next detector is documented in
+  [`docs/DETECTOR_PROPOSAL.md`](docs/DETECTOR_PROPOSAL.md). It is a design
+  proposal only; no performance number is claimed until it is run through the
+  same frozen evaluation contract.
 - Public, private, and evaluation files coexist for local reproducibility; this
   repository is not a server-side blind benchmark.

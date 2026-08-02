@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -10,6 +11,9 @@ import numpy as np
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402
@@ -34,7 +38,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "reports" / "clean_acom_comparison.json",
+        default=REPORT_DIR / "clean_acom_comparison.json",
     )
     return parser.parse_args()
 

@@ -4,11 +4,16 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V4_DIR", ROOT / "reports" / "v4")
+).resolve()
+RUN_DIR = REPORT_DIR / "runs"
 
 
 def parse_args() -> argparse.Namespace:
@@ -20,7 +25,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output",
         type=Path,
-        default=ROOT / "reports" / "clean_counted_acom_comparison.json",
+        default=REPORT_DIR / "clean_counted_acom_comparison.json",
     )
     parser.add_argument("--max-workers", type=int, default=2)
     parser.add_argument("--allow-subset", action="store_true")
@@ -38,6 +43,9 @@ def run_one(run: dict, allow_subset: bool) -> tuple[str, Path]:
     tag = f"{variant}_{detector}"
     peak_file = Path(run["output"]).resolve()
     prediction = ROOT / "submissions" / f"acom_clean_{tag}.jsonl"
+    details = RUN_DIR / f"acom_clean_details_{tag}.json"
+    audit = RUN_DIR / f"acom_plan_audit_{tag}.json"
+    candidates = RUN_DIR / f"acom_candidates_{tag}.h5"
     command = [
         sys.executable,
         str(ROOT / "scripts" / "07_run_acom_baseline.py"),
@@ -47,11 +55,17 @@ def run_one(run: dict, allow_subset: bool) -> tuple[str, Path]:
         tag,
         "--prediction-file",
         str(prediction),
+        "--details-file",
+        str(details),
+        "--audit-file",
+        str(audit),
+        "--candidates-file",
+        str(candidates),
     ]
     if allow_subset:
         command.append("--allow-subset")
     subprocess.run(command, cwd=ROOT, check=True)
-    return tag, ROOT / "reports" / f"acom_clean_details_{tag}.json"
+    return tag, details
 
 
 def main() -> None:
@@ -64,8 +78,7 @@ def main() -> None:
         completed = [
             (
                 f"{run['variant']}_{run['detector']}",
-                ROOT
-                / "reports"
+                RUN_DIR
                 / f"acom_clean_details_{run['variant']}_{run['detector']}.json",
             )
             for run in runs

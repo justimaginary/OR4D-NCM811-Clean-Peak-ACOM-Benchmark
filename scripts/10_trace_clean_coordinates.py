@@ -5,6 +5,7 @@ import argparse
 import gzip
 import io
 import json
+import os
 import sys
 from collections import defaultdict
 from pathlib import Path
@@ -16,6 +17,9 @@ import py4DSTEM
 from pymatgen.core import Structure
 
 ROOT = Path(__file__).resolve().parents[1]
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from coordinate_trace import (  # noqa: E402
@@ -738,13 +742,13 @@ def main() -> None:
         "private/clean_ground_truth.jsonl",
     )
     details_payload = json.loads(
-        (ROOT / "reports" / "acom_clean_details.json").read_text(
+        (REPORT_DIR / "acom_clean_details.json").read_text(
             encoding="utf-8"
         )
     )
     details = unique_by_id(
         details_payload["samples"],
-        "reports/acom_clean_details.json",
+        "reports/v3/acom_clean_details.json",
     )
     diagnostics = load_diagnostic_reflections()
     all_ids = [sample["sample_id"] for sample in samples]
@@ -773,8 +777,7 @@ def main() -> None:
         )
     )
     summary_output_path = args.summary_output or (
-        ROOT
-        / "reports"
+        REPORT_DIR
         / (
             "ACOM_COORDINATE_ANALYSIS.md"
             if args.all

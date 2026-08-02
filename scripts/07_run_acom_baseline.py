@@ -5,6 +5,7 @@ import argparse
 import hashlib
 import importlib.metadata
 import json
+import os
 import platform
 import subprocess
 import sys
@@ -12,12 +13,16 @@ import time
 from collections import Counter
 from pathlib import Path
 
+import h5py
 import numpy as np
 import py4DSTEM
 from pymatgen.core import Structure
 from scipy.spatial import cKDTree
 
 ROOT = Path(__file__).resolve().parents[1]
+V3_REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
 sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import (  # noqa: E402
@@ -33,6 +38,7 @@ from or4d_common import (  # noqa: E402
     symmetry_aware_misorientation_deg,
     write_jsonl,
 )
+from topk_evaluation import summarize_topk_errors  # noqa: E402
 
 
 def in_plane_rotation_matrix(phi: float) -> np.ndarray:
@@ -125,10 +131,17 @@ def make_point_list(sample: dict) -> py4DSTEM.PointList:
 def unique_records_by_id(records: list[dict], *, source: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for record in records:
-        sample_id = str(record["sample_id"])
+        record_id = record.get("sample_id", record.get("orientation_id"))
+        if record_id is None:
+            raise ValueError(
+                f"Record in {source} has neither sample_id nor orientation_id"
+            )
+        sample_id = str(record_id)
         if sample_id in result:
             raise ValueError(f"Duplicate sample_id in {source}: {sample_id}")
-        result[sample_id] = record
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        result[sample_id] = normalized
     return result
 
 
@@ -161,6 +174,93 @@ def runtime_summary(seconds: list[float]) -> dict:
         "p90_seconds": float(np.percentile(values, 90)),
         "p99_seconds": float(np.percentile(values, 99)),
         "throughput_samples_per_second": float(len(values) / values.sum()),
+    }
+
+
+def match_topk_distinct_zone_axes(
+    crystal,
+    point_list,
+    *,
+    n_best: int,
+    min_number_peaks: int,
+    inversion_symmetry: bool,
+    min_zone_separation_deg: float,
+) -> dict[str, np.ndarray]:
+    """Return ranked ACOM hypotheses from the unchanged input peak list.
+
+    ``Crystal.match_single_pattern(num_matches_return > 1)`` removes peaks
+    explained by each preceding match.  Those outputs are a multi-orientation
+    decomposition, not classification Top-K candidates.  For benchmark Top-K,
+    run the native matcher repeatedly on the same peaks and mask only the
+    previously selected zone-axis neighbourhood in the orientation plan.
+
+    py4DSTEM reduces every zone-axis row to its best in-plane angle and
+    normal/Friedel branch, so these are explicitly *zone-axis-distinct*
+    candidates.  Rank 1 is byte-for-byte the normal native single match.
+    """
+    if n_best < 1:
+        raise ValueError("n_best must be positive")
+    if min_zone_separation_deg <= 0:
+        raise ValueError("min_zone_separation_deg must be positive")
+
+    orientation_ref = crystal.orientation_ref
+    orientation_vecs = np.asarray(crystal.orientation_vecs, dtype=float)
+    excluded = np.zeros(orientation_vecs.shape[0], dtype=bool)
+    restored_rows: list[tuple[np.ndarray, object]] = []
+    matrices: list[np.ndarray] = []
+    correlations: list[float] = []
+    indices: list[np.ndarray] = []
+    mirrors: list[bool] = []
+    angles: list[np.ndarray] = []
+    cosine_limit = float(np.cos(np.deg2rad(min_zone_separation_deg)))
+
+    try:
+        for _ in range(n_best):
+            orientation = crystal.match_single_pattern(
+                bragg_peaks=point_list,
+                num_matches_return=1,
+                min_number_peaks=min_number_peaks,
+                inversion_symmetry=inversion_symmetry,
+                plot_polar=False,
+                plot_corr=False,
+                verbose=False,
+            )
+            correlation = float(np.asarray(orientation.corr)[0])
+            if not np.isfinite(correlation) or correlation <= 0:
+                raise RuntimeError("ACOM exhausted positive Top-K hypotheses")
+            zone_index = int(np.asarray(orientation.inds)[0, 0])
+            matrices.append(np.asarray(orientation.matrix, dtype=float)[0])
+            correlations.append(correlation)
+            indices.append(np.asarray(orientation.inds, dtype=np.int32)[0])
+            mirrors.append(bool(np.asarray(orientation.mirror)[0]))
+            angles.append(np.asarray(orientation.angles, dtype=float)[0])
+
+            cosine = orientation_vecs @ orientation_vecs[zone_index]
+            new_mask = (cosine > cosine_limit) & ~excluded
+            new_indices = np.flatnonzero(new_mask)
+            if new_indices.size == 0:
+                raise RuntimeError(
+                    f"ACOM Top-K failed to exclude zone index {zone_index}"
+                )
+            saved = orientation_ref[new_indices, :, :].copy()
+            restored_rows.append((new_indices, saved))
+            orientation_ref[new_indices, :, :] = 0
+            excluded[new_indices] = True
+    finally:
+        for row_indices, saved in restored_rows:
+            orientation_ref[row_indices, :, :] = saved
+
+    correlations_array = np.asarray(correlations, dtype=float)
+    if np.any(np.diff(correlations_array) > 1e-8):
+        raise RuntimeError(
+            "ACOM Top-K correlations are not monotonically non-increasing"
+        )
+    return {
+        "matrix": np.stack(matrices, axis=0),
+        "correlation": correlations_array,
+        "indices": np.stack(indices, axis=0),
+        "mirror": np.asarray(mirrors, dtype=bool),
+        "angles": np.stack(angles, axis=0),
     }
 
 
@@ -199,9 +299,69 @@ def parse_args() -> argparse.Namespace:
         help="Exact prediction JSONL output path.",
     )
     parser.add_argument(
+        "--ground-truth-file",
+        type=Path,
+        default=ROOT / "private" / "clean_ground_truth.jsonl",
+        help=(
+            "Ground-truth JSONL. Records may use sample_id (V3) or "
+            "orientation_id (V5)."
+        ),
+    )
+    parser.add_argument(
+        "--ground-truth-id-prefix",
+        default="",
+        help=(
+            "Explicit prefix ensured on ground-truth IDs before matching peak IDs "
+            "(V5 image/peak files use 'clean_' before orientation_id)."
+        ),
+    )
+    parser.add_argument(
+        "--orientation-file",
+        type=Path,
+        help=(
+            "Orientation-manifest file recorded in the provenance hash. "
+            "Defaults to private/orientations.jsonl for V3 or the ground-truth "
+            "file for external datasets."
+        ),
+    )
+    parser.add_argument(
+        "--details-file",
+        type=Path,
+        help="Exact ACOM per-sample details JSON output path.",
+    )
+    parser.add_argument(
+        "--candidates-file",
+        type=Path,
+        help=(
+            "HDF5 output containing every returned candidate. Full Top-5 "
+            "runs should place this large artifact under /mnt/data."
+        ),
+    )
+    parser.add_argument(
+        "--audit-file",
+        type=Path,
+        help="Exact orientation-plan audit JSON output path.",
+    )
+    parser.add_argument(
+        "--cuda",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Override config acom.cuda for orientation-plan FFT operations.",
+    )
+    parser.add_argument(
         "--allow-subset",
         action="store_true",
         help="Allow a strict sample-ID subset for legacy smoke runs.",
+    )
+    parser.add_argument(
+        "--insufficient-peaks-policy",
+        choices=("error", "skip"),
+        default="error",
+        help=(
+            "Behavior when a pattern has fewer than acom.min_number_peaks. "
+            "'skip' records a deterministic indexing failure and omits only "
+            "that prediction."
+        ),
     )
     return parser.parse_args()
 
@@ -236,6 +396,17 @@ def main() -> None:
         raise ValueError("ACOM angle steps must be positive")
     if power_intensity_experiment < 0.0 or power_intensity_simulated < 0.0:
         raise ValueError("intensity exponents must be non-negative")
+    num_matches_return = int(acom["num_matches_return"])
+    if num_matches_return != 5:
+        raise ValueError(
+            "The V5 candidate contract requires acom.num_matches_return=5, "
+            f"got {num_matches_return}"
+        )
+    topk_min_zone_separation_deg = float(
+        acom.get("topk_min_zone_separation_deg", 0.01)
+    )
+    if topk_min_zone_separation_deg <= 0:
+        raise ValueError("acom.topk_min_zone_separation_deg must be positive")
     if args.output_tag and not args.output_tag.replace("_", "").isalnum():
         raise ValueError(
             "output tag may contain only letters, numbers, and underscores"
@@ -243,13 +414,37 @@ def main() -> None:
     output_suffix = f"_{args.output_tag}" if args.output_tag else ""
 
     peak_path = args.peak_file.resolve()
-    gt_path = ROOT / "private" / "clean_ground_truth.jsonl"
-    manifest_path = ROOT / "private" / "orientations.jsonl"
+    gt_path = args.ground_truth_file.resolve()
+    default_gt_path = (ROOT / "private" / "clean_ground_truth.jsonl").resolve()
+    manifest_path = (
+        args.orientation_file.resolve()
+        if args.orientation_file
+        else (
+            (ROOT / "private" / "orientations.jsonl").resolve()
+            if gt_path == default_gt_path
+            else gt_path
+        )
+    )
+    use_cuda = bool(acom["cuda"]) if args.cuda is None else bool(args.cuda)
     samples = read_peak_h5(peak_path)
-    ground_truth = unique_records_by_id(
+    ground_truth_unprefixed = unique_records_by_id(
         read_jsonl(gt_path),
         source=str(gt_path),
     )
+    ground_truth: dict[str, dict] = {}
+    for ground_truth_id, record in ground_truth_unprefixed.items():
+        sample_id = (
+            ground_truth_id
+            if (
+                not args.ground_truth_id_prefix
+                or ground_truth_id.startswith(args.ground_truth_id_prefix)
+            )
+            else f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        )
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized["ground_truth_source_id"] = ground_truth_id
+        ground_truth[sample_id] = normalized
     sample_ids = [str(sample["sample_id"]) for sample in samples]
     if len(sample_ids) != len(set(sample_ids)):
         raise ValueError("public/clean_peaks.h5 contains duplicate sample IDs")
@@ -260,11 +455,39 @@ def main() -> None:
             raise ValueError("Peak input includes IDs absent from ground truth")
     elif sample_id_set != ground_truth_id_set:
         raise ValueError("Clean peak input and ground-truth sample IDs differ")
-    for sample in samples:
-        if len(sample["qx"]) < int(acom["min_number_peaks"]):
+    min_number_peaks = int(acom["min_number_peaks"])
+    insufficient_peak_rows = [
+        {
+            "sample_id": str(sample["sample_id"]),
+            "num_peaks": int(len(sample["qx"])),
+            "required_min_number_peaks": min_number_peaks,
+            "failure_reason": "insufficient_detected_peaks",
+        }
+        for sample in samples
+        if len(sample["qx"]) < min_number_peaks
+    ]
+    if insufficient_peak_rows and args.insufficient_peaks_policy == "error":
+        first = insufficient_peak_rows[0]
+        raise ValueError(
+            f"{first['sample_id']} has only {first['num_peaks']} peaks; "
+            f"ACOM requires {min_number_peaks}. "
+            "Use --insufficient-peaks-policy skip to record indexing failures."
+        )
+    insufficient_ids = {
+        str(row["sample_id"]) for row in insufficient_peak_rows
+    }
+    matched_samples = [
+        sample
+        for sample in samples
+        if str(sample["sample_id"]) not in insufficient_ids
+    ]
+    if not matched_samples:
+        raise ValueError("No samples have enough peaks for ACOM matching")
+    for sample in matched_samples:
+        if len(sample["qx"]) < min_number_peaks:
             raise ValueError(
                 f"{sample['sample_id']} has only {len(sample['qx'])} peaks; "
-                f"ACOM requires {acom['min_number_peaks']}"
+                f"ACOM requires {min_number_peaks}"
             )
 
     structure = Structure.from_file(cif_path(config))
@@ -293,7 +516,7 @@ def main() -> None:
         power_intensity=power_intensity_simulated,
         power_intensity_experiment=power_intensity_experiment,
         tol_distance=float(acom["tol_distance_Ainv"]),
-        CUDA=bool(acom["cuda"]),
+        CUDA=use_cuda,
         progress_bar=bool(acom["progress_bar"]),
     )
     plan_seconds = time.perf_counter() - plan_start
@@ -346,6 +569,7 @@ def main() -> None:
                 "nearest_discrete_search_seed_misorientation_deg": discrete_distance,
                 "nearest_zone_axis_node_misorientation_deg": zone_distance,
                 "probe_discrete_seed_threshold_deg": probe_threshold,
+                "acom_eligible": sample_id not in insufficient_ids,
                 "passed": passed,
             }
         )
@@ -387,7 +611,11 @@ def main() -> None:
         ),
         "samples": audit_rows,
     }
-    audit_path = ROOT / "reports" / f"acom_plan_audit{output_suffix}.json"
+    audit_path = (
+        args.audit_file.resolve()
+        if args.audit_file
+        else V3_REPORT_DIR / f"acom_plan_audit{output_suffix}.json"
+    )
     audit_path.parent.mkdir(parents=True, exist_ok=True)
     audit_path.write_text(
         json.dumps(audit_output, ensure_ascii=False, indent=2),
@@ -403,40 +631,85 @@ def main() -> None:
     predictions: list[dict] = []
     details: list[dict] = []
     prediction_seconds: list[float] = []
-    for sample_index, sample in enumerate(samples):
+    candidate_matrices: list[np.ndarray] = []
+    candidate_correlations: list[np.ndarray] = []
+    candidate_indices: list[np.ndarray] = []
+    candidate_mirrors: list[np.ndarray] = []
+    candidate_angles_deg: list[np.ndarray] = []
+    candidate_strict_errors: list[np.ndarray] = []
+    candidate_friedel_errors: list[np.ndarray] = []
+    candidate_sample_ids: list[str] = []
+    for sample_index, sample in enumerate(matched_samples):
         point_list = make_point_list(sample)
         start = time.perf_counter()
-        orientation = crystal.match_single_pattern(
-            bragg_peaks=point_list,
-            num_matches_return=int(acom["num_matches_return"]),
-            min_number_peaks=int(acom["min_number_peaks"]),
+        candidates = match_topk_distinct_zone_axes(
+            crystal,
+            point_list,
+            n_best=num_matches_return,
+            min_number_peaks=min_number_peaks,
             inversion_symmetry=inversion_symmetry,
-            plot_polar=False,
-            plot_corr=False,
-            verbose=False,
+            min_zone_separation_deg=topk_min_zone_separation_deg,
         )
         seconds = time.perf_counter() - start
         prediction_seconds.append(seconds)
 
         sample_id = sample["sample_id"]
         gt = ground_truth[sample_id]
-        matrix_pred = nearest_rotation(
-            np.asarray(orientation.matrix[0], dtype=float)
+        matrices = np.asarray(candidates["matrix"], dtype=float)
+        if matrices.shape != (num_matches_return, 3, 3):
+            raise RuntimeError(
+                f"{sample_id} returned candidate shape {matrices.shape}; "
+                f"expected {(num_matches_return, 3, 3)}"
+            )
+        matrices = np.stack(
+            [nearest_rotation(matrix) for matrix in matrices], axis=0
         )
+        correlations = np.asarray(candidates["correlation"], dtype=float)
+        indices = np.asarray(candidates["indices"], dtype=np.int32)
+        mirrors = np.asarray(candidates["mirror"], dtype=bool)
+        angles_deg = np.degrees(
+            np.asarray(candidates["angles"], dtype=float)
+        )
+        if (
+            correlations.shape != (num_matches_return,)
+            or indices.shape != (num_matches_return, 2)
+            or mirrors.shape != (num_matches_return,)
+            or angles_deg.shape != (num_matches_return, 3)
+        ):
+            raise RuntimeError(f"{sample_id} returned inconsistent Top-5 arrays")
         matrix_gt = np.asarray(
             gt["orientation_matrix_sample_to_crystal"],
             dtype=float,
         )
-        strict_error = symmetry_aware_misorientation_deg(
-            matrix_pred,
-            matrix_gt,
-            symmetries,
+        strict_errors = np.asarray(
+            [
+                symmetry_aware_misorientation_deg(
+                    matrix, matrix_gt, symmetries
+                )
+                for matrix in matrices
+            ],
+            dtype=float,
         )
-        friedel_error = friedel_aware_misorientation_deg(
-            matrix_pred,
-            matrix_gt,
-            symmetries,
+        friedel_errors = np.asarray(
+            [
+                friedel_aware_misorientation_deg(
+                    matrix, matrix_gt, symmetries
+                )
+                for matrix in matrices
+            ],
+            dtype=float,
         )
+        matrix_pred = matrices[0]
+        strict_error = float(strict_errors[0])
+        friedel_error = float(friedel_errors[0])
+        candidate_sample_ids.append(sample_id)
+        candidate_matrices.append(matrices)
+        candidate_correlations.append(correlations)
+        candidate_indices.append(indices)
+        candidate_mirrors.append(mirrors)
+        candidate_angles_deg.append(angles_deg)
+        candidate_strict_errors.append(strict_errors)
+        candidate_friedel_errors.append(friedel_errors)
         predictions.append(
             {
                 "sample_id": sample_id,
@@ -452,11 +725,11 @@ def main() -> None:
                 "probe_axis_id": gt.get("probe_axis_id"),
                 "probe_offset_deg": gt.get("probe_offset_deg"),
                 "num_peaks": int(len(sample["qx"])),
-                "correlation_score": float(orientation.corr[0]),
-                "zone_axis_plan_index": int(orientation.inds[0, 0]),
-                "in_plane_plan_index": int(orientation.inds[0, 1]),
-                "mirror_match": bool(orientation.mirror[0]),
-                "euler_angles_deg": np.degrees(orientation.angles[0]).tolist(),
+                "correlation_score": float(correlations[0]),
+                "zone_axis_plan_index": int(indices[0, 0]),
+                "in_plane_plan_index": int(indices[0, 1]),
+                "mirror_match": bool(mirrors[0]),
+                "euler_angles_deg": angles_deg[0].tolist(),
                 "prediction_seconds": seconds,
                 "strict_misorientation_deg": float(strict_error),
                 "friedel_equivalent_misorientation_deg": float(friedel_error),
@@ -472,9 +745,12 @@ def main() -> None:
                 ),
             }
         )
-        if (sample_index + 1) % 50 == 0 or sample_index + 1 == len(samples):
+        if (
+            (sample_index + 1) % 50 == 0
+            or sample_index + 1 == len(matched_samples)
+        ):
             print(
-                f"Matched {sample_index + 1}/{len(samples)} samples; "
+                f"Matched {sample_index + 1}/{len(matched_samples)} samples; "
                 f"latest Friedel error={friedel_error:.3f}°"
             )
 
@@ -485,6 +761,60 @@ def main() -> None:
     )
     write_jsonl(submission_path, predictions)
 
+    candidates_path = (
+        args.candidates_file.resolve()
+        if args.candidates_file
+        else V3_REPORT_DIR / f"acom_candidates{output_suffix}.h5"
+    )
+    candidates_path.parent.mkdir(parents=True, exist_ok=True)
+    candidate_arrays = {
+        "orientation_matrix_sample_to_crystal": np.asarray(
+            candidate_matrices, dtype=np.float64
+        ),
+        "correlation": np.asarray(candidate_correlations, dtype=np.float32),
+        "plan_index": np.asarray(candidate_indices, dtype=np.int32),
+        "mirror_match": np.asarray(candidate_mirrors, dtype=np.bool_),
+        "euler_angles_deg": np.asarray(
+            candidate_angles_deg, dtype=np.float64
+        ),
+        "strict_misorientation_deg": np.asarray(
+            candidate_strict_errors, dtype=np.float64
+        ),
+        "friedel_equivalent_misorientation_deg": np.asarray(
+            candidate_friedel_errors, dtype=np.float64
+        ),
+    }
+    with h5py.File(candidates_path, "w") as output:
+        output.attrs["schema"] = "or4d-acom-topk-v1"
+        output.attrs["n_best"] = num_matches_return
+        output.attrs["rank_order"] = "algorithm_correlation_order"
+        output.create_dataset(
+            "sample_id",
+            data=np.asarray(
+                candidate_sample_ids, dtype=h5py.string_dtype("utf-8")
+            ),
+        )
+        output.create_dataset(
+            "rank",
+            data=np.arange(1, num_matches_return + 1, dtype=np.int8),
+        )
+        for name, values in candidate_arrays.items():
+            output.create_dataset(
+                name,
+                data=values,
+                chunks=True,
+                compression="gzip",
+                compression_opts=4,
+            )
+
+    friedel_array = candidate_arrays[
+        "friedel_equivalent_misorientation_deg"
+    ]
+    top_k_metrics = summarize_topk_errors(
+        friedel_array,
+        total_input_samples=len(samples),
+    )
+
     config_path = ROOT / "config" / "benchmark.yaml"
     details_output = {
         "dataset_id": config["dataset"]["id"],
@@ -493,6 +823,26 @@ def main() -> None:
         "acom_angle_step_in_plane_deg": angle_step_in_plane,
         "acom_power_intensity_experiment": power_intensity_experiment,
         "acom_power_intensity_simulated": power_intensity_simulated,
+        "acom_cuda": use_cuda,
+        "k_max_Ainv": k_max,
+        "source_peak_file": str(peak_path),
+        "ground_truth_file": str(gt_path),
+        "ground_truth_id_prefix": args.ground_truth_id_prefix,
+        "orientation_manifest_file": str(manifest_path),
+        "insufficient_peaks_policy": args.insufficient_peaks_policy,
+        "num_input_samples": len(samples),
+        "num_matched_samples": len(matched_samples),
+        "num_indexing_failures": len(insufficient_peak_rows),
+        "num_matches_return": num_matches_return,
+        "candidate_definition": (
+            "Ranked zone-axis-distinct ACOM hypotheses. Every rank is matched "
+            "against the unchanged full peak list; only previously selected "
+            "zone-axis neighbourhoods are masked."
+        ),
+        "topk_min_zone_separation_deg": topk_min_zone_separation_deg,
+        "candidate_file": str(candidates_path),
+        "top_k_metrics": top_k_metrics,
+        "indexing_failures": insufficient_peak_rows,
         "source_git_revision": git_revision(),
         "primary_metric": "friedel_equivalent_misorientation_deg",
         "headline_sample_role": config["evaluation"]["headline_sample_role"],
@@ -528,13 +878,19 @@ def main() -> None:
         ),
         "samples": details,
     }
-    details_path = ROOT / "reports" / f"acom_clean_details{output_suffix}.json"
+    details_path = (
+        args.details_file.resolve()
+        if args.details_file
+        else V3_REPORT_DIR / f"acom_clean_details{output_suffix}.json"
+    )
+    details_path.parent.mkdir(parents=True, exist_ok=True)
     details_path.write_text(
         json.dumps(details_output, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
 
     print(f"Predictions: {submission_path}")
+    print(f"Top-{num_matches_return} candidates: {candidates_path}")
     print(f"Plan audit: {audit_path}")
     print(f"ACOM details: {details_path}")
 

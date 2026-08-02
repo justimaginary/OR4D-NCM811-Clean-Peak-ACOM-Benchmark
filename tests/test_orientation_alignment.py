@@ -109,6 +109,9 @@ class OrientationAlignmentTest(unittest.TestCase):
             atol=1e-12,
         )
         self.assertGreater(reciprocal["cell_volume_A3"], 0.0)
+        self.assertEqual(len(sample["observed"]), sample["num_observed_peaks"])
+        self.assertEqual(len(sample["predicted"]), sample["num_predicted_peaks"])
+        self.assertEqual(len(sample["matches"]), sample["num_matched_peaks"])
 
         friedel = next(row for row in samples if row["label"] == "Friedel branch")
         self.assertEqual(friedel["sample_id"], "clean_core_0061")
@@ -128,6 +131,45 @@ class OrientationAlignmentTest(unittest.TestCase):
             @ np.asarray(friedel["standard_matrix"]).T,
             np.eye(3),
             atol=1.2e-2,
+        )
+
+        median = next(row for row in samples if row["sample_id"] == "clean_core_0530")
+        diagnostics = median["peak_set_diagnostics"]
+        self.assertFalse(median["friedel_used"])
+        self.assertAlmostEqual(
+            median["best_crystal_symmetry_description"]["angle_deg"],
+            0.0,
+            places=6,
+        )
+        self.assertEqual(len(diagnostics["gt_only"]), 3)
+        self.assertEqual(len(diagnostics["acom_only"]), 2)
+        self.assertEqual(
+            {
+                tuple(row["hkl"])
+                for row in diagnostics["gt_only"]
+            },
+            {(0, -3, 0), (-1, 3, 2), (1, 3, -2)},
+        )
+        self.assertTrue(
+            all(
+                row["reason_not_in_other_set"] == "intensity_cutoff"
+                for row in diagnostics["gt_only"] + diagnostics["acom_only"]
+            )
+        )
+        cutoff = diagnostics["raw_intensity_cutoff"]
+        self.assertTrue(
+            all(
+                row["gt"]["raw_intensity"] > cutoff
+                and row["acom"]["raw_intensity"] <= cutoff
+                for row in diagnostics["gt_only"]
+            )
+        )
+        self.assertTrue(
+            all(
+                row["gt"]["raw_intensity"] <= cutoff
+                and row["acom"]["raw_intensity"] > cutoff
+                for row in diagnostics["acom_only"]
+            )
         )
 
     def test_v3_visualization_exposes_001_grid_probe_anomaly(self) -> None:

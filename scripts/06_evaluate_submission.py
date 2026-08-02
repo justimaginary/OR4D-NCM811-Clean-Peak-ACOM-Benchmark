@@ -42,10 +42,18 @@ def summarize(values: np.ndarray, track: str) -> dict:
 def unique_records_by_id(records: list[dict], *, source: str) -> dict[str, dict]:
     result: dict[str, dict] = {}
     for record in records:
-        sample_id = str(record["sample_id"])
+        record_id = record.get("sample_id", record.get("orientation_id"))
+        if record_id is None:
+            raise ValueError(
+                f"Record in {source} has neither sample_id nor orientation_id"
+            )
+        sample_id = str(record_id)
         if sample_id in result:
             raise ValueError(f"Duplicate sample_id in {source}: {sample_id}")
-        result[sample_id] = record
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized.setdefault("track", "clean")
+        result[sample_id] = normalized
     return result
 
 
@@ -101,6 +109,34 @@ def main() -> None:
         type=Path,
         default=ROOT / "reports" / "evaluation.json",
     )
+    parser.add_argument(
+        "--ground-truth-file",
+        type=Path,
+        help=(
+            "Explicit ground-truth JSONL for an external clean dataset. "
+            "Records may use sample_id or orientation_id."
+        ),
+    )
+    parser.add_argument(
+        "--ground-truth-id-prefix",
+        default="",
+        help="Explicit prefix ensured on ground-truth IDs before submission matching.",
+    )
+    parser.add_argument(
+        "--headline-sample-role",
+        help=(
+            "Sample role used for headline metrics. Defaults to the benchmark "
+            "config; use study_001 for the separate V5 [001] dataset."
+        ),
+    )
+    parser.add_argument(
+        "--allow-subset",
+        action="store_true",
+        help=(
+            "Evaluate a strict prediction subset and report missing IDs as "
+            "indexing failures instead of raising an ID-contract error."
+        ),
+    )
     args = parser.parse_args()
 
     config = load_config()
@@ -110,18 +146,52 @@ def main() -> None:
     )
     tracks = ("clean", "dynamical") if args.track == "all" else (args.track,)
     ground_truth_records: list[dict] = []
-    for track in tracks:
-        path = ROOT / "private" / f"{track}_ground_truth.jsonl"
-        if not path.exists():
-            raise FileNotFoundError(f"Missing ground truth for requested track: {path}")
-        ground_truth_records.extend(read_jsonl(path))
-    ground_truth = unique_records_by_id(
+    if args.ground_truth_file:
+        if args.track != "clean":
+            raise ValueError("--ground-truth-file currently supports --track clean")
+        ground_truth_records.extend(read_jsonl(args.ground_truth_file.resolve()))
+    else:
+        for track in tracks:
+            path = ROOT / "private" / f"{track}_ground_truth.jsonl"
+            if not path.exists():
+                raise FileNotFoundError(
+                    f"Missing ground truth for requested track: {path}"
+                )
+            ground_truth_records.extend(read_jsonl(path))
+    ground_truth_unprefixed = unique_records_by_id(
         ground_truth_records,
         source="requested ground-truth tracks",
     )
-    if set(predictions) != set(ground_truth):
-        missing = sorted(set(ground_truth) - set(predictions))
-        extra = sorted(set(predictions) - set(ground_truth))
+    ground_truth: dict[str, dict] = {}
+    for ground_truth_id, record in ground_truth_unprefixed.items():
+        sample_id = (
+            ground_truth_id
+            if (
+                not args.ground_truth_id_prefix
+                or ground_truth_id.startswith(args.ground_truth_id_prefix)
+            )
+            else f"{args.ground_truth_id_prefix}{ground_truth_id}"
+        )
+        normalized = dict(record)
+        normalized["sample_id"] = sample_id
+        normalized["ground_truth_source_id"] = ground_truth_id
+        ground_truth[sample_id] = normalized
+    prediction_ids = set(predictions)
+    ground_truth_ids = set(ground_truth)
+    missing = sorted(ground_truth_ids - prediction_ids)
+    extra = sorted(prediction_ids - ground_truth_ids)
+    if args.allow_subset:
+        if extra:
+            raise ValueError(
+                f"Predictions contain IDs absent from ground truth: {extra}"
+            )
+        if not predictions:
+            raise ValueError("Cannot evaluate an empty prediction subset")
+        ground_truth = {
+            sample_id: ground_truth[sample_id]
+            for sample_id in predictions
+        }
+    elif prediction_ids != ground_truth_ids:
         raise ValueError(
             f"Submission IDs do not exactly match the requested ground truth: "
             f"missing={missing}, extra={extra}"
@@ -165,13 +235,23 @@ def main() -> None:
 
     strict_values = np.asarray(strict_errors, dtype=float)
     primary_values = np.asarray(primary_errors, dtype=float)
-    headline_role = str(config["evaluation"]["headline_sample_role"])
+    headline_role = str(
+        args.headline_sample_role or config["evaluation"]["headline_sample_role"]
+    )
     if args.track == "clean":
         headline_rows = [
             row for row in per_sample if row.get("sample_role") == headline_role
         ]
     else:
         headline_rows = per_sample
+    if not headline_rows:
+        available_roles = sorted(
+            {str(row.get("sample_role", "unspecified")) for row in per_sample}
+        )
+        raise ValueError(
+            f"No samples have headline role {headline_role!r}; "
+            f"available roles={available_roles}. Use --headline-sample-role."
+        )
     headline_primary = np.asarray(
         [row["misorientation_deg"] for row in headline_rows],
         dtype=float,
@@ -190,6 +270,13 @@ def main() -> None:
             else "track_dependent_misorientation_deg"
         ),
         "headline_sample_role": headline_role if args.track == "clean" else None,
+        "coverage": {
+            "num_ground_truth_samples": len(ground_truth_ids),
+            "num_predicted_samples": len(predictions),
+            "prediction_coverage": len(predictions) / len(ground_truth_ids),
+            "num_indexing_failures": len(missing),
+            "missing_sample_ids": missing,
+        },
         "metrics": summarize(headline_primary, args.track),
         "metrics_strict": summarize(headline_strict, args.track),
         "metrics_all_samples": summarize(primary_values, args.track),

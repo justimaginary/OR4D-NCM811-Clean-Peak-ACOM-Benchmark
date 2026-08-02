@@ -1,0 +1,18 @@
+{
+  "schema": "or4d-runtime-paths-v1",
+  "clean_python": {
+    "environment_name": "or4d-clean",
+    "candidate_executables": [
+      "/home/xietianhong/miniconda3/envs/or4d-clean/bin/python",
+      "/opt/anaconda3/envs/or4d-clean/bin/python"
+    ]
+  },
+  "reports": {
+    "v3": "reports/v3",
+    "v4": "reports/v4",
+    "v5": "reports/v5"
+  },
+  "v5": {
+    "server_data_root": "/mnt/data/xietianhong/or4d-clean-v5"
+  }
+}

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import os
 import sys
 from collections import Counter
 from pathlib import Path
@@ -20,13 +21,16 @@ from or4d_common import (  # noqa: E402
 
 CONFIG_PATH = ROOT / "config" / "benchmark.yaml"
 TRACE_PATH = ROOT / "diagnostics" / "clean_coordinate_trace.jsonl.gz"
-DETAILS_PATH = ROOT / "reports" / "acom_clean_details.json"
-PLAN_AUDIT_PATH = ROOT / "reports" / "acom_plan_audit.json"
-OUTPUT_PATH = ROOT / "reports" / "ACOM_COORDINATE_VISUALIZATION.html"
+REPORT_DIR = Path(
+    os.environ.get("OR4D_REPORT_V3_DIR", ROOT / "reports" / "v3")
+).resolve()
+DETAILS_PATH = REPORT_DIR / "acom_clean_details.json"
+PLAN_AUDIT_PATH = REPORT_DIR / "acom_plan_audit.json"
+OUTPUT_PATH = REPORT_DIR / "ACOM_COORDINATE_VISUALIZATION.html"
 EVALUATION_PATHS = {
-    4.0: ROOT / "reports" / "acom_clean_evaluation_angle_4deg.json",
-    3.0: ROOT / "reports" / "acom_clean_evaluation_angle_3deg.json",
-    2.0: ROOT / "reports" / "acom_clean_evaluation.json",
+    4.0: REPORT_DIR / "acom_clean_evaluation_angle_4deg.json",
+    3.0: REPORT_DIR / "acom_clean_evaluation_angle_3deg.json",
+    2.0: REPORT_DIR / "acom_clean_evaluation.json",
 }
 
 
@@ -274,10 +278,86 @@ def symmetry_description(matrix: np.ndarray) -> dict:
     }
 
 
+def diffraction_inclusion_model(config: dict, structure: Structure) -> dict:
+    """Reproduce py4DSTEM's v3 reflection inclusion test for diagnostics."""
+    import py4DSTEM
+    from py4DSTEM.process.utils import electron_wavelength_angstrom
+
+    common = config["common"]
+    clean = config["clean"]
+    crystal = py4DSTEM.process.diffraction.Crystal.from_pymatgen_structure(
+        structure=structure,
+        conventional_standard_structure=False,
+    )
+    voltage = float(common["accelerating_voltage_V"])
+    crystal.setup_diffraction(accelerating_voltage=voltage)
+    crystal.calculate_structure_factors(
+        k_max=float(common["k_max_Ainv"]),
+        tol_structure_factor=float(clean["tol_structure_factor"]),
+    )
+    structure_factor_intensity = {
+        tuple(int(value) for value in hkl): float(intensity)
+        for hkl, intensity in zip(
+            np.asarray(crystal.hkl).T,
+            np.asarray(crystal.struct_factors_int),
+        )
+    }
+    sigma = float(clean["sigma_excitation_error_Ainv"])
+    return {
+        "wavelength_A": float(electron_wavelength_angstrom(voltage)),
+        "sigma_excitation_error_Ainv": sigma,
+        "excitation_error_cutoff_Ainv": (
+            sigma * float(clean["tol_excitation_error_mult"])
+        ),
+        "raw_intensity_cutoff": float(clean["tol_intensity"]),
+        "structure_factor_intensity": structure_factor_intensity,
+    }
+
+
+def reflection_inclusion_diagnostic(
+    hkl: list[int],
+    reciprocal_matrix: np.ndarray,
+    orientation_matrix: np.ndarray,
+    model: dict,
+) -> dict:
+    hkl_tuple = tuple(int(value) for value in hkl)
+    g_crystal = np.asarray(hkl_tuple, dtype=float) @ reciprocal_matrix
+    g_sample = orientation_matrix.T @ g_crystal
+    wavelength = float(model["wavelength_A"])
+    excitation_error = float(
+        (2.0 * g_sample[2] - wavelength * np.dot(g_sample, g_sample))
+        / (2.0 - 2.0 * wavelength * g_sample[2])
+    )
+    structure_factor_intensity = float(
+        model["structure_factor_intensity"].get(hkl_tuple, 0.0)
+    )
+    sigma = float(model["sigma_excitation_error_Ainv"])
+    raw_intensity = float(
+        structure_factor_intensity
+        * np.exp(-(excitation_error**2) / (2.0 * sigma**2))
+    )
+    excitation_pass = bool(
+        abs(excitation_error)
+        <= float(model["excitation_error_cutoff_Ainv"])
+    )
+    intensity_pass = bool(
+        raw_intensity > float(model["raw_intensity_cutoff"])
+    )
+    return {
+        "excitation_error_Ainv": excitation_error,
+        "structure_factor_intensity": structure_factor_intensity,
+        "raw_intensity": raw_intensity,
+        "excitation_pass": excitation_pass,
+        "intensity_pass": intensity_pass,
+        "included": excitation_pass and intensity_pass,
+    }
+
+
 def compact_trace(
     row: dict,
     label: str,
     symmetries: list[np.ndarray],
+    inclusion_model: dict,
 ) -> dict:
     standard_matrix = np.asarray(
         row["standard_orientation_matrix_sample_to_crystal"],
@@ -351,7 +431,7 @@ def compact_trace(
         enumerate(row["acom_simulated_reflections"]),
         key=lambda item: item[1]["reported_by_py4DSTEM_intensity_normalized"],
         reverse=True,
-    )[:12]
+    )
     observed_index = {
         original_index: compact_index
         for compact_index, (original_index, _) in enumerate(observed_ranked)
@@ -423,6 +503,42 @@ def compact_trace(
         for match in row["detector_q_assignment"]["matches"]
         if match["observed_index"] in observed_index
         and match["predicted_index"] in predicted_index
+    ]
+    matched_observed = {match["observed"] for match in matches}
+    matched_predicted = {match["predicted"] for match in matches}
+
+    def unmatched_record(peak: dict, *, compare_to: str) -> dict:
+        gt_diagnostic = reflection_inclusion_diagnostic(
+            peak["hkl"], reciprocal_matrix, standard_matrix, inclusion_model
+        )
+        acom_diagnostic = reflection_inclusion_diagnostic(
+            peak["hkl"], reciprocal_matrix, acom_matrix, inclusion_model
+        )
+        other = acom_diagnostic if compare_to == "acom" else gt_diagnostic
+        if not other["excitation_pass"]:
+            reason = "excitation_error_cutoff"
+        elif not other["intensity_pass"]:
+            reason = "intensity_cutoff"
+        else:
+            reason = "q_assignment_or_symmetry_relabeling"
+        return {
+            "hkl": peak["hkl"],
+            "q": peak["q"],
+            "display_intensity_normalized": peak["intensity"],
+            "gt": gt_diagnostic,
+            "acom": acom_diagnostic,
+            "reason_not_in_other_set": reason,
+        }
+
+    gt_only = [
+        unmatched_record(peak, compare_to="acom")
+        for index, peak in enumerate(observed)
+        if index not in matched_observed
+    ]
+    acom_only = [
+        unmatched_record(peak, compare_to="gt")
+        for index, peak in enumerate(predicted)
+        if index not in matched_predicted
     ]
     return rounded(
         {
@@ -518,6 +634,19 @@ def compact_trace(
             "observed": observed,
             "predicted": predicted,
             "matches": matches,
+            "peak_set_diagnostics": {
+                "sigma_excitation_error_Ainv": inclusion_model[
+                    "sigma_excitation_error_Ainv"
+                ],
+                "excitation_error_cutoff_Ainv": inclusion_model[
+                    "excitation_error_cutoff_Ainv"
+                ],
+                "raw_intensity_cutoff": inclusion_model[
+                    "raw_intensity_cutoff"
+                ],
+                "gt_only": gt_only,
+                "acom_only": acom_only,
+            },
         }
     )
 
@@ -526,6 +655,7 @@ def load_samples() -> list[dict]:
     config = parse_config()
     structure = Structure.from_file(ROOT / config["dataset"]["cif_path"])
     symmetries = proper_point_group_rotations(structure)
+    inclusion_model = diffraction_inclusion_model(config, structure)
     selected_ids = representative_ids()
     base_labels = ("Best", "Median", "P95", "Worst")
     labels = {}
@@ -546,6 +676,7 @@ def load_samples() -> list[dict]:
                     row,
                     labels[sample_id],
                     symmetries,
+                    inclusion_model,
                 )
     missing = sorted(set(selected_ids) - set(selected))
     if missing:
@@ -708,6 +839,8 @@ button:focus-visible, select:focus-visible { outline: 3px solid var(--series-1);
 .legend { color: var(--muted-foreground); font-weight: 400; }
 .dot { width: 10px; height: 10px; border: 2px solid var(--series-1); border-radius: 50%; }
 .cross { color: var(--series-2); font-size: 20px; line-height: 1; }
+.dot.unmatched { border-color: #d97706; border-width: 3px; }
+.cross.unmatched { color: #dc2626; font-weight: 700; }
 .line { width: 20px; border-top: 2px solid var(--series-1); }
 .line.acom { border-top-color: var(--series-2); border-top-style: dashed; }
 svg { display: block; width: 100%; height: auto; color: var(--foreground); }
@@ -778,7 +911,10 @@ tbody tr.is-selected { background: #eef4ff; }
 <main>
   <header class="page-header">
     <h1>Clean v3 坐标与倒空间中间变量</h1>
-    <a class="page-switch" href="CLEAN_IMAGE_ACOM_VISUALIZATION.html">进入二维衍射图版本 →</a>
+    <div>
+      <a class="page-switch" href="../v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html">V4 · 二维衍射图</a>
+      <a class="page-switch" href="../v5/ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量、噪声与 Top‑5 →</a>
+    </div>
   </header>
   <section class="overview">
     <div class="overview-head">
@@ -941,6 +1077,14 @@ tbody tr.is-selected { background: #eef4ff; }
       <div id="axes-note" class="plot-note"></div>
     </section>
   </div>
+  <details class="parameters" id="peak-set-diagnostics" open>
+    <summary>为什么存在仅 GT / 仅 ACOM 的峰？ / Peak-set differences</summary>
+    <p id="peak-set-summary"></p>
+    <div class="table-wrap"><table>
+      <thead><tr><th>集合</th><th>HKL</th><th>q (Å⁻¹)</th><th>s<sub>g</sub> GT / ACOM (Å⁻¹)</th><th>未归一化 I<sub>raw</sub> GT / ACOM</th><th>原因</th></tr></thead>
+      <tbody id="peak-set-rows"></tbody>
+    </table></div>
+  </details>
   <div class="reflection-control">
     <label for="reflection"><strong>选择一个 GT 反射做坐标诊断</strong></label>
     <select id="reflection"></select>
@@ -1006,6 +1150,7 @@ const vector = values => `[${values.map(value => Number(value).toFixed(4)).join(
 const matrix = values => values.map(vector).join("\\n");
 const preciseVector = values => `[${values.map(value => Number(value).toFixed(8)).join(", ")}]`;
 const preciseMatrix = values => values.map(preciseVector).join("\\n");
+const scientific = value => Number(value).toExponential(3);
 const qPixelsPerAinv = 165 / kMaxAinv;
 const qX = value => 280 + value * qPixelsPerAinv;
 const qY = value => 200 - value * qPixelsPerAinv;
@@ -1218,7 +1363,9 @@ function renderViewTabs() {
   const showACOM = displayMode !== "gt";
   document.getElementById("detector-legend").innerHTML =
     `${showGT ? '<i class="dot"></i>GT 观测峰' : ''}` +
-    `${showACOM ? '<i class="cross">×</i>ACOM 预测峰' : ''}`;
+    `${showACOM ? '<i class="cross">×</i>ACOM 预测峰' : ''}` +
+    `${showGT ? '<i class="dot unmatched"></i>仅 GT' : ''}` +
+    `${showACOM ? '<i class="cross unmatched">×</i>仅 ACOM' : ''}`;
   document.getElementById("axes-legend").innerHTML =
     `${showGT ? '<i class="line"></i>R<sup>GT</sup>' : ''}` +
     `${showACOM ? `<i class="line acom"></i>R<sup>ACOM ${orientationModeLabel()}</sup>` : ''}`;
@@ -1251,10 +1398,12 @@ function renderOrientationTabs(sample) {
 }
 
 function renderDetector(sample) {
-  const plottedObserved = sample.observed.slice(0, 12).map((peak, index) => ({peak, index}));
-  if (reflectionIndex >= 12) {
-    plottedObserved.push({peak: sample.observed[reflectionIndex], index: reflectionIndex});
-  }
+  const plottedObserved = sample.observed.map((peak, index) => ({peak, index}));
+  const visibleObserved = new Set(plottedObserved.map(item => item.index));
+  const plottedMatches = sample.matches.filter(match => visibleObserved.has(match.observed));
+  const plottedPredicted = sample.predicted.map((peak, index) => ({peak, index}));
+  const matchedObserved = new Set(plottedMatches.map(match => match.observed));
+  const matchedPredicted = new Set(plottedMatches.map(match => match.predicted));
   let markup = `
     <line x1="82" y1="200" x2="500" y2="200" stroke="var(--border)"/>
     <line x1="280" y1="22" x2="280" y2="378" stroke="var(--border)"/>
@@ -1262,7 +1411,7 @@ function renderDetector(sample) {
     <text x="495" y="222" text-anchor="end" fill="var(--muted-foreground)">qₓ (Å⁻¹)</text>
     <text x="290" y="36" fill="var(--muted-foreground)">qᵧ (Å⁻¹)</text>`;
   if (displayMode === "overlay") {
-    sample.matches.filter(match => match.observed < 12).forEach(match => {
+    plottedMatches.forEach(match => {
       const observed = sample.observed[match.observed];
       const predicted = sample.predicted[match.predicted];
       markup += `<line x1="${qX(observed.q[0])}" y1="${qY(observed.q[1])}" x2="${qX(predicted.q[0])}" y2="${qY(predicted.q[1])}" stroke="var(--border)"/>`;
@@ -1272,21 +1421,57 @@ function renderDetector(sample) {
     plottedObserved.forEach(({peak, index}) => {
       const radius = 4 + 7 * Math.sqrt(peak.intensity);
       const selected = index === reflectionIndex;
-      markup += `<circle cx="${qX(peak.q[0])}" cy="${qY(peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${selected ? "var(--series-3)" : "var(--series-1)"}" stroke-width="${selected ? 3 : 1.8}"><title>GT 观测反射 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
+      const matched = matchedObserved.has(index);
+      const stroke = selected ? "var(--series-3)" : matched ? "var(--series-1)" : "#d97706";
+      markup += `<circle cx="${qX(peak.q[0])}" cy="${qY(peak.q[1])}" r="${selected ? radius + 3 : radius}" fill="none" stroke="${stroke}" stroke-width="${selected || !matched ? 3 : 1.8}"><title>${matched ? "已匹配" : "仅 GT"} · HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></circle>`;
     });
   }
   if (displayMode !== "gt") {
-    sample.predicted.forEach(peak => {
+    plottedPredicted.forEach(({peak, index}) => {
       const x = qX(peak.q[0]);
       const y = qY(peak.q[1]);
       const size = 4 + 6 * Math.sqrt(peak.intensity);
-      markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="var(--series-2)" stroke-width="2"><title>ACOM 模拟预测反射 HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
+      const matched = matchedPredicted.has(index);
+      markup += `<path d="M ${x-size} ${y-size} L ${x+size} ${y+size} M ${x-size} ${y+size} L ${x+size} ${y-size}" stroke="${matched ? "var(--series-2)" : "#dc2626"}" stroke-width="${matched ? 2 : 3}"><title>${matched ? "已匹配" : "仅 ACOM"} · 预测反射 #${index + 1} · HKL ${peak.hkl.join(",")} · I=${peak.intensity}</title></path>`;
     });
   }
   detector.innerHTML = markup;
-  const modeText = displayMode === "gt" ? "GT 观测峰" : displayMode === "acom" ? "ACOM 预测峰" : "GT 与 ACOM 叠加";
+  const modeText = displayMode === "gt" ? "全部 GT 观测峰" : displayMode === "acom" ? "全部 ACOM 预测峰" : "全部 GT 与 ACOM 峰叠加";
   document.getElementById("detector-note").textContent =
-    `当前显示：${modeText}（强度前 12）；诊断选择为 GT HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
+    `当前显示：${modeText}；GT ${sample.num_observed_peaks} 个，ACOM ${sample.num_predicted_peaks} 个，` +
+    `一对一匹配 ${sample.num_matched_peaks} 个（全部峰均显示）。诊断选择为 GT HKL [${sample.observed[reflectionIndex].hkl.join(", ")}]`;
+}
+
+function renderPeakSetDiagnostics(sample) {
+  const diagnostics = sample.peak_set_diagnostics;
+  const gtOnly = diagnostics.gt_only;
+  const acomOnly = diagnostics.acom_only;
+  const noEquivalentBranch = !sample.friedel_used && Math.abs(sample.best_crystal_symmetry_description.angle_deg) < 1e-6;
+  const reasonLabels = {
+    intensity_cutoff: "另一取向下 Iraw ≤ 数值阈值",
+    excitation_error_cutoff: "另一取向下 |sg| 超过截断",
+    q_assignment_or_symmetry_relabeling: "两集合均保留；未通过 q 一对一分配/需对称重标号",
+  };
+  document.getElementById("peak-set-summary").innerHTML =
+    `<b>当前样本完整显示：</b>匹配 ${sample.num_matched_peaks}，仅 GT ${gtOnly.length}，仅 ACOM ${acomOnly.length}。` +
+    `${noEquivalentBranch ? "该样本没有使用晶体对称操作或 Friedel branch；" : "取向指标已做对称/Friedel 等价搜索；"}` +
+    `孤立标记不是漏画或坐标轴未对齐。v3 会分别用 GT 与 ACOM 取向重新生成峰表，并以 ` +
+    `<code>|s<sub>g</sub>| ≤ ${diagnostics.excitation_error_cutoff_Ainv.toFixed(3)} Å⁻¹</code>、` +
+    `<code>I<sub>raw</sub> &gt; ${scientific(diagnostics.raw_intensity_cutoff)}</code> 裁剪。` +
+    `<b>强度阈值是数值稀疏化参数，不是材料或探测器的物理临界强度。</b>`;
+  const rows = [
+    ...gtOnly.map(row => ({...row, setLabel: "仅 GT"})),
+    ...acomOnly.map(row => ({...row, setLabel: "仅 ACOM"})),
+  ];
+  document.getElementById("peak-set-rows").innerHTML = rows.length
+    ? rows.map(row =>
+      `<tr><td>${row.setLabel}</td><td>[${row.hkl.join(", ")}]</td>` +
+      `<td>[${row.q.map(value => value.toFixed(4)).join(", ")}]</td>` +
+      `<td>${row.gt.excitation_error_Ainv.toFixed(5)} / ${row.acom.excitation_error_Ainv.toFixed(5)}</td>` +
+      `<td>${scientific(row.gt.raw_intensity)} / ${scientific(row.acom.raw_intensity)}</td>` +
+      `<td>${reasonLabels[row.reason_not_in_other_set]}</td></tr>`
+    ).join("")
+    : '<tr><td colspan="6">GT 与 ACOM 的全部峰均完成一对一匹配。</td></tr>';
 }
 
 function renderAxes(sample) {
@@ -1477,6 +1662,7 @@ function render() {
     `<option value="${index}" ${index === reflectionIndex ? "selected" : ""}>GT HKL [${esc(peak.hkl.join(", "))}] · I=${peak.intensity.toFixed(3)}</option>`
   ).join("");
   renderDetector(sample);
+  renderPeakSetDiagnostics(sample);
   renderAxes(sample);
   renderTransform(sample);
   renderReflectionTable(sample);

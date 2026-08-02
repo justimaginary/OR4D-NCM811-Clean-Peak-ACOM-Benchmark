@@ -1,0 +1,127 @@
+dataset:
+  id: OR4D-NCM811-CleanImage-v5
+  description: Friedel-canonical Clean image benchmark with 2048 headline orientations.
+  expected_sample_counts:
+    legacy_smoke: 0
+    headline_core: 2048
+    acom_grid_probe: 0
+  expected_num_orientations: 2048
+
+legacy_manual:
+  enabled: false
+
+legacy_so3_sampling:
+  enabled: false
+
+clean_sampling:
+  headline_core:
+    count: 2048
+    orientation_id_prefix: v5_core_
+    canonicalize_friedel: true
+  acom_grid_probes:
+    enabled: false
+
+clean_image:
+  forward_model: coherent_first_born
+  pyxem_template_matching:
+    package_version: "0.21.0"
+    orientation_resolution_deg: 2.0
+    in_plane_resolution_deg: 2.0
+    reciprocal_radius_Ainv: 1.5
+    max_excitation_error_Ainv: 0.06
+    shape_factor_model: sin2c
+    shape_factor_minima: 3
+    minimum_relative_intensity: 0.0001
+    intensity_power: 0.25
+    central_beam_exclusion_Ainv: 0.03
+    frac_keep: 0.1
+    n_best: 5
+    batch_size: 128
+    precision: float32
+    target: gpu
+  cuda_first_born:
+    batch_size: 16
+    complex_dtype: complex64
+  py4dstem_find_bragg_disks:
+    normalize_for_detection: max
+    min_absolute_intensity: 1.0e-8
+  cuda_xcorr_poly:
+    method: batched_cuda_xcorr_polynomial_subpixel
+    batch_size: 512
+    normalize_for_detection: max
+    sigma_cc: 1.0
+    min_absolute_intensity: 1.0e-8
+    min_relative_intensity: 1.0e-12
+    min_peak_spacing_px: 5
+    edge_boundary_px: 0
+    max_num_peaks: 256
+    integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
+  dog_rgm:
+    dog_min_sigma_px: 2.0
+    dog_max_sigma_px: 8.0
+    dog_sigma_ratio: 1.4
+    threshold_abs: 0.001
+    overlap: 0.5
+    min_peak_spacing_px: 5
+    rgm_search_radius_px: 1.0
+    rgm_search_step_px: 0.1
+    rgm_inner_radius_fraction: 0.8
+    rgm_split_radius_fraction: 1.0
+    rgm_outer_radius_fraction: 1.2
+    integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
+    max_num_peaks: 256
+  counting:
+    model: poisson_expected_total
+    doses_electrons: [100, 300, 1000, 3000, 10000, 30000, 100000, 300000, 1000000]
+    repeats: 5
+    seed_base: 24052026
+  instrument_noise:
+    model: empad_g2_gaussian_read_noise_after_frame_sum
+    reference_detector: EMPAD-G2
+    reference_beam_energy_keV: 300.0
+    reference_read_noise_keV_rms_per_pixel: 2.6
+    reference_read_noise_primary_e_rms_per_pixel: 0.008666666666666666
+    reference_dqe_zero_frequency: 0.94
+    reference_charge_spread_fwhm_px: 1.34
+    source_doi: 10.1017/S1431927621013701
+    seed_base: 19082026
+    levels:
+      - id: noiseless
+        poisson_shot_noise: false
+        summed_frame_count: 0
+      - id: poisson_only
+        poisson_shot_noise: true
+        summed_frame_count: 0
+      - id: empad_g2_1frame
+        poisson_shot_noise: true
+        summed_frame_count: 1
+      - id: empad_g2_4frames
+        poisson_shot_noise: true
+        summed_frame_count: 4
+      - id: empad_g2_16frames
+        poisson_shot_noise: true
+        summed_frame_count: 16
+      - id: empad_g2_64frames
+        poisson_shot_noise: true
+        summed_frame_count: 64
+
+v5:
+  schema_version: clean-v5.1
+  config_name: benchmark_v5
+  headline_sample_count: 2048
+  trace_intermediates: true
+  large_artifacts_server_only: true
+  study_001:
+    enabled: true
+    sample_count: 512
+    exact_001_count: 32
+    local_tilt_deg: [0.125, 0.25, 0.5, 1.0, 2.0]
+    local_tilt_azimuth_count: 8
+    local_in_plane_count: 8
+    transition_tilt_deg: [3.0, 4.0, 6.0]
+    transition_azimuth_count: 8
+    transition_in_plane_count: 4
+    control_100_count: 32
+    control_110_count: 32

@@ -1,0 +1,27 @@
+{
+  "expectation_file": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_expectation_2048.h5",
+  "output": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_first_born_dose_noiseless_2048.h5",
+  "samples": 2048,
+  "shape": [
+    2048,
+    9,
+    512,
+    512
+  ],
+  "doses_electrons": [
+    100,
+    300,
+    1000,
+    3000,
+    10000,
+    30000,
+    100000,
+    300000,
+    1000000
+  ],
+  "noise_model": "none",
+  "total_seconds": 154.76222326804418,
+  "git_commit": "e3e48dc40167f4bfde646366cb8a5479889ab7e1",
+  "source_sha256": "4199f2f32967784244b3edb8ae788f2b6dfdd674c8c90e23cd8ed0277b5af6e9",
+  "output_sha256": "7b59115ae585ed2c00f41df3acf49f970cd05689e6420ecc82fee0cfc9cfc0a4"
+}
