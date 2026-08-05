@@ -134,6 +134,17 @@ checkpoints/
 pyxem_templates/
 *pyxem_template_library*.pickle
 
+# V6 large datasets, compressed observation shards, detector peaks and ACOM
+# row-level outputs live only under /mnt/data/xietianhong/or4d-clean-v6.
+public/clean_v6_*.h5
+diagnostics/clean_v6_*.h5
+diagnostics/v6_*/
+reports/v6/full_results/
+v6_artifacts/
+observations/
+peaks/v6/
+acom/v6/
+
 # Timing / profiling / debug dumps
 *.prof
 *.profile

@@ -1,0 +1,154 @@
+dataset:
+  id: OR4D-NCM811-CleanImage-v6
+  description: 16384 independent symmetry/Friedel-canonical Clean orientations.
+  headline_sample_role: headline_core
+  expected_sample_counts:
+    headline_core: 16384
+  expected_num_orientations: 16384
+
+legacy_manual:
+  enabled: false
+
+legacy_so3_sampling:
+  enabled: false
+
+clean_sampling:
+  headline_core:
+    enabled: true
+    count: 16384
+    orientation_id_prefix: v6_core_
+    method: haar_uniform_so3
+    seed: 26080501
+    canonicalize_crystal_symmetry: true
+    canonicalize_friedel: true
+    canonical_quaternion_decimals: 12
+    duplicate_tolerance_deg: 0.000001
+    dedup_query_initial_neighbors: 8
+    distribution_euler_sequence: ZYZ
+  acom_grid_probes:
+    enabled: false
+
+common:
+  accelerating_voltage_V: 300000.0
+  k_max_Ainv: 1.5
+  central_beam_exclusion_Ainv: 0.03
+
+clean_image:
+  forward_model: coherent_first_born
+  gpts: [512, 512]
+  q_max_Ainv: 1.6
+  convergence_semiangle_mrad: 1.2
+  thickness_nm: 5.0
+  cuda_first_born:
+    batch_size: 16
+  counting:
+    model: poisson_expected_total_from_areal_dose
+    doses_e_per_A2: [0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 1000.0]
+    stochastic_repeats: 3
+    seed_base: 26080502
+    rng_algorithm: PCG64
+  instrument_noise:
+    model: empad_g2_gaussian_read_noise_after_frame_sum
+    reference_detector: EMPAD-G2
+    reference_beam_energy_keV: 300.0
+    reference_read_noise_keV_rms_per_pixel: 2.6
+    reference_read_noise_primary_e_rms_per_pixel: 0.008666666666666666
+    source_doi: 10.1017/S1431927621013701
+    seed_base: 26080503
+    levels:
+      - id: deterministic_count
+        poisson_shot_noise: false
+        summed_frame_count: 0
+        stochastic_repeats: 1
+      - id: poisson_shot
+        poisson_shot_noise: true
+        summed_frame_count: 0
+        stochastic_repeats: 3
+      - id: empad_g2_1frame
+        poisson_shot_noise: true
+        summed_frame_count: 1
+        stochastic_repeats: 3
+      - id: empad_g2_16frame_fixed_total_dose
+        poisson_shot_noise: true
+        summed_frame_count: 16
+        stochastic_repeats: 3
+
+v6:
+  schema_version: clean-v6.0
+  config_name: benchmark_v6
+  headline_orientation_count: 16384
+  trace_intermediates: true
+  large_artifacts_server_only: true
+  study_001:
+    enabled: true
+    included_in_headline_count: false
+  effective_probe_area:
+    definition: intensity_participation_ratio
+    real_space_oversampling: 4
+    integration_extent_factor: 8.0
+    normalization_tolerance: 1.0e-7
+  observation_store:
+    root: /mnt/data/xietianhong/or4d-clean-v6
+    soft_quota_GB: 450.0
+    physical_sample_shard_size: 128
+    dense_codec: zstd
+    dense_codec_level: 5
+    shuffle: bitshuffle
+    sparse_codec: zstd
+    sparse_codec_level: 5
+    sparse_switch_fraction: 0.35
+    persist_expectation: true
+    persist_poisson_realizations: true
+    factorize_deterministic_counts: true
+    factorize_read_noise: true
+    reconstruction_audit_samples_per_shard: 2
+  ubragg_x:
+    repository_commit: 3d9ea14
+    checkpoint_path: /mnt/data/xietianhong/UBragg/runs/ubragg-x-noise-v2-ddp/best.pt
+    checkpoint_size_bytes: 12421769
+    checkpoint_sha256: e327c466cb2e483aa3c0bf1767692e4827b212c3c21aeb6835b74d17018efb27
+    score_threshold: 0.5
+    batch_size_candidates: [1, 2, 4]
+    output_covariance: true
+    use_covariance_in_acom: false
+  gpu_backends:
+    first_born: cupy
+    poisson: cupy
+    find_bragg_disks: py4dstem_cuda_batched
+    ubragg_x: pytorch_cuda
+    autodisk: cupy_equivalent_or_cpu
+    dog_rgm: cupy_equivalent_or_cpu
+    equivalence_position_tolerance_px: 0.001
+    equivalence_intensity_rtol: 0.0001
+  runtime:
+    server_id: SL3053
+    conda_environment: or4d-clean
+    max_gpus: 4
+    require_empty_gpu: true
+    max_cpu_threads_total: 32
+    max_cpu_threads_per_gpu_at_four_gpus: 8
+    dataloader_workers_total: 16
+    prefetch_factor: 2
+    progress_every_patterns: 256
+    resume: true
+  acom:
+    cuda: true
+    angle_step_zone_axis_deg: 2.0
+    angle_step_in_plane_deg: 2.0
+    num_matches_return: 5
+    insufficient_peaks_policy: skip
+    shard_condition_balancing: true
+  evaluation:
+    peak_match_tolerance_px: 2.0
+    high_angle_radius_fraction: 0.75
+    orientation_accuracy_thresholds_deg: [1.0, 2.0, 5.0]
+    catastrophic_error_threshold_deg: 5.0
+    polar_metrics:
+      enabled: true
+      beam_axis_sample: [0.0, 0.0, 1.0]
+      polar_reference_crystal_axis: [0.0, 0.0, 1.0]
+      azimuth_reference_crystal_axis: [1.0, 0.0, 0.0]
+      azimuth_valid_min_tilt_deg: 1.0
+      beam_accuracy_thresholds_deg: [1.0, 2.0, 5.0]
+      azimuth_accuracy_thresholds_deg: [2.0, 5.0, 10.0]
+
