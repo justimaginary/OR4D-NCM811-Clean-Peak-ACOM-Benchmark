@@ -1665,6 +1665,13 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 <section class="section physics-scope" aria-labelledby="physics-scope-title">
  <h2 id="physics-scope-title">V5 图像模型的物理范围 / Physical scope</h2>
  <p class="section-intro">V5 使用 coherent First‑Born 运动学 CBED。有限厚度通过反射振幅中的形状因子进入图像；该模型不是 multislice，也不包含多重散射。</p>
+ <div class="grid2" style="margin:14px 0">
+  <div class="panel"><h3>First‑Born：一阶单次散射</h3><p>First‑Born 近似把样品势当作弱扰动，只保留入射电子被晶体散射一次的项。它适合用来建立 Clean 的运动学基线，但不描述电子在晶体内继续散射形成的 dynamical / multislice 效应。</p><div class="formula">入射波 → 一次晶体散射 → 出射波
+不包含：散射 → 散射 → 散射</div></div>
+  <div class="panel"><h3>coherent：复振幅相干叠加</h3><p>每个反射先以带相位的复数振幅表示，再相加并取模平方。不同反射之间的干涉因此保留；这不同于先分别算强度再直接相加。</p><div class="formula">A(q) = Σ<sub>g</sub> A<sub>g</sub>(q)
+I(q) = |A(q)|²
+非相干近似：I(q) = Σ<sub>g</sub> |A<sub>g</sub>(q)|²</div></div>
+ </div>
  <div class="grid2">
   <div class="panel">
    <h3>当前生成中实际使用的因素</h3>
