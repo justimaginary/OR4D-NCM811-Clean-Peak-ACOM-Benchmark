@@ -160,7 +160,11 @@ def image_data_url(
     ).decode("ascii")
 
 
-def difference_data_url(array: np.ndarray) -> str:
+def difference_data_url(
+    array: np.ndarray,
+    *,
+    ceiling: float | None = None,
+) -> str:
     """Render a non-negative residual with a white-to-red scale.
 
     This is a display-only image for comparing a counted realization with its
@@ -168,7 +172,11 @@ def difference_data_url(array: np.ndarray) -> str:
     """
     values = np.maximum(np.asarray(array, dtype=np.float64), 0.0)
     positive = values[values > 0]
-    ceiling = float(np.percentile(positive, 99.7)) if positive.size else 1.0
+    ceiling = (
+        float(ceiling)
+        if ceiling is not None
+        else (float(np.percentile(positive, 99.7)) if positive.size else 1.0)
+    )
     normalized = np.clip(values / max(ceiling, 1e-12), 0.0, 1.0) ** 0.55
     rgb = np.empty((*normalized.shape, 3), dtype=np.uint8)
     rgb[..., 0] = (255 - 35 * normalized).astype(np.uint8)
@@ -587,7 +595,12 @@ def build_noise_gallery(
                 dtype=np.float32,
             )
             normalized_sampled = sampled / max(float(dose_value), 1.0)
-            residual = np.abs(normalized_sampled - probability)
+            expected_residual = np.abs(
+                np.asarray(expected, dtype=np.float64)
+                / max(float(dose_value), 1.0)
+                - probability
+            )
+            sampled_residual = np.abs(normalized_sampled - probability)
             comparison_arrays.append(
                 {
                     "id": f"dose_{dose_value}_noiseless",
@@ -597,7 +610,7 @@ def build_noise_gallery(
                         "同时给出绝对计数和归一化结构。"
                     ),
                     "values": expected,
-                    "difference_values": residual,
+                    "difference_values": expected_residual,
                     "dose_electrons": dose_value,
                     "kind": "noiseless",
                 }
@@ -611,7 +624,7 @@ def build_noise_gallery(
                         " |n/Nₑ − P(q)|。"
                     ),
                     "values": sampled,
-                    "difference_values": residual,
+                    "difference_values": sampled_residual,
                     "dose_electrons": dose_value,
                     "kind": "poisson",
                 }
@@ -651,6 +664,18 @@ def build_noise_gallery(
                 "read_noise_sigma_e_rms_per_pixel": sigma,
             }
         )
+    residual_values = [
+        np.asarray(item["difference_values"], dtype=np.float64)
+        for item in comparison_arrays
+    ]
+    residual_positive = np.concatenate(
+        [values[values > 0] for values in residual_values if np.any(values > 0)]
+    ) if any(np.any(values > 0) for values in residual_values) else np.asarray([], dtype=float)
+    residual_ceiling = (
+        float(np.percentile(residual_positive, 99.7))
+        if residual_positive.size
+        else 1.0
+    )
     comparisons = []
     for item in comparison_arrays:
         values = item["values"]
@@ -663,7 +688,9 @@ def build_noise_gallery(
             }
             | {
                 "image_url": image_data_url(values),
-                "difference_url": difference_data_url(residual),
+                "difference_url": difference_data_url(
+                    residual, ceiling=residual_ceiling
+                ),
                 "sum": float(np.sum(values)),
                 "minimum": float(np.min(values)),
                 "maximum": float(np.max(values)),
@@ -686,6 +713,12 @@ def build_noise_gallery(
                     "display only; stored values and reported statistics are "
                     "unchanged."
                 ),
+                "difference_display": {
+                    "formula": "|n(q)/Nₑ − P(q)|",
+                    "color_scale": "shared across all comparison cards; white=0, pale red=small, dark red=large",
+                    "ceiling_p99_7": residual_ceiling,
+                    "note": "colors are display bins for the absolute normalized residual, not physical intensity or ACOM confidence",
+                },
             },
             "images": images,
             "comparison": comparisons,
@@ -1462,7 +1495,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
 .summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
 .definitions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{margin:7px 0}.definition .tag{display:inline-block;background:#eef2ff;border-radius:99px;padding:3px 8px;font-size:12px}.formation{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.formation>div{border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--panel);min-height:112px}.formation b{display:block;color:var(--blue);margin-bottom:5px}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px}.input-schema>section{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}.schema-note{padding:12px;border-radius:9px;background:#f8fafc;border:1px solid var(--line)}.input-examples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.input-example{border:1px solid var(--line);border-radius:12px;padding:10px}.input-example img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.image-comparison-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.comparison-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.comparison-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.comparison-card .diff{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.comparison-card .diff img{width:100%;aspect-ratio:1;object-fit:contain}.compare-stage{position:relative;max-width:680px;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#f8fafc}.compare-stage img,.compare-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.comparison-layout{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:16px;align-items:start}.parameter-table-wrap{overflow:auto}.parameter-table-wrap table{font-size:13px}.parameter-table-wrap td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:left}.study-quick{border:2px solid #c4b5fd;background:linear-gradient(135deg,#faf5ff,#fff);border-radius:14px;padding:18px}.study-quick .cards{margin:12px 0}.study-quick canvas{height:330px}@media(max-width:1100px){.definitions,.formation,.image-comparison-grid{grid-template-columns:1fr 1fr}.input-schema,.comparison-layout{grid-template-columns:1fr}}@media(max-width:650px){.definitions,.formation,.image-comparison-grid,.input-examples{grid-template-columns:1fr}}
-.image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
+.image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}.comparison-color-key{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0 12px}.comparison-color-key i{display:inline-block;width:28px;height:14px;border:1px solid #d8dee8;border-radius:3px}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
 .method-comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.method-comparison-plot{min-width:0}.method-comparison-plot canvas{height:420px}.method-comparison-note{padding:11px 13px;border-left:4px solid var(--blue);background:#eff6ff;border-radius:8px;margin:12px 0}.method-comparison-table td,.method-comparison-table th{text-align:right}.method-comparison-table td:first-child,.method-comparison-table th:first-child{text-align:left}.method-comparison-table td:not(:first-child){font-variant-numeric:tabular-nums}@media(max-width:1100px){.method-comparison-grid{grid-template-columns:1fr}}
 .naming-guide table th:first-child,.naming-guide table td:first-child{white-space:nowrap}.naming-guide table td:nth-child(2){text-align:left}.naming-guide .panel h3{margin-bottom:10px}.recall-definition{margin-top:14px;border-left-color:var(--blue);background:#eff6ff}
 html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.grid2,.grid3,.two-charts,.method-comparison-grid,.case-layout,.comparison-layout,.input-schema,.definitions,.formation,.pipeline,.findings,.controls,.control{min-width:0}.grid2>*,.grid3>*,.two-charts>*,.method-comparison-grid>*,.case-layout>*,.comparison-layout>*,.input-schema>*,.definitions>*,.formation>*,.pipeline>*,.findings>*{min-width:0}pre{max-width:100%;overflow-x:auto}code{overflow-wrap:anywhere}canvas{max-width:100%}.control select{width:min(100%,360px);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:650px){.control{width:100%}.control select{width:100%;min-width:0;max-width:none}}
@@ -1627,7 +1660,8 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </section>
 
 <section class="section"><details class="fold" open><summary>同一取向的图像差异 / Same-orientation image comparison</summary><div class="fold-body">
- <p class="section-intro">这里不把每幅图单独拉伸后并排比较，而是同时显示：实际图像、归一化后与 Clean‑E 的差异图、总电子数和相对 RMS。这样可以直接看出“剂量改变计数精度”，而不是误把显示亮度当作物理强度。</p>
+ <p class="section-intro">这里不把每幅图单独拉伸后并排比较，而是同时显示：实际图像、归一化后与 Clean‑E 的差异图、总电子数和相对 RMS。右侧残差图的定义是 <code>|n(q)/Nₑ − P(q)|</code>：白色为零或接近零，颜色越红表示该像素的归一化计数偏离期望概率越大。四张残差图共用同一个色标；红色不表示物理强度、衍射盘强弱或 ACOM 置信度。无噪声期望计数应为全白，Poisson 图中的红色来自电子落点涨落。</p>
+ <div class="comparison-color-key"><span>残差色标 / residual scale</span><i style="background:#ffffff"></i><span>0</span><i style="background:#f7b8b8"></i><span>小</span><i style="background:#dc3232"></i><span>大</span><span class="small muted">单位：归一化概率差；共用 P99.7 显示上限</span></div>
  <div class="image-comparison-grid" id="image-comparison-grid"></div>
  <div class="comparison-layout" style="margin-top:16px">
   <div><h3>检峰结果叠加 / Detection overlay</h3><div class="compare-stage"><img id="comparison-base-image" alt="comparison diffraction image"><canvas id="comparison-overlay" width="512" height="512"></canvas></div><div class="legend"><span style="--c:#16a34a">绿色圆/线：TP</span><span style="--c:#eab308">黄色圆：FN 漏检</span><span style="--c:#dc2626">红色叉：FP 误检</span></div></div>
@@ -1850,7 +1884,7 @@ function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);
 function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("")}
 function parameterTable(rows){if(!rows||!rows.length)return '<p class="muted">没有保存参数。</p>';return `<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td><code>${row[1]}</code></td><td>${row[2]}</td></tr>`).join('')}</tbody></table>`}
 function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom']])$(id).innerHTML=parameterTable(tables[key])}
-function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$("image-comparison-grid").innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>与 P(q) 的绝对差异 / residual</figcaption><img src="${x.difference_url}" alt="${x.label} residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
+function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$('image-comparison-grid').innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>归一化绝对残差 / |n/Nₑ − P(q)|</figcaption><img src="${x.difference_url}" alt="${x.label} normalized absolute residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
 function drawComparisonOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value);if(!c)return;$("comparison-base-image").src=c.image_url;$("comparison-case-title").textContent=`${c.sample_id} · ${c.track==='expectation'?'Clean-E':`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("comparison-case-note").textContent=c.description;const m=c.peak_metrics;$("comparison-case-metrics").innerHTML=[['TP',m.true_positive],['FP',m.false_positive],['FN',m.false_negative],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['RMSE',`${num(m.position_rmse_px,3)} px`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');const {ctx,W,H}=canvasSurface($("comparison-overlay"));ctx.clearRect(0,0,W,H);const matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.lineWidth=1.5;for(const pair of m.matches){const a=qToPixel(c,c.oracle_peaks[pair.oracle_index].qx,c.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(c,c.detected_peaks[pair.detected_index].qx,c.detected_peaks[pair.detected_index].qy,W,H);ctx.strokeStyle='#16a34a';ctx.fillStyle='#16a34a';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.beginPath();ctx.arc(a[0],a[1],5,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(b[0],b[1],3,0,Math.PI*2);ctx.fill()}ctx.strokeStyle='#eab308';ctx.lineWidth=2;for(let i=0;i<c.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(c,c.oracle_peaks[i].qx,c.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle='#dc2626';ctx.lineWidth=2;for(let i=0;i<c.detected_peaks.length;i++)if(!matchedD.has(i)){const p=qToPixel(c,c.detected_peaks[i].qx,c.detected_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-5,p[1]-5);ctx.lineTo(p[0]+5,p[1]+5);ctx.moveTo(p[0]+5,p[1]-5);ctx.lineTo(p[0]-5,p[1]+5);ctx.stroke()}}
 function drawStudy001Quick(){const method=$("study001-quick-method").value,groups=DATA.study_001.topk_groups.groups||[],order=['exact_001','near_001','transition_001','control_100','control_110'],labels={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100] control',control_110:'[110] control'},chartLabels={exact_001:'exact',near_001:'near',transition_001:'transition',control_100:'[100]',control_110:'[110]'},find=group=>groups.find(x=>x.method===method&&x.group===group);const rows=order.map(group=>find(group)).filter(Boolean);const series=[{name:'Top-1',color:'#7c3aed',values:rows.map(r=>r.topk_acc2[0])},{name:'Top-5',color:'#ea580c',values:rows.map(r=>r.topk_acc2[4])}];chart($("study001-quick-chart"),rows.map(r=>chartLabels[r.group]||r.group),series,{yTitle:'Acc@2°',fixed:true});legend('study001-quick-legend',series);$("study001-quick-cards").innerHTML=rows.map(r=>`<div class="card"><strong>${pct(r.topk_acc2[0])} → ${pct(r.topk_acc2[4])}</strong><span>${labels[r.group]||r.group} · N=${r.samples}</span></div>`).join('')}
 function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5",study_001:"[001] independent study"};const show=v=>typeof v==="object"?JSON.stringify(v,null,2):String(v);$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]||k}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><pre class="file">${show(b)}</pre></div>`).join("")}</div>`).join("")}
