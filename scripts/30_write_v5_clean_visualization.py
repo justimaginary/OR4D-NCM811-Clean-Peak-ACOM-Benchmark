@@ -1574,6 +1574,11 @@ HTML_TEMPLATE = r"""<!doctype html>
 html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.grid2,.grid3,.two-charts,.method-comparison-grid,.case-layout,.comparison-layout,.input-schema,.definitions,.formation,.pipeline,.findings,.controls,.control{min-width:0}.grid2>*,.grid3>*,.two-charts>*,.method-comparison-grid>*,.case-layout>*,.comparison-layout>*,.input-schema>*,.definitions>*,.formation>*,.pipeline>*,.findings>*{min-width:0}pre{max-width:100%;overflow-x:auto}code{overflow-wrap:anywhere}canvas{max-width:100%}.control select{width:min(100%,360px);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:650px){.control{width:100%}.control select{width:100%;min-width:0;max-width:none}}
 .naming-guide .table-wrap,.physics-scope .table-wrap{overflow:visible}.naming-guide table,.physics-scope table{table-layout:fixed}.naming-guide th,.naming-guide td,.physics-scope th,.physics-scope td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}.naming-guide table th:first-child,.naming-guide table td:first-child{white-space:normal}.naming-guide table:nth-child(1) th:nth-child(1){width:14%}.naming-guide table:nth-child(1) th:nth-child(2){width:36%}.naming-guide table:nth-child(1) th:nth-child(3){width:50%}.naming-guide table:nth-child(2) th:nth-child(1){width:22%}.naming-guide table:nth-child(2) th:nth-child(2){width:42%}.naming-guide table:nth-child(2) th:nth-child(3){width:36%}.physics-scope table th:first-child{width:30%}.physics-scope table th:nth-child(2){width:70%}
 .table-wrap,.naming-guide .table-wrap,.physics-scope .table-wrap{overflow:hidden}.table-wrap table{table-layout:fixed;width:100%}.table-wrap th,.table-wrap td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}
+.tag-explainer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.tag-definition{border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:11px;padding:13px;background:#f8fafc}.tag-definition h3{margin:0 0 5px;font-size:16px}.tag-definition p{margin:0;font-size:13px}.tag-definition code{font-size:12px}@media(max-width:900px){.tag-explainer{grid-template-columns:1fr 1fr}}@media(max-width:650px){.tag-explainer{grid-template-columns:1fr}}
+.naming-guide table:nth-child(2) th:nth-child(1){width:28%}.naming-guide table:nth-child(2) th:nth-child(2){width:36%}.naming-guide table:nth-child(2) th:nth-child(3){width:36%}
+.naming-guide .version-table th:nth-child(1){width:15%}.naming-guide .version-table th:nth-child(2){width:35%}.naming-guide .version-table th:nth-child(3){width:50%}.naming-guide .observation-table th:nth-child(1){width:28%}.naming-guide .observation-table th:nth-child(2){width:36%}.naming-guide .observation-table th:nth-child(3){width:36%}
+.naming-guide .observation-table td:first-child{white-space:nowrap;word-break:normal}
+.naming-guide .observation-table{table-layout:auto}
 </style>
 </head>
 <body><main>
@@ -1624,11 +1629,19 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 
 <section class="section naming-guide" aria-labelledby="naming-guide-title">
  <h2 id="naming-guide-title">版本、图像与观测层 / Versions, image model and observation layers</h2>
- <p class="section-intro">页面中的名称分为四层：benchmark 版本、图像生成模型、电子计数方式和读出噪声。它们对应数据流程的不同阶段，不是四个互相竞争的模型。</p>
+ <p class="section-intro">下面的标签对应数据流程中的不同对象。V3、V4、V5 是 benchmark 版本；Clean‑E 和 Clean‑C 是输入图像层；noiseless、Poisson only 和 EMPAD‑G2 是 Clean‑C 的观测方式。</p>
+ <div class="tag-explainer" aria-label="标签说明 / Label definitions">
+  <article class="tag-definition"><h3>V3 · 直接峰输入</h3><p>输入已经是 <code>(qₓ,qᵧ,intensity)</code> 峰列表，只测试 ACOM 取向搜索。</p></article>
+  <article class="tag-definition"><h3>V4 · 旧图像接口</h3><p>输入是按旧 ACOM 反射计划生成的运动学 CBED 图像，主要验证图像接口。</p></article>
+  <article class="tag-definition"><h3>V5 · 当前图像模型</h3><p>输入是 coherent First‑Born 运动学 CBED 图像，加入有限厚度相干散射。</p></article>
+  <article class="tag-definition"><h3>Clean‑E · 期望图</h3><p>物理模型输出的 <code>float32 P<sub>E</sub>(q)</code>，没有电子随机抽样和读出噪声。</p></article>
+  <article class="tag-definition"><h3>Clean‑C · 计数观测</h3><p>从同一张 Clean‑E 按电子剂量生成计数图，再选择具体观测层。</p></article>
+  <article class="tag-definition"><h3>观测层 · 噪声方式</h3><p><b>noiseless</b> 只缩放；<b>Poisson only</b> 只做电子计数抽样；<b>EMPAD‑G2</b> 再加入读出噪声。</p></article>
+ </div>
  <div class="grid2">
   <div class="panel">
    <h3>版本与图像模型</h3>
-   <div class="table-wrap"><table><thead><tr><th>标签</th><th>定义</th><th>与下一版的主要差别</th></tr></thead><tbody>
+   <div class="table-wrap"><table class="version-table"><thead><tr><th>标签</th><th>定义</th><th>与下一版的主要差别</th></tr></thead><tbody>
     <tr><td>V3</td><td>直接输入 <code>(qₓ,qᵧ,intensity)</code> 峰列表</td><td>没有二维图像形成和自动检峰</td></tr>
     <tr><td>V4</td><td>ACOM‑matched kinematical CBED 图像</td><td>反射集合按旧 ACOM 计划生成；1,081 个取向、3 个剂量档</td></tr>
     <tr><td>V5</td><td>coherent First‑Born kinematical CBED 图像</td><td>有限厚度相干散射、2,048 个 headline 取向、9 个剂量档；检峰器和 ACOM 评价接口保持一致</td></tr>
@@ -1636,12 +1649,12 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
   </div>
   <div class="panel">
    <h3>Clean‑E、Clean‑C 与观测层</h3>
-   <div class="table-wrap"><table><thead><tr><th>标签</th><th>输入形式</th><th>计数与噪声</th></tr></thead><tbody>
+   <div class="table-wrap"><table class="observation-table"><thead><tr><th>标签</th><th>输入形式</th><th>计数与噪声</th></tr></thead><tbody>
     <tr><td>Clean‑E</td><td>期望图 <code>P<sub>E</sub>(q)</code>，float32</td><td>没有；用于隔离图像形成和检峰损失</td></tr>
     <tr><td>Clean‑C</td><td>由同一张期望图按电子剂量得到的计数观测</td><td>可以选择下列观测层</td></tr>
     <tr><td>noiseless</td><td><code>I<sub>N</sub>(q)=N<sub>e</sub>P<sub>E</sub>(q)</code></td><td>确定性缩放，不抽样</td></tr>
     <tr><td>Poisson only</td><td><code>n(q)~Poisson(N<sub>e</sub>P<sub>E</sub>(q))</code></td><td>只有电子散粒噪声；总计数在剂量附近波动</td></tr>
-    <tr><td>EMPAD‑G2 · 1/4/16/64 frames</td><td>Poisson 计数再叠加读出噪声</td><td>frames 只改变读出噪声累积，不改变电子剂量</td></tr>
+    <tr><td>EMPAD‑G2<br><span class="small">1 / 4 / 16 / 64 frames</span></td><td>Poisson 计数再叠加读出噪声</td><td>frames 只改变读出噪声累积，不改变电子剂量</td></tr>
    </tbody></table></div>
   </div>
  </div>
