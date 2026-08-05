@@ -826,7 +826,7 @@ def build_study_001_topk_groups(
                 "autodisk": "ACOM + AutoDisk",
                 "dog_rgm": "ACOM + DoG-RGM",
                 "py4dstem": "ACOM + find_Bragg_disks",
-                "pyxem": "Pyxem image matching",
+                "pyxem": "Pyxem accelerated template matching",
             },
         }
     )
@@ -1266,6 +1266,58 @@ def parameter_tables(config: dict, v5_config: dict) -> dict[str, list[list[str]]
             ["返回候选数 / Candidates returned", "acom.num_matches_return", fmt(acom["num_matches_return"])],
             ["GPU / CUDA", "acom.cuda", fmt(acom["cuda"])],
         ],
+        "pyxem": [
+            [
+                "软件 / Software",
+                "clean_image.pyxem_template_matching.package_version",
+                "Pyxem 0.21.0",
+            ],
+            [
+                "官方接口 / Official API",
+                "pyxem.utils.indexation_utils.index_dataset_with_template_rotation",
+                "Pyxem accelerated template matching",
+            ],
+            [
+                "模板库 / Template library",
+                "clean_image.pyxem_template_matching",
+                "diffsims diffraction library + orix reduced fundamental zone",
+            ],
+            [
+                "输入 / Input",
+                "datasets/*expectation*.h5 or counted images",
+                "二维 HDF5 图像；不先生成 (qx,qy,intensity) 峰列表",
+            ],
+            [
+                "中心束处理 / Direct beam",
+                "central_beam_exclusion_Ainv",
+                "中心区域置零，再补齐一行一列以对齐 Pyxem 的 shape/2 原点",
+            ],
+            [
+                "强度变换 / Intensity transform",
+                "intensity_transform_function",
+                "max(I, 0)^0.25",
+            ],
+            [
+                "归一化 / Normalization",
+                "normalize_images / normalize_templates",
+                "两者均为 True；只影响相关匹配尺度，不改变原始 HDF5 图像",
+            ],
+            [
+                "候选数 / Candidates",
+                "n_best",
+                "5；按模板相关分数返回 Top‑5 Euler/rotation candidates",
+            ],
+            [
+                "输出 / Output",
+                "orientation, correlation, mirrored_template, template_index",
+                "取向候选及相关分数；不输出可供 ACOM 使用的盘坐标列表",
+            ],
+            [
+                "计算目标 / Compute target",
+                "target",
+                "结果文件记录 GPU 或 CPU；本页只读取已保存结果",
+            ],
+        ],
     }
 
 
@@ -1504,7 +1556,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 </head>
 <body><main>
 <header class="topbar">
- <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · 3 disk detectors + Pyxem · ACOM Top‑1…Top‑5</p></div>
+ <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · 3 disk detectors + Pyxem accelerated template matching · ACOM/Pyxem Top‑1…Top‑5</p></div>
  <nav class="nav"><a href="../v3/ACOM_COORDINATE_VISUALIZATION.html">V3 · 直接峰</a><a href="../v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html">V4 · 图像接口</a><a class="active" href="ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量/噪声/Top‑5</a></nav>
 </header>
 
@@ -1586,7 +1638,22 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 
 <section class="section method-comparison" aria-labelledby="method-comparison-title">
  <h2 id="method-comparison-title">方法横向比较 / Method comparison</h2>
- <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及直接读二维图像的 Pyxem。左图比较最终取向 Top‑1～Top‑5；右图只比较三种检峰器的盘恢复指标。</p>
+ <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及 Pyxem accelerated template matching。前三条路径先从二维图像恢复衍射盘，再把 <code>(qₓ,qᵧ,intensity)</code> 列表交给 ACOM；Pyxem 直接在二维图像与独立生成的取向模板库之间做相关匹配，不生成 ACOM 峰列表。左图比较最终取向 Top‑1～Top‑5；右图只比较前三条路径的盘恢复指标。</p>
+ <div class="grid3" style="margin:12px 0">
+  <div class="panel"><h3>AutoDisk</h3><p class="small">环形模板互相关定位衍射盘，随后用 LoG 初检和 RGM 中心精修，再积分盘强度。</p></div>
+  <div class="panel"><h3>DoG‑RGM</h3><p class="small"><b>DoG</b>（Difference of Gaussians，高斯差分）在多个尺度上增强局部亮斑并给出候选中心；<b>RGM</b>（radial gradient maximization，径向梯度最大化）用候选中心周围的内外环响应网格搜索亚像素中心，再积分圆盘强度。</p></div>
+  <div class="panel"><h3>find_Bragg_disks</h3><p class="small">调用 py4DSTEM 的 Bragg-disk 检测接口，完成候选峰定位、中心精修和盘强度积分；结果再转换为 ACOM 所需的峰列表。</p></div>
+ </div>
+ <details class="fold" style="margin:12px 0"><summary>Pyxem accelerated template matching：输入、计算和输出</summary><div class="fold-body">
+  <div class="pipeline" style="grid-template-columns:repeat(5,1fr)">
+   <div class="step"><b>① 二维图像</b>读取与 ACOM 相同的 Clean‑E/C 图像数组；不读取峰列表。</div>
+   <div class="step"><b>② 几何预处理</b>屏蔽中心束，补齐一行一列，使偶数尺寸图像与 Pyxem 的 <code>shape/2</code> 原点一致。</div>
+   <div class="step"><b>③ 模板库</b>由 CIF、<code>diffsims</code> 和 <code>orix</code> 生成独立的取向模板库，使用 2° 取向与面内角步长、Kmax=1.5 Å⁻¹。</div>
+   <div class="step"><b>④ 加速相关</b>调用 <code>index_dataset_with_template_rotation</code>；图像和模板均做 <code>max(I,0)^0.25</code> 变换及归一化。</div>
+   <div class="step"><b>⑤ 取向候选</b>直接返回 5 个 Euler/rotation 候选、相关分数、镜像标记和模板索引；评价时再做晶体对称性与 Friedel 等价搜索。</div>
+  </div>
+  <p class="small muted">Pyxem 是 4D‑STEM 衍射分析软件包；本页调用其 accelerated template matching 接口。这里的“无检峰步骤”仅指不经过 AutoDisk、DoG‑RGM 或 <code>find_Bragg_disks</code> 的显式盘坐标提取。它仍然使用由 CIF 生成的运动学衍射模板，因此不是无模型的图像分类器。Pyxem Top‑5 与 ACOM Top‑5 都按各自相关分数排序，网页不使用 GT 重排候选。</p>
+ </div></details>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="method-comparison-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="method-comparison-dose"></select></div>
@@ -1604,7 +1671,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 
 <section class="section dose-response" aria-labelledby="dose-response-title">
  <h2 id="dose-response-title">剂量响应：检峰与端到端取向 / Dose response</h2>
- <p class="section-intro">这两张图沿用 V4 的读法：横轴是每张图的电子数，纵轴随选择的指标变化。左图同时画三个检峰器，右图同时画 ACOM 三条检峰路径和 Pyxem；因此可以直接区分“盘没找好”与“盘找到了但取向仍有歧义”。</p>
+ <p class="section-intro">这两张图沿用 V4 的读法：横轴是每张图的电子数，纵轴随选择的指标变化。左图同时画三个检峰器，右图同时画三条 ACOM 检峰路径和 Pyxem accelerated template matching。左图反映盘坐标恢复；右图反映最终取向候选质量，两者使用同一数据集、剂量和观测层。</p>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="dose-response-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>噪声 / Noise</label><select id="dose-response-noise"></select></div>
@@ -1655,7 +1722,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
    <section><h3>Clean‑E</h3><p><code>datasets/clean_v5_first_born_expectation_2048.h5</code></p><p><code>expectation/intensity</code> · float32 · <code>[2048,512,512]</code></p><p class="small muted">每个样本是一张确定性概率/期望图，另存 sample_id、q 轴、beam center 和 vacuum probe。</p></section>
    <section><h3>Clean‑C</h3><p><code>datasets/clean_v5_first_born_counted_2048.h5</code></p><p><code>images/counts</code> · uint32 · <code>[2048,9,5,512,512]</code></p><p class="small muted">维度依次为 sample、dose、repeat、row、col；噪声 manifest 记录读出噪声种子和 σ。</p></section>
   </div>
-  <div class="schema-note" style="margin-top:12px"><b>实际读取链：</b>HDF5 二维数组 → AutoDisk / DoG‑RGM / py4DSTEM <code>find_Bragg_disks</code> → <code>(qx,qy,intensity)</code> PointList → 现有 ACOM。Pyxem 路径直接读取二维图像做模板匹配。</div>
+ <div class="schema-note" style="margin-top:12px"><b>实际读取链：</b>HDF5 二维数组 → AutoDisk / DoG‑RGM / py4DSTEM <code>find_Bragg_disks</code> → <code>(qx,qy,intensity)</code> PointList → 现有 ACOM；或 HDF5 二维数组 → Pyxem accelerated template matching → Top‑5 取向候选。两条路径的输入图像相同，后续计算接口不同。</div>
  </div>
 </section>
 
@@ -1674,7 +1741,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  <div class="warning"><b>现有数据的直接结论：</b><code>exact [001]</code> 的 Clean‑E AutoDisk 检峰 Precision/Recall 均为 100%，但 ACOM 直接使用 physical oracle 峰时，512 个样本总体 Top‑1 Acc@2° 仍只有 2.73%，中位对称/Friedel 等价误差约 71.7°。因此主要异常已存在于 ACOM 取向搜索或取向表示/评价接口，不能归因于 Poisson 噪声或自动检峰。</div>
  <div class="cards" id="study001-diagnostic-cards" style="margin-top:12px"></div>
  <div class="table-wrap" style="margin:12px 0"><table><thead><tr><th>证据层 / Evidence layer</th><th>现有结果</th><th>能够排除或支持的解释</th></tr></thead><tbody id="study001-diagnostic-table"></tbody></table></div>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-quick-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div></div>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-quick-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div></div>
  <div class="cards" id="study001-quick-cards"></div>
  <canvas class="chart" id="study001-quick-chart" width="1280" height="330"></canvas><div class="legend" id="study001-quick-legend"></div>
  <p class="small muted">判读顺序：先比较 oracle 与自动检峰路径，再比较 exact/near/transition 与 controls。oracle 已失败而 exact [001] 检峰仍准确时，应优先审计 ACOM orientation plan、sample→crystal 矩阵约定以及 V5 Friedel canonicalization 与候选评价是否一致。高对称投影可能放大模板近简并，但当前数据尚未把它与坐标/表示问题单独消融。</p>
@@ -1687,7 +1754,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  <div class="step"><b>③ Clean‑E</b>512×512 coherent First‑Born expectation image。</div>
  <div class="step"><b>④ Clean‑C</b>9 档剂量；无噪声 expected counts 或 Poisson 电子计数。</div>
  <div class="step"><b>⑤ Instrument noise</b>独立 EMPAD‑G2 read-noise 梯度，确定性 seed。</div>
- <div class="step"><b>⑥ Indexing</b>ACOM 读取检峰列表；Pyxem 直接读取二维图像模板匹配。</div>
+ <div class="step"><b>⑥ Indexing</b>ACOM 读取检峰列表；Pyxem 调用官方 accelerated template matching 直接生成取向候选。</div>
  <div class="step"><b>⑦ Top‑K metric</b>前 K 个候选中至少一个 symmetry/Friedel error ≤2°。</div>
 </div>
 <div class="warning" style="margin-top:14px"><b>重要：</b>网页读取已保存结果，不会重新运行 benchmark。图像亮度使用显示专用的 clip/log 映射；ACOM/Pyxem 输入仍是原始 HDF5 数组。</div>
@@ -1719,7 +1786,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  <p>每条曲线使用所选数据集的全部输入作为分母：headline 为 2,048，[001] 独立研究集为 512。ACOM 没有候选的样本计为错误；Pyxem 返回候选并不代表候选正确。</p>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="dose-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
-  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct-image template matching</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div>
   <div class="control"><label>噪声梯度 / Noise level</label><select id="dose-noise"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="dose-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -1729,7 +1796,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </section>
 
 <section class="section"><details class="fold"><summary>全噪声 × 全方法小多图（24 张）</summary><div class="fold-body">
- <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem。每张图同时保留 Top‑1…Top‑5。</p>
+ <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem accelerated template matching。每张图同时保留 Top‑1…Top‑5。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="overview-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <div class="legend" id="overview-legend"></div>
  <div class="small-multiples" id="overview-grid"></div>
@@ -1738,7 +1805,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 <section class="section"><h2>固定电子剂量下的噪声阶梯</h2>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="noise-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
-  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="noise-dose"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="noise-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -1748,7 +1815,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </section>
 
 <section class="section"><h2>Clean‑E 输入/检峰器与 Top‑K</h2>
- <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 直接读取图像。Clean‑C 的三种检峰器均已完成 234 个条件。</p>
+ <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 使用 accelerated template matching 直接处理二维图像。Clean‑C 的三种检峰器均已完成 234 个条件。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="cleane-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <canvas class="chart" id="cleane-chart" width="1280" height="390"></canvas>
  <div class="legend" id="cleane-legend"></div>
@@ -1757,12 +1824,12 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
   <tr><td>ACOM + AutoDisk</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>环形互相关、LoG 初检、RGM 精修</td></tr>
   <tr><td>ACOM + DoG‑RGM</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>DoG 尺度空间初检、RGM 精修</td></tr>
   <tr><td>ACOM + find_Bragg_disks</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>Clean‑C ACOM 正式路径</td></tr>
-  <tr><td>Pyxem direct image</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>直接图像模板匹配，无检峰步骤</td></tr>
+  <tr><td>Pyxem accelerated template matching</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>官方二维图像模板匹配；不生成 ACOM 峰列表，直接返回 Top‑5 取向候选</td></tr>
  </tbody></table></div>
 </section>
 
 <section class="section"><h2>当前条件的精确 Top‑K 数值</h2>
- <div class="controls"><div class="control"><label>数据集 / Dataset</label><select id="condition-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
+ <div class="controls"><div class="control"><label>数据集 / Dataset</label><select id="condition-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
  <p id="condition-caption"></p><div class="table-wrap"><table><thead><tr><th>K</th><th>Coverage</th><th>Acc@1°</th><th>Acc@2°</th><th>Acc@5°</th><th>Median error</th><th>P95 error</th></tr></thead><tbody id="condition-table"></tbody></table></div>
 </section>
 
@@ -1808,7 +1875,7 @@ q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
   </div>
   <div class="result-callout"><b>解释边界：</b>[001] 高对称投影、Friedel 二义性和弱峰变化都是合理的物理放大因素；但 oracle 输入下高度集中的约 71.7° 误差不能仅凭“高对称”解释。当前应将其表述为待审计的 ACOM/坐标/canonicalization 系统异常，而不是已经证明的材料物理极限。</div>
  </div></details>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div><div class="control"><label>分组图指标 / Group metric</label><select id="study001-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option></select></div></div>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div><div class="control"><label>分组图指标 / Group metric</label><select id="study001-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option></select></div></div>
  <canvas class="chart chart-wide" id="study001-tilt-chart" width="1280" height="440"></canvas><div class="legend" id="study001-legend"></div>
  <div id="study001-tables"></div>
  <p class="warning"><b>边界说明：</b>这 512 个样本是单独构建、单独检峰、单独运行 ACOM/Pyxem Top‑5 的研究集，不混入 2,048 headline 指标。页面显示的是新全量实验，不是旧 Top‑1 冒烟结果。</p>
@@ -1825,6 +1892,7 @@ q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
  <details><summary>图像形成参数 / Image formation parameters</summary><div class="parameter-table-wrap" id="parameter-table-image"></div></details>
  <details><summary>电子计数与噪声参数 / Counting and noise parameters</summary><div class="parameter-table-wrap" id="parameter-table-counting"></div></details>
  <details><summary>ACOM 与评价参数 / ACOM and evaluation parameters</summary><div class="parameter-table-wrap" id="parameter-table-acom"></div></details>
+ <details><summary>Pyxem 加速模板匹配参数 / Pyxem accelerated template matching</summary><div class="parameter-table-wrap" id="parameter-table-pyxem"></div></details>
  <details open><summary>Top‑K、对称性与 Friedel branch</summary><p>“Top‑K 含有正确答案”定义为：算法按相关分数给出的前 K 个候选中，至少一个候选在 proper crystal point-group rotations 与 detector-plane Friedel branch 两类等价变换后，取向误差 ≤2°。Friedel branch 处理二维衍射图无法区分的探测器平面反演；V5 同时在数据构建时保存 canonical Friedel branch，评价仍做等价搜索以避免代表选择影响指标。</p></details>
  <details><summary>电子计数与噪声</summary><div class="formula">Clean‑E: P(q), Σq P(q)=1
 Noiseless expected counts: I_N(q)=N_e P(q)
@@ -1844,7 +1912,7 @@ const NOISE_LABEL={noiseless:"确定性期望计数 / Noiseless expected counts"
 const NOISE_SHORT={noiseless:"Noiseless",poisson_only:"Poisson",empad_g2_1frame:"EMPAD 1f",empad_g2_4frames:"EMPAD 4f",empad_g2_16frames:"EMPAD 16f",empad_g2_64frames:"EMPAD 64f"};
 const pct=v=>(100*v).toFixed(2)+"%";const num=(v,d=3)=>Number.isFinite(v)?Number(v).toFixed(d):"—";
 const METRIC={acc1:{field:"accuracy_all_inputs_within_1deg",label:"Acc@1°",fixed:true},acc2:{field:"accuracy_all_inputs_within_2deg",label:"Acc@2°",fixed:true},acc5:{field:"accuracy_all_inputs_within_5deg",label:"Acc@5°",fixed:true},median:{field:"median_misorientation_deg_indexed",label:"Median equivalent error (°)",fixed:false},p95:{field:"p95_misorientation_deg_indexed",label:"P95 equivalent error (°)",fixed:false},coverage:{field:"prediction_coverage",label:"Prediction coverage",fixed:true}};
-const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem direct image"}};
+const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem accelerated template matching"}};
 const DETECTOR_LABEL={autodisk:"AutoDisk",dog_rgm:"DoG‑RGM",py4dstem:"find_Bragg_disks"};
 const METHOD_ORDER=["acom:autodisk","acom:dog_rgm","acom:py4dstem","pyxem"],METHOD_SHORT={"acom:autodisk":"AutoDisk","acom:dog_rgm":"DoG‑RGM","acom:py4dstem":"find_Bragg",pyxem:"Pyxem"};
 const DISK_METRIC={precision:{field:"precision_mean",label:"Disk Precision (matched / detected)",fixed:true},recall:{field:"recall_mean",label:"Disk Recall (matched oracle / all oracle)",fixed:true},high_angle_recall:{field:"high_angle_recall_mean",label:"High-angle disk Recall",fixed:true},position_rmse_px:{field:"position_rmse_px_mean",label:"Position RMSE (px)",fixed:false},position_p95_px:{field:"position_p95_px_mean",label:"Position P95 (px)",fixed:false},sample_detection_coverage:{field:"sample_detection_coverage_mean",label:"Sample detection coverage",fixed:true},false_positive_per_sample:{field:"false_positive_per_sample_mean",label:"False positives / sample",fixed:false},false_negative_per_sample:{field:"false_negative_per_sample_mean",label:"False negatives / sample",fixed:false}};
@@ -1869,7 +1937,7 @@ function drawDose(){const scope=$("dose-scope").value,method=$("dose-method").va
 function drawNoise(){const scope=$("noise-scope").value,method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>cleanCRow(method,dose,noise,scope)),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_SHORT[n]),series,{yTitle:`${scope==="study001"?"[001]":"Headline"} · ${m.label}`,fixed:m.fixed});legend("noise-legend",series)}
 function drawDiskDose(){const scope=$("disk-scope").value,noise=$("disk-noise").value,m=DISK_METRIC[$("disk-metric").value];const series=Object.keys(DETECTOR_LABEL).map((detector,i)=>({name:DETECTOR_LABEL[detector],color:["#2563eb","#ea580c","#15803d"][i],values:DATA.dataset.doses.map(d=>diskRow(scope,detector,d,noise)[m.field])}));chart($("disk-dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("disk-dose-legend",series);drawDiskNoise()}
 function drawDiskNoise(){const scope=$("disk-scope").value,dose=Number($("disk-fixed-dose").value),detector=$("disk-detector").value,m=DISK_METRIC[$("disk-metric").value],series=[{name:`${DETECTOR_LABEL[detector]} · ${m.label}`,color:"#7c3aed",values:NOISE_ORDER.map(noise=>diskRow(scope,detector,dose,noise)[m.field])}];chart($("disk-noise-chart"),NOISE_ORDER.map(n=>NOISE_SHORT[n]),series,{yTitle:m.label,fixed:m.fixed});legend("disk-noise-legend",series)}
-function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem image"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
+function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem accelerated"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
 function buildOverview(){const grid=$("overview-grid");grid.innerHTML="";for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const box=document.createElement("div");box.className="mini-chart";box.innerHTML=`<h3>${NOISE_LABEL[noise]} · ${METHODS[method].label}</h3><canvas width="620" height="240"></canvas>`;grid.append(box)}}drawOverview()}
 function drawOverview(){const key=$("overview-metric").value,m=METRIC[key],canvases=$("overview-grid").querySelectorAll("canvas");let index=0;for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,key);chart(canvases[index++],DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed})}}const dummy={top_k:[1,2,3,4,5].map(()=>({[m.field]:0}))};legend("overview-legend",metricSeries([dummy],key))}
 function drawCondition(){const scope=$("condition-scope").value,method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value),row=cleanCRow(method,dose,noise,scope);$("condition-caption").textContent=`${scope==="study001"?"[001] study":"Headline"} · ${METHODS[method].label} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
@@ -1883,7 +1951,7 @@ function drawAxes(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{c
 function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes();drawComparisonOverlay()}
 function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("")}
 function parameterTable(rows){if(!rows||!rows.length)return '<p class="muted">没有保存参数。</p>';return `<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td><code>${row[1]}</code></td><td>${row[2]}</td></tr>`).join('')}</tbody></table>`}
-function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom']])$(id).innerHTML=parameterTable(tables[key])}
+function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom'],['parameter-table-pyxem','pyxem']])$(id).innerHTML=parameterTable(tables[key])}
 function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$('image-comparison-grid').innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>归一化绝对残差 / |n/Nₑ − P(q)|</figcaption><img src="${x.difference_url}" alt="${x.label} normalized absolute residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
 function drawComparisonOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value);if(!c)return;$("comparison-base-image").src=c.image_url;$("comparison-case-title").textContent=`${c.sample_id} · ${c.track==='expectation'?'Clean-E':`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("comparison-case-note").textContent=c.description;const m=c.peak_metrics;$("comparison-case-metrics").innerHTML=[['TP',m.true_positive],['FP',m.false_positive],['FN',m.false_negative],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['RMSE',`${num(m.position_rmse_px,3)} px`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');const {ctx,W,H}=canvasSurface($("comparison-overlay"));ctx.clearRect(0,0,W,H);const matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.lineWidth=1.5;for(const pair of m.matches){const a=qToPixel(c,c.oracle_peaks[pair.oracle_index].qx,c.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(c,c.detected_peaks[pair.detected_index].qx,c.detected_peaks[pair.detected_index].qy,W,H);ctx.strokeStyle='#16a34a';ctx.fillStyle='#16a34a';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.beginPath();ctx.arc(a[0],a[1],5,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(b[0],b[1],3,0,Math.PI*2);ctx.fill()}ctx.strokeStyle='#eab308';ctx.lineWidth=2;for(let i=0;i<c.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(c,c.oracle_peaks[i].qx,c.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle='#dc2626';ctx.lineWidth=2;for(let i=0;i<c.detected_peaks.length;i++)if(!matchedD.has(i)){const p=qToPixel(c,c.detected_peaks[i].qx,c.detected_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-5,p[1]-5);ctx.lineTo(p[0]+5,p[1]+5);ctx.moveTo(p[0]+5,p[1]-5);ctx.lineTo(p[0]-5,p[1]+5);ctx.stroke()}}
 function drawStudy001Quick(){const method=$("study001-quick-method").value,groups=DATA.study_001.topk_groups.groups||[],order=['exact_001','near_001','transition_001','control_100','control_110'],labels={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100] control',control_110:'[110] control'},chartLabels={exact_001:'exact',near_001:'near',transition_001:'transition',control_100:'[100]',control_110:'[110]'},find=group=>groups.find(x=>x.method===method&&x.group===group);const rows=order.map(group=>find(group)).filter(Boolean);const series=[{name:'Top-1',color:'#7c3aed',values:rows.map(r=>r.topk_acc2[0])},{name:'Top-5',color:'#ea580c',values:rows.map(r=>r.topk_acc2[4])}];chart($("study001-quick-chart"),rows.map(r=>chartLabels[r.group]||r.group),series,{yTitle:'Acc@2°',fixed:true});legend('study001-quick-legend',series);$("study001-quick-cards").innerHTML=rows.map(r=>`<div class="card"><strong>${pct(r.topk_acc2[0])} → ${pct(r.topk_acc2[4])}</strong><span>${labels[r.group]||r.group} · N=${r.samples}</span></div>`).join('')}
@@ -1894,8 +1962,11 @@ function drawStudy001(){const data=DATA.study_001.topk_groups,method=$("study001
 function renderStudy001(){
  const s=DATA.study_001,labels=s.topk_groups.method_labels;
  const oracle=cleanERow("study001","oracle"),auto=cleanERow("study001","autodisk"),dog=cleanERow("study001","dog_rgm"),py4=cleanERow("study001","py4dstem"),pyxem=cleanERow("study001","pyxem");
+ const groups=s.topk_groups.groups;
+ const groupRow=(method,group)=>groups.find(row=>row.method===method&&row.group===group);
+ const exactOracle=groupRow("oracle","exact_001"),exactPyxem=groupRow("pyxem","exact_001"),transitionOracle=groupRow("oracle","transition_001"),transitionPy4=groupRow("py4dstem","transition_001");
  const exactAuto=(s.detectors.find(x=>x.detector==="autodisk")?.study_group_summary||{}).exact_001;
- $("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>为何单独研究：</b>该数据集同时包含 exact、near、transition [001] 和 [100]/[110] controls，用来区分检峰损失、候选排序、高对称近简并以及取向表示/评价接口问题。现有 oracle 结果说明异常不止来自自动检峰。</div>`;
+ $("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>当前判定：</b>exact [001] 的 ACOM oracle Top‑1/Top‑5 均为 ${pct(exactOracle.topk_acc2[0])} / ${pct(exactOracle.topk_acc2[4])}；同一组的 AutoDisk Clean‑E 盘 Recall 为 ${exactAuto?pct(exactAuto.recall):"—"}，但接入 ACOM 后仍未恢复正确取向。transition [001] 的 ACOM oracle Top‑5 为 ${pct(transitionOracle.topk_acc2[4])}，find_Bragg_disks 路径为 ${pct(transitionPy4.topk_acc2[4])}。该差异将异常集中定位到 exact [001] 的高对称取向搜索、候选排序或取向表示/评价接口；它不能归因于单一检峰器。Pyxem 在 exact [001] 的 Top‑3/Top‑5 为 ${pct(exactPyxem.topk_acc2[2])} / ${pct(exactPyxem.topk_acc2[4])}，说明二维图像包含可用取向信息，但不能替代对 ACOM 代表矩阵和等价分支的审计。</div>`;
  $("study001-diagnostic-cards").innerHTML=[
   [`${pct(oracle.top_k[0].accuracy_all_inputs_within_2deg)}`,"ACOM + oracle · Top‑1 Acc@2°"],
   [`${pct(oracle.top_k[4].accuracy_all_inputs_within_2deg)}`,"ACOM + oracle · Top‑5 Acc@2°"],
@@ -1907,9 +1978,9 @@ function renderStudy001(){
   ["Clean‑E + physical oracle",methodText("ACOM",oracle),"绕过图像噪声和三个检峰器后仍失败；异常位于 ACOM 搜索、取向表示或评价接口。"],
   ["exact [001] · Clean‑E disk recovery",exactAuto?`AutoDisk Precision ${pct(exactAuto.precision)}, Recall ${pct(exactAuto.recall)}, RMSE ${num(exactAuto.position_rmse_px)} px`:"—","精确 [001] 的自动检峰本身不是主要瓶颈。"],
   ["三条 ACOM 自动检峰路径",[methodText("AutoDisk",auto),methodText("DoG‑RGM",dog),methodText("find_Bragg_disks",py4)].join("<br>"),"三种检峰输入落入相近误差平台，支持系统性下游异常，而不是单一 detector failure。"],
-  ["Pyxem direct-image matching",methodText("Pyxem",pyxem),"表现与 ACOM 不同，说明二维图像并非完全没有取向信息；同时仍存在高对称候选困难。"]
+  ["Pyxem accelerated template matching",methodText("Pyxem",pyxem),"该路径直接从二维图像与取向模板库计算相关候选，不经过显式检峰；结果仍受高对称取向的候选近简并影响。"]
  ].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td style="text-align:left;white-space:normal">${r[2]}</td></tr>`).join("");
- const groups=s.topk_groups.groups,ordered=["exact_001","near_001","transition_001","control_100","control_110"];
+ const ordered=["exact_001","near_001","transition_001","control_100","control_110"];
  $("study001-tables").innerHTML=`<h3>Clean‑E Top‑1 / Top‑5 Acc@2° by group</h3><div class="table-wrap"><table><thead><tr><th>Method</th>${ordered.map(g=>`<th>${g}<br>Top‑1 / Top‑5</th>`).join("")}</tr></thead><tbody>${Object.keys(labels).map(method=>`<tr><td>${labels[method]}</td>${ordered.map(group=>{const r=groups.find(x=>x.method===method&&x.group===group);return `<td>${pct(r.topk_acc2[0])} / <b>${pct(r.topk_acc2[4])}</b><br><span class="small muted">N=${r.samples}</span></td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;
  drawStudy001()
 }
