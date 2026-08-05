@@ -41,6 +41,25 @@ clean_image:
   thickness_nm: 5.0
   cuda_first_born:
     batch_size: 16
+    complex_dtype: complex64
+  py4dstem_find_bragg_disks:
+    normalize_for_detection: max
+    min_absolute_intensity: 1.0e-8
+  dog_rgm:
+    dog_min_sigma_px: 2.0
+    dog_max_sigma_px: 8.0
+    dog_sigma_ratio: 1.4
+    threshold_abs: 0.001
+    overlap: 0.5
+    min_peak_spacing_px: 5
+    rgm_search_radius_px: 1.0
+    rgm_search_step_px: 0.1
+    rgm_inner_radius_fraction: 0.8
+    rgm_split_radius_fraction: 1.0
+    rgm_outer_radius_fraction: 1.2
+    integration_radius_fraction: 0.9
+    min_integrated_intensity_relative: 0.0001
+    max_num_peaks: 256
   counting:
     model: poisson_expected_total_from_areal_dose
     doses_e_per_A2: [0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 1000.0]
@@ -99,6 +118,7 @@ v6:
     definition: intensity_participation_ratio
     real_space_oversampling: 4
     normalization_tolerance: 1.0e-7
+    q_axis_uniformity_relative_tolerance: 5.0e-5
   observation_store:
     root: /mnt/data/xietianhong/or4d-clean-v6
     soft_quota_GB: 450.0
@@ -120,11 +140,13 @@ v6:
     factorize_read_noise: true
     reconstruction_audit_samples_per_shard: 2
   ubragg_x:
+    repository_path: /mnt/data/xietianhong/UBragg
     repository_commit: 3d9ea14
     checkpoint_path: /mnt/data/xietianhong/UBragg/runs/ubragg-x-noise-v2-ddp/best.pt
     checkpoint_size_bytes: 12421769
     checkpoint_sha256: e327c466cb2e483aa3c0bf1767692e4827b212c3c21aeb6835b74d17018efb27
     score_threshold: 0.5
+    clean_e_inference_reference_total_electrons: 1000000.0
     batch_size_candidates: [1, 2, 4]
     output_covariance: true
     use_covariance_in_acom: false
@@ -137,6 +159,15 @@ v6:
     dog_rgm: cupy_equivalent_or_cpu
     equivalence_position_tolerance_px: 0.001
     equivalence_intensity_rtol: 0.0001
+  detection:
+    detectors: [autodisk, dog_rgm, py4dstem, ubragg_x]
+    output_compression: zstd
+    output_compression_level: 5
+    output_shuffle: bitshuffle
+    py4dstem_batch_size: 8
+    cpu_sample_workers: 8
+    failure_message_max_characters: 2000
+    progress_every_observations: 256
   runtime:
     server_id: SL3053
     enforce_write_scope_for_users: [xietianhong]
@@ -146,6 +177,8 @@ v6:
     conda_environment: or4d-clean
     max_gpus: 4
     require_empty_gpu: true
+    empty_gpu_max_memory_MiB: 100
+    empty_gpu_max_utilization_percent: 5
     max_cpu_threads_total: 32
     max_cpu_threads_per_gpu_at_four_gpus: 8
     dataloader_workers_total: 16

@@ -16,6 +16,7 @@ from v6_observations import (
     stable_v6_seed,
     write_observation_shard,
 )
+from v6_detection import write_v6_peak_h5
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -81,10 +82,18 @@ def test_effective_probe_area_is_scale_invariant() -> None:
     qx = (np.arange(32) - 15.5) * 0.01
     qy = (15.5 - np.arange(32)) * 0.01
     first = effective_probe_area_A2(
-        probe, qx, qy, real_space_oversampling=2
+        probe,
+        qx,
+        qy,
+        real_space_oversampling=2,
+        q_axis_uniformity_relative_tolerance=1e-8,
     )
     second = effective_probe_area_A2(
-        probe * 7.0, qx, qy, real_space_oversampling=2
+        probe * 7.0,
+        qx,
+        qy,
+        real_space_oversampling=2,
+        q_axis_uniformity_relative_tolerance=1e-8,
     )
     assert first["effective_illumination_area_A2"] > 0.0
     assert np.isclose(
@@ -154,3 +163,66 @@ def test_compressed_shard_roundtrip(tmp_path: Path) -> None:
             loader.metadata(0, poisson_index)["validation_sha256"]
             == array_sha256(poisson).hex()
         )
+
+
+def test_v6_peak_file_keeps_common_and_detector_fields(tmp_path: Path) -> None:
+    config = v6_test_config()
+    config["v6"]["detection"]["output_compression"] = "gzip"
+    config["v6"]["detection"]["output_compression_level"] = 1
+    output = tmp_path / "peaks.h5"
+    common = {
+        "source_sample_id": "clean_v6_core_00000",
+        "global_sample_index": 0,
+        "seed": 7,
+        "validation_sha256": "ab" * 32,
+        "expected_total_electrons": 100.0,
+        "actual_total_electrons": 98.0,
+        "read_noise_sigma_e_per_pixel": 0.0,
+        "runtime_seconds": 0.1,
+    }
+    write_v6_peak_h5(
+        output,
+        [
+            {
+                **common,
+                "observation_id": "clean_v6_core_00000::condition_001",
+                "condition_index": 1,
+                "condition_id": "condition-one",
+                "detection_status": "ok",
+                "failure_type": "",
+                "failure_message": "",
+                "peak_count": 1,
+                "peaks": {
+                    "qx": np.asarray([0.2], dtype=np.float32),
+                    "qy": np.asarray([-0.3], dtype=np.float32),
+                    "intensity": np.asarray([0.8], dtype=np.float32),
+                    "score": np.asarray([0.9], dtype=np.float32),
+                    "cov_xx": np.asarray([1e-5], dtype=np.float32),
+                },
+            },
+            {
+                **common,
+                "observation_id": "clean_v6_core_00000::condition_002",
+                "condition_index": 2,
+                "condition_id": "condition-two",
+                "detection_status": "failed",
+                "failure_type": "RuntimeError",
+                "failure_message": "reproducible failure",
+                "peak_count": 0,
+                "peaks": {
+                    "qx": np.empty(0, np.float32),
+                    "qy": np.empty(0, np.float32),
+                    "intensity": np.empty(0, np.float32),
+                    "score": np.empty(0, np.float32),
+                },
+            },
+        ],
+        {"detector": "test"},
+        config,
+    )
+    with h5py.File(output, "r") as h5:
+        assert h5["peaks/offsets"][:].tolist() == [0, 1, 1]
+        assert np.allclose(h5["peaks/score"][:], [0.9])
+        assert np.allclose(h5["peaks/cov_xx"][:], [1e-5])
+        assert h5["peaks/cov_xx"].compression == "gzip"
+        assert h5["sample/observation_validation_sha256"].shape == (2, 32)

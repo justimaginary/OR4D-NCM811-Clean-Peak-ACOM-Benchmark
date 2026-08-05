@@ -66,15 +66,18 @@ def stable_v6_seed(
     return int.from_bytes(hashlib.blake2b(payload, digest_size=8).digest(), "little")
 
 
-def _axis_spacing(axis: np.ndarray, name: str) -> float:
+def _axis_spacing(
+    axis: np.ndarray, name: str, *, uniformity_relative_tolerance: float
+) -> float:
     values = np.asarray(axis, dtype=np.float64)
     if values.ndim != 1 or len(values) < 2:
         raise ValueError(f"{name} must be a one-dimensional coordinate axis")
     steps = np.diff(values)
     spacing = float(np.median(np.abs(steps)))
-    if spacing <= 0.0 or not np.allclose(
-        np.abs(steps), spacing, rtol=1e-5, atol=1e-10
-    ):
+    if spacing <= 0.0:
+        raise ValueError(f"{name} must be uniformly sampled")
+    relative_error = float(np.max(np.abs(np.abs(steps) - spacing)) / spacing)
+    if relative_error > float(uniformity_relative_tolerance):
         raise ValueError(f"{name} must be uniformly sampled")
     return spacing
 
@@ -85,6 +88,7 @@ def effective_probe_area_A2(
     qy_axis_Ainv: np.ndarray,
     *,
     real_space_oversampling: int,
+    q_axis_uniformity_relative_tolerance: float,
 ) -> dict[str, float]:
     """Compute the real-space intensity participation-ratio area.
 
@@ -101,8 +105,16 @@ def effective_probe_area_A2(
     oversampling = int(real_space_oversampling)
     if oversampling <= 0:
         raise ValueError("real_space_oversampling must be positive")
-    dq_x = _axis_spacing(qx_axis_Ainv, "qx_axis_Ainv")
-    dq_y = _axis_spacing(qy_axis_Ainv, "qy_axis_Ainv")
+    dq_x = _axis_spacing(
+        qx_axis_Ainv,
+        "qx_axis_Ainv",
+        uniformity_relative_tolerance=q_axis_uniformity_relative_tolerance,
+    )
+    dq_y = _axis_spacing(
+        qy_axis_Ainv,
+        "qy_axis_Ainv",
+        uniformity_relative_tolerance=q_axis_uniformity_relative_tolerance,
+    )
     ny, nx = probe.shape
     padded_shape = (ny * oversampling, nx * oversampling)
     amplitude_q = np.sqrt(probe)
@@ -357,6 +369,11 @@ def write_observation_shard(
             real_space_oversampling=int(
                 config["v6"]["effective_probe_area"]["real_space_oversampling"]
             ),
+            q_axis_uniformity_relative_tolerance=float(
+                config["v6"]["effective_probe_area"][
+                    "q_axis_uniformity_relative_tolerance"
+                ]
+            ),
         )
         area = area_record["effective_illumination_area_A2"]
         sample_count = sample_stop - sample_start
@@ -422,7 +439,7 @@ def write_observation_shard(
                 digest = array_sha256(probability)
                 expectation_hashes[local_index] = np.frombuffer(digest, dtype=np.uint8)
                 logical_hashes[local_index, 0] = expectation_hashes[local_index]
-                logical_actual_electrons[local_index, 0] = 1.0
+                logical_actual_electrons[local_index, 0] = np.nan
 
             poisson_root = target.create_group("poisson")
             for dose_index, (dose, expected_total) in enumerate(
