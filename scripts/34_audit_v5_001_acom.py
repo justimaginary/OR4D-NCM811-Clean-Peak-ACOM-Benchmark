@@ -333,6 +333,7 @@ def collision_diagnostics(
     )
     qxy = qxy[keep]
     selected_hkl = hkl[keep]
+    selected_structure_factor = structure_factor[keep]
     q_pixel = (
         2.0
         * float(config["clean_image"]["q_max_Ainv"])
@@ -340,32 +341,98 @@ def collision_diagnostics(
     )
     tolerance = float(config["clean_image"]["oracle_merge_distance_px"]) * q_pixel
 
-    parent = np.arange(len(qxy), dtype=np.int64)
+    # Recompute the per-reflection integrated intensity used to order the
+    # renderer's greedy merge.  The probe phase has unit modulus, so it does
+    # not enter this single-component intensity calculation.
+    ny, nx = (int(value) for value in config["clean_image"]["gpts"])
+    oversampling = int(config["clean_image"]["oversampling"])
+    high_center_y = (ny * oversampling - 1) / 2.0
+    high_center_x = (nx * oversampling - 1) / 2.0
+    high_q_pixel = q_pixel / oversampling
+    k0 = 1.0 / wavelength
+    thickness_A = float(config["clean_image"]["thickness_nm"]) * 10.0
+    soft_edge_fraction = float(
+        config["clean_image"]["aperture_soft_edge_fraction"]
+    )
+    inner_radius = disk_radius * (1.0 - soft_edge_fraction)
+    patch_half_width = int(np.ceil(disk_radius / high_q_pixel)) + 2
+    component_intensity = np.zeros(len(qxy), dtype=float)
+    for index, ((gx, gy), factor) in enumerate(
+        zip(qxy, selected_structure_factor)
+    ):
+        col_center = high_center_x + gx / high_q_pixel
+        row_center = high_center_y - gy / high_q_pixel
+        cols = np.arange(
+            int(np.floor(col_center)) - patch_half_width,
+            int(np.floor(col_center)) + patch_half_width + 2,
+            dtype=float,
+        )[None, :]
+        rows = np.arange(
+            int(np.floor(row_center)) - patch_half_width,
+            int(np.floor(row_center)) + patch_half_width + 2,
+            dtype=float,
+        )[:, None]
+        pixel_qx = (cols - high_center_x) * high_q_pixel
+        pixel_qy = (high_center_y - rows) * high_q_pixel
+        kappa_x = pixel_qx - gx
+        kappa_y = pixel_qy - gy
+        kappa_radius = np.hypot(kappa_x, kappa_y)
+        aperture = np.zeros_like(kappa_radius)
+        aperture[kappa_radius <= inner_radius] = 1.0
+        edge = (kappa_radius > inner_radius) & (kappa_radius < disk_radius)
+        if np.any(edge):
+            phase = (kappa_radius[edge] - inner_radius) / (
+                disk_radius - inner_radius
+            )
+            aperture[edge] = 0.5 * (1.0 + np.cos(np.pi * phase))
+        kz_incident = np.sqrt(
+            np.maximum(k0**2 - kappa_x**2 - kappa_y**2, 0.0)
+        )
+        kz_outgoing = np.sqrt(
+            np.maximum(k0**2 - pixel_qx**2 - pixel_qy**2, 0.0)
+        )
+        delta_kz = kz_outgoing - kz_incident - g_sample[keep][index, 2]
+        thickness_amplitude = thickness_A * np.sinc(thickness_A * delta_kz)
+        component_intensity[index] = float(
+            np.sum(np.abs(factor * aperture * thickness_amplitude) ** 2)
+        )
 
-    def find(index: int) -> int:
-        while parent[index] != index:
-            parent[index] = parent[parent[index]]
-            index = int(parent[index])
-        return index
-
-    def union(a: int, b: int) -> None:
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[rb] = ra
-
-    if len(qxy):
-        for a, b in cKDTree(qxy).query_pairs(tolerance):
-            union(int(a), int(b))
-    components: dict[int, list[int]] = defaultdict(list)
-    for index in range(len(qxy)):
-        components[find(index)].append(index)
-    ordered = sorted(components.values(), key=lambda group: (-len(group), group[0]))
+    greedy_groups: list[dict[str, Any]] = []
+    for index in np.argsort(component_intensity)[::-1]:
+        point = qxy[index]
+        group = next(
+            (
+                candidate
+                for candidate in greedy_groups
+                if np.linalg.norm(point - candidate["anchor_qxy"]) <= tolerance
+            ),
+            None,
+        )
+        if group is None:
+            greedy_groups.append(
+                {
+                    "anchor_qxy": point.copy(),
+                    "weighted_qxy": point * component_intensity[index],
+                    "weight": float(component_intensity[index]),
+                    "indices": [int(index)],
+                }
+            )
+        else:
+            group["weighted_qxy"] += point * component_intensity[index]
+            group["weight"] += float(component_intensity[index])
+            group["indices"].append(int(index))
+    ordered = sorted(
+        (group["indices"] for group in greedy_groups),
+        key=lambda group: (-len(group), group[0]),
+    )
     examples = []
     for group in ordered[:10]:
         examples.append(
             {
                 "multiplicity": len(group),
-                "qxy_centroid_Ainv": np.mean(qxy[group], axis=0).tolist(),
+                "qxy_centroid_Ainv": np.average(
+                    qxy[group], weights=component_intensity[group], axis=0
+                ).tolist(),
                 "max_pair_distance_Ainv": float(
                     np.max(
                         np.linalg.norm(
@@ -383,11 +450,13 @@ def collision_diagnostics(
         "renderer_merge_fraction": float(
             1.0 - exact_merged_count / max(exact_candidate_count, 1)
         ),
-        "geometric_candidate_count": int(len(qxy)),
-        "geometric_component_count": int(len(ordered)),
-        "geometric_collision_fraction": float(1.0 - len(ordered) / max(len(qxy), 1)),
-        "geometric_mean_multiplicity": float(multiplicities.mean()) if len(multiplicities) else 0.0,
-        "geometric_max_multiplicity": int(multiplicities.max()) if len(multiplicities) else 0,
+        "reconstructed_candidate_count": int(len(qxy)),
+        "reconstructed_greedy_merged_count": int(len(ordered)),
+        "reconstruction_matches_saved_counts": bool(
+            len(qxy) == exact_candidate_count and len(ordered) == exact_merged_count
+        ),
+        "greedy_mean_multiplicity": float(multiplicities.mean()) if len(multiplicities) else 0.0,
+        "greedy_max_multiplicity": int(multiplicities.max()) if len(multiplicities) else 0,
         "merge_tolerance_Ainv": tolerance,
         "largest_collision_groups": examples,
     }
