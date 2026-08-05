@@ -1258,6 +1258,221 @@ def build_cases(
     return rounded(cases), basis, np.asarray(qx)
 
 
+def _match_acom_prediction_peaks(
+    observed: list[dict],
+    predicted: list[dict],
+    tolerance_Ainv: float,
+) -> dict:
+    """One-to-one q assignment used only for the GT/ACOM visualization."""
+    from scipy.optimize import linear_sum_assignment
+
+    observed_q = np.asarray(
+        [[row["qx"], row["qy"]] for row in observed], dtype=float
+    )
+    predicted_q = np.asarray(
+        [[row["qx"], row["qy"]] for row in predicted], dtype=float
+    )
+    if not len(observed_q) or not len(predicted_q):
+        matches = []
+    else:
+        distances = np.linalg.norm(
+            observed_q[:, None, :] - predicted_q[None, :, :], axis=2
+        )
+        observed_indices, predicted_indices = linear_sum_assignment(distances)
+        matches = [
+            {
+                "oracle_index": int(observed_index),
+                "predicted_index": int(predicted_index),
+                "distance_Ainv": float(distances[observed_index, predicted_index]),
+            }
+            for observed_index, predicted_index in zip(
+                observed_indices, predicted_indices
+            )
+            if distances[observed_index, predicted_index] <= tolerance_Ainv
+        ]
+    matched_observed = {row["oracle_index"] for row in matches}
+    matched_predicted = {row["predicted_index"] for row in matches}
+    distances_Ainv = np.asarray(
+        [row["distance_Ainv"] for row in matches], dtype=float
+    )
+    return {
+        "matching_tolerance_Ainv": float(tolerance_Ainv),
+        "matched_count": len(matches),
+        "unmatched_oracle_count": len(observed) - len(matched_observed),
+        "unmatched_predicted_count": len(predicted) - len(matched_predicted),
+        "oracle_match_fraction": (
+            len(matches) / len(observed) if observed else 0.0
+        ),
+        "predicted_match_fraction": (
+            len(matches) / len(predicted) if predicted else 0.0
+        ),
+        "q_rmse_Ainv": (
+            float(np.sqrt(np.mean(distances_Ainv**2)))
+            if distances_Ainv.size
+            else float("nan")
+        ),
+        "matches": matches,
+    }
+
+
+def build_study_001_peak_example(data_root: Path, config: dict) -> dict:
+    """Build one exact-[001] GT-versus-ACOM Top-1 peak overlay."""
+    import py4DSTEM
+
+    expectation_path = (
+        data_root / "datasets/clean_v5_001_first_born_expectation_512.h5"
+    )
+    oracle_path = (
+        data_root / "intermediates/clean_v5_001_first_born_oracle_512.h5"
+    )
+    manifest = load_jsonl(
+        data_root / "manifests/clean_v5_001_orientations.jsonl"
+    )
+    exact_rows = [
+        row for row in manifest if str(row["study_group"]) == "exact_001"
+    ]
+    if not exact_rows:
+        raise ValueError("[001] manifest has no exact_001 samples")
+    sample_row = min(exact_rows, key=lambda row: str(row["sample_id"]))
+    sample_id = str(sample_row["sample_id"])
+    with h5py.File(expectation_path, "r") as expectation:
+        sample_ids = decode(expectation["sample_id"][:])
+        sample_index = sample_ids.index(sample_id)
+        image = np.asarray(
+            expectation["expectation/intensity"][sample_index],
+            dtype=np.float32,
+        )
+        qx = np.asarray(expectation["detector/qx_Ainv"][:], dtype=float)
+        qy = np.asarray(expectation["detector/qy_Ainv"][:], dtype=float)
+    oracle = ragged_peaks(oracle_path, sample_id)
+    candidate_path = (
+        data_root
+        / "results/v5_001_suite/acom_001/oracle_candidates.h5"
+    )
+    with h5py.File(candidate_path, "r") as candidates:
+        candidate_ids = decode(candidates["sample_id"][:])
+        candidate_index = candidate_ids.index(sample_id)
+        predicted_matrix = np.asarray(
+            candidates["orientation_matrix_sample_to_crystal"][
+                candidate_index, 0
+            ],
+            dtype=float,
+        )
+        candidate = {
+            "rank": 1,
+            "input": "physical oracle peaks",
+            "correlation": float(candidates["correlation"][candidate_index, 0]),
+            "strict_error_deg": float(
+                candidates["strict_misorientation_deg"][candidate_index, 0]
+            ),
+            "friedel_error_deg": float(
+                candidates["friedel_equivalent_misorientation_deg"][
+                    candidate_index, 0
+                ]
+            ),
+            "mirror_match": bool(
+                candidates["mirror_match"][candidate_index, 0]
+            ),
+            "plan_index": np.asarray(
+                candidates["plan_index"][candidate_index, 0], dtype=int
+            ),
+            "orientation_matrix_sample_to_crystal": predicted_matrix,
+        }
+
+    structure = Structure.from_file(str(cif_path(config)))
+    crystal = py4DSTEM.process.diffraction.Crystal.from_pymatgen_structure(
+        structure=structure,
+        conventional_standard_structure=False,
+    )
+    common = config["common"]
+    clean = config["clean"]
+    k_max = float(common["k_max_Ainv"])
+    crystal.setup_diffraction(
+        accelerating_voltage=float(common["accelerating_voltage_V"])
+    )
+    crystal.calculate_structure_factors(
+        k_max=k_max,
+        tol_structure_factor=float(clean["tol_structure_factor"]),
+    )
+    point_list = crystal.generate_diffraction_pattern(
+        orientation_matrix=predicted_matrix,
+        sigma_excitation_error=float(clean["sigma_excitation_error_Ainv"]),
+        tol_excitation_error_mult=float(clean["tol_excitation_error_mult"]),
+        tol_intensity=float(clean["tol_intensity"]),
+        k_max=k_max,
+    )
+    data = point_list.data
+    predicted_qx = np.asarray(data["qx"], dtype=float)
+    predicted_qy = np.asarray(data["qy"], dtype=float)
+    predicted_intensity = np.asarray(data["intensity"], dtype=float)
+    radius = np.hypot(predicted_qx, predicted_qy)
+    keep = (
+        np.isfinite(predicted_qx)
+        & np.isfinite(predicted_qy)
+        & np.isfinite(predicted_intensity)
+        & (radius >= float(common["central_beam_exclusion_Ainv"]))
+        & (radius <= k_max + 1e-8)
+        & (predicted_intensity > 0)
+    )
+    kept_intensity = predicted_intensity[keep]
+    intensity_scale = float(kept_intensity.max(initial=1.0))
+    predicted = [
+        {
+            "qx": float(qx_value),
+            "qy": float(qy_value),
+            "intensity": float(intensity / intensity_scale),
+            "hkl": [int(h), int(k), int(l)],
+        }
+        for qx_value, qy_value, intensity, h, k, l in zip(
+            predicted_qx[keep],
+            predicted_qy[keep],
+            kept_intensity,
+            np.asarray(data["h"], dtype=int)[keep],
+            np.asarray(data["k"], dtype=int)[keep],
+            np.asarray(data["l"], dtype=int)[keep],
+        )
+    ]
+    tolerance_Ainv = float(
+        config["evaluation"]["coordinate_match_tolerance_Ainv"]
+    )
+    comparison = _match_acom_prediction_peaks(
+        oracle, predicted, tolerance_Ainv
+    )
+    return rounded(
+        {
+            "sample_id": sample_id,
+            "sample_index": sample_index,
+            "selection_rule": (
+                "lexicographically first exact_001 sample; fixed, not "
+                "selected by detector performance"
+            ),
+            "study_group": sample_row["study_group"],
+            "tilt_deg": sample_row["tilt_deg"],
+            "tilt_azimuth_deg": sample_row["tilt_azimuth_deg"],
+            "in_plane_rotation_deg": sample_row["in_plane_rotation_deg"],
+            "image_url": image_data_url(image),
+            "image_stats": {
+                "shape": list(image.shape),
+                "dtype": str(image.dtype),
+                "sum": float(np.sum(image)),
+                "minimum": float(np.min(image)),
+                "maximum": float(np.max(image)),
+            },
+            "q_axis": {
+                "qx_min": float(qx[0]),
+                "qx_max": float(qx[-1]),
+                "qy_min": float(qy[0]),
+                "qy_max": float(qy[-1]),
+                "q_pixel_size_Ainv": abs(float(np.median(np.diff(qx)))),
+            },
+            "oracle_peaks": oracle,
+            "acom_predicted_peaks": predicted,
+            "acom_candidate": candidate,
+            "comparison": comparison,
+        }
+    )
+
+
 def aggregate_payload(summary: dict) -> list[dict]:
     return rounded(summary["aggregates"])
 
@@ -1426,6 +1641,9 @@ def build_payload(args: argparse.Namespace) -> dict:
         args.study_001_pyxem_details.resolve(),
         study_001["detectors"],
     )
+    study_001_peak_example = build_study_001_peak_example(
+        args.data_root.resolve(), config
+    )
     noise_gallery = build_noise_gallery(args.data_root.resolve())
     legacy_v3 = []
     for step, filename in (
@@ -1513,6 +1731,7 @@ def build_payload(args: argparse.Namespace) -> dict:
         "cases": cases,
         "study_001": {
             "manifest": rounded(study_001_manifest),
+            "peak_example": study_001_peak_example,
             "evaluation": rounded(
                 {
                     key: value
@@ -1620,6 +1839,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
 .summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
 .definitions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{margin:7px 0}.definition .tag{display:inline-block;background:#eef2ff;border-radius:99px;padding:3px 8px;font-size:12px}.formation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.formation>div{border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--panel);min-height:112px}.formation b{display:block;color:var(--blue);margin-bottom:5px}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px}.input-schema>section{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}.schema-note{padding:12px;border-radius:9px;background:#f8fafc;border:1px solid var(--line)}.input-examples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.input-example{border:1px solid var(--line);border-radius:12px;padding:10px}.input-example img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.image-comparison-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.comparison-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.comparison-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.comparison-card .diff{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.comparison-card .diff img{width:100%;aspect-ratio:1;object-fit:contain}.compare-stage{position:relative;max-width:680px;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#f8fafc}.compare-stage img,.compare-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.comparison-layout{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:16px;align-items:start}.parameter-table-wrap{overflow:auto}.parameter-table-wrap table{font-size:13px}.parameter-table-wrap td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:left}.study-quick{border:2px solid #c4b5fd;background:linear-gradient(135deg,#faf5ff,#fff);border-radius:14px;padding:18px}.study-quick .cards{margin:12px 0}.study-quick canvas{height:330px}@media(max-width:1100px){.definitions,.formation,.image-comparison-grid{grid-template-columns:1fr 1fr}.input-schema,.comparison-layout{grid-template-columns:1fr}}@media(max-width:650px){.definitions,.formation,.image-comparison-grid,.input-examples{grid-template-columns:1fr}}
+.study001-peak-example{margin:16px 0;padding:16px;border:1px solid #c4b5fd;border-radius:14px;background:#fff}.study001-example-grid{display:grid;grid-template-columns:minmax(480px,1.15fr) minmax(320px,.85fr);gap:16px;align-items:start}.study001-example-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;min-width:0}.study001-example-stage{position:relative;width:100%;aspect-ratio:1;overflow:hidden;border-radius:9px;background:#f8fafc}.study001-example-stage img,.study001-example-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.study001-example-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px}.study001-example-metrics span{padding:8px 4px;border-radius:7px;background:#f1f5f9;text-align:center;font-size:12px}.study001-example-metrics b{display:block;font-size:15px;color:var(--ink)}@media(max-width:900px){.study001-example-grid{grid-template-columns:1fr}}
 .image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}.comparison-color-key{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0 12px}.comparison-color-key i{display:inline-block;width:28px;height:14px;border:1px solid #d8dee8;border-radius:3px}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
 .method-comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.method-comparison-plot{min-width:0}.method-comparison-plot canvas{height:420px}.method-comparison-note{padding:11px 13px;border-left:4px solid var(--blue);background:#eff6ff;border-radius:8px;margin:12px 0}.method-comparison-table td,.method-comparison-table th{text-align:right}.method-comparison-table td:first-child,.method-comparison-table th:first-child{text-align:left}.method-comparison-table td:not(:first-child){font-variant-numeric:tabular-nums}@media(max-width:1100px){.method-comparison-grid{grid-template-columns:1fr}}
 .indexer-compare{margin:12px 0 14px}.indexer-compare table{table-layout:fixed}.indexer-compare th,.indexer-compare td{white-space:normal;text-align:left;vertical-align:top;overflow-wrap:anywhere}.indexer-compare th:first-child{width:19%}.indexer-compare th:nth-child(2),.indexer-compare th:nth-child(3){width:40.5%}.indexer-compare td:first-child{font-weight:650;color:#334155}
@@ -1908,6 +2128,13 @@ F ∈ {0, 1, 4, 16, 64}
   <article><b>[100] control · 32</b><span>以 [100] 为 zone axis 的非 [001] 对照组。</span></article>
   <article><b>[110] control · 32</b><span>以 [110] 为 zone axis 的非 [001] 对照组。</span></article>
  </div>
+ <div class="study001-peak-example">
+  <h3>exact [001]：GT 与 ACOM Top‑1 预测峰 / Prediction overlay</h3>
+  <p id="study001-example-note" class="small muted"></p>
+  <div class="legend"><span style="--c:#0891b2">青色圆：GT physical-oracle 峰</span><span style="--c:#ea580c">橙色叉：ACOM Top‑1 取向生成的模板峰</span><span style="--c:#7c3aed">紫色线：q 空间一对一匹配</span><span style="--c:#eab308">黄色粗圈：未匹配 GT 峰</span><span style="--c:#dc2626">红色粗叉：未匹配 ACOM 峰</span></div>
+  <div class="study001-example-grid" id="study001-example-grid"></div>
+  <p class="chart-note">蓝色 GT 点来自 V5 First‑Born 图像对应的 physical oracle。橙色 ACOM 点由保存的 Top‑1 预测矩阵重新调用与 ACOM 基线一致的 py4DSTEM 运动学峰生成器得到。全部 <code>Kmax ≤ 1.5 Å⁻¹</code> 峰均显示；中心透射盘不计入比较。</p>
+ </div>
  <div class="result-callout" id="study001-trend-callout"></div>
  <div class="study-summary-grid">
   <article class="panel"><h3 id="study001-angle-summary-title">随倾角变化的 Top‑5 Acc@2°</h3><p class="small muted">横轴 0°–6°；每条线使用对应倾角的同一批 Clean‑E 样本。分组平均值随离开 [001] 明显恢复，但逐角度结果并非严格单调。</p><div class="controls compact"><div class="control"><label>候选范围 / Rank</label><select id="study001-angle-rank"><option value="1">Top‑1</option><option value="2">Top‑2</option><option value="3">Top‑3</option><option value="4">Top‑4</option><option value="5" selected>Top‑5</option></select></div><div class="control"><label>正确阈值 / Accuracy</label><select id="study001-angle-threshold"><option value="acc1">Acc@1°</option><option value="acc2" selected>Acc@2°</option><option value="acc5">Acc@5°</option></select></div></div><canvas class="chart" id="study001-angle-summary-chart" width="760" height="360"></canvas><div class="legend" id="study001-angle-summary-legend"></div></article>
@@ -2136,6 +2363,8 @@ function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gal
 function drawComparisonOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value);if(!c)return;$("comparison-base-image").src=c.image_url;$("comparison-case-title").textContent=`${c.sample_id} · ${c.track==='expectation'?'Clean-E':`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("comparison-case-note").textContent=c.description;const m=c.peak_metrics;$("comparison-case-metrics").innerHTML=[['TP',m.true_positive],['FP',m.false_positive],['FN',m.false_negative],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['RMSE',`${num(m.position_rmse_px,3)} px`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');const {ctx,W,H}=canvasSurface($("comparison-overlay"));ctx.clearRect(0,0,W,H);const matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.lineWidth=1.5;for(const pair of m.matches){const a=qToPixel(c,c.oracle_peaks[pair.oracle_index].qx,c.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(c,c.detected_peaks[pair.detected_index].qx,c.detected_peaks[pair.detected_index].qy,W,H);ctx.strokeStyle='#16a34a';ctx.fillStyle='#16a34a';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.beginPath();ctx.arc(a[0],a[1],5,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(b[0],b[1],3,0,Math.PI*2);ctx.fill()}ctx.strokeStyle='#eab308';ctx.lineWidth=2;for(let i=0;i<c.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(c,c.oracle_peaks[i].qx,c.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle='#dc2626';ctx.lineWidth=2;for(let i=0;i<c.detected_peaks.length;i++)if(!matchedD.has(i)){const p=qToPixel(c,c.detected_peaks[i].qx,c.detected_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-5,p[1]-5);ctx.lineTo(p[0]+5,p[1]+5);ctx.moveTo(p[0]+5,p[1]-5);ctx.lineTo(p[0]-5,p[1]+5);ctx.stroke()}}
 function drawStudy001Summary(){const s=DATA.study_001,groups=s.topk_groups.groups||[],tilts=s.topk_groups.tilts||[],diskTilts=s.topk_groups.disk_tilts||[],order=['exact_001','near_001','transition_001','control_100','control_110'],short={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100]',control_110:'[110]'},row=(method,group)=>groups.find(x=>x.method===method&&x.group===group),oracle=order.map(g=>row('oracle',g)),rank=Number($("study001-angle-rank").value)-1,threshold=$("study001-angle-threshold").value,thresholdLabel={acc1:'Acc@1°',acc2:'Acc@2°',acc5:'Acc@5°'}[threshold],tiltKey=`topk_${threshold}`;const angleMethods=[['oracle','ACOM + oracle','#111827'],['autodisk','ACOM + AutoDisk','#2563eb'],['dog_rgm','ACOM + DoG‑RGM','#ea580c'],['py4dstem','ACOM + find_Bragg_disks','#15803d'],['pyxem','Pyxem','#7c3aed']],tiltValues=[...new Set(tilts.map(x=>x.tilt_deg))].sort((a,b)=>a-b),angleSeries=angleMethods.map(([method,name,color])=>({name,color,values:tiltValues.map(t=>tilts.find(x=>x.method===method&&x.tilt_deg===t)?.[tiltKey][rank]??null)})),orientationTitle=`Top‑${rank+1} ${thresholdLabel}`;$("study001-angle-summary-title").textContent=`随倾角变化的 ${orientationTitle}`;chart($("study001-angle-summary-chart"),tiltValues,angleSeries,{yTitle:orientationTitle,fixed:true});legend('study001-angle-summary-legend',angleSeries);const diskMetric=$("study001-disk-angle-metric").value,diskMetricLabel={recall:'Recall',precision:'Precision',high_angle_recall:'High-angle Recall'}[diskMetric],diskMethods=[['autodisk','AutoDisk','#2563eb'],['dog_rgm','DoG‑RGM','#ea580c'],['py4dstem','find_Bragg_disks','#15803d']],diskAngleSeries=diskMethods.map(([detector,name,color])=>({name,color,values:tiltValues.map(t=>diskTilts.find(x=>x.detector===detector&&x.tilt_deg===t)?.[diskMetric]??null)}));$("study001-disk-angle-title").textContent=`相同倾角样本的检峰 ${diskMetricLabel}`;chart($("study001-disk-angle-chart"),tiltValues,diskAngleSeries,{yTitle:`Disk ${diskMetricLabel}`,fixed:true});legend('study001-disk-angle-legend',diskAngleSeries);const groupSeries=[{name:'Top‑1 Acc@2°',color:'#dc2626',values:oracle.map(r=>r.topk_acc2[0])},{name:'Top‑5 Acc@2°',color:'#2563eb',values:oracle.map(r=>r.topk_acc2[4])},{name:'Top‑5 Acc@5°',color:'#15803d',values:oracle.map(r=>r.topk_acc5[4])}];groupedBarChart($("study001-group-summary-chart"),order.map(g=>short[g]),groupSeries,{yTitle:'Accuracy',fixed:true});legend('study001-group-summary-legend',groupSeries);const detectorColors=['#2563eb','#ea580c','#15803d'],detectorSeries=s.detectors.map((detector,i)=>({name:DETECTOR_LABEL[detector.detector],color:detectorColors[i],values:order.map(g=>(detector.study_group_summary||{})[g]?.recall??null)}));groupedBarChart($("study001-detector-summary-chart"),order.map(g=>short[g]),detectorSeries,{yTitle:'Disk Recall',fixed:true});legend('study001-detector-summary-legend',detectorSeries);const exact=row('oracle','exact_001'),near=row('oracle','near_001'),transition=row('oracle','transition_001'),c100=row('oracle','control_100'),c110=row('oracle','control_110'),pxExact=row('pyxem','exact_001'),pxNear=row('pyxem','near_001'),autoGroups=(s.detectors.find(x=>x.detector==='autodisk')?.study_group_summary||{});$("study001-trend-callout").innerHTML=`<b>离开 [001] 后总体恢复，但逐角度并非严格单调：</b>ACOM + physical oracle 的分组 Top‑5 Acc@2° 从 exact [001] 的 ${pct(exact.topk_acc2[4])}，上升到 near [001] 的 ${pct(near.topk_acc2[4])}，再到 3°–6° transition 的 ${pct(transition.topk_acc2[4])}。两个对照组在 2° 阈值下为 ${pct(c100.topk_acc2[4])} / ${pct(c110.topk_acc2[4])}，但 Top‑5 Acc@5° 均为 ${pct(c100.topk_acc5[4])}，说明对照组主要落在 2° 判定边界附近。Pyxem 的 exact/near Top‑5 Acc@2° 为 ${pct(pxExact.topk_acc2[4])} / ${pct(pxNear.topk_acc2[4])}，表明二维图像仍包含可用取向信息。`;$("study001-detector-conclusion").innerHTML=`<b>恢复不是因为检峰变得更容易：</b>AutoDisk Recall 从 exact [001] 的 ${pct(autoGroups.exact_001.recall)} 降到 near [001] 的 ${pct(autoGroups.near_001.recall)}，在 transition [001] 进一步降到 ${pct(autoGroups.transition_001.recall)}；同一过程中 ACOM + oracle 的 Top‑5 Acc@2° 却从 ${pct(exact.topk_acc2[4])} 升至 ${pct(transition.topk_acc2[4])}。两条趋势方向相反，进一步支持高对称候选简并、取向搜索或等价表示接口是主要异常来源。`}
 function drawStudy001Quick(){const method=$("study001-quick-method").value,groups=DATA.study_001.topk_groups.groups||[],order=['exact_001','near_001','transition_001','control_100','control_110'],labels={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100] control',control_110:'[110] control'},chartLabels={exact_001:'exact',near_001:'near',transition_001:'transition',control_100:'[100]',control_110:'[110]'},find=group=>groups.find(x=>x.method===method&&x.group===group);const rows=order.map(group=>find(group)).filter(Boolean);const series=[{name:'Top-1',color:'#7c3aed',values:rows.map(r=>r.topk_acc2[0])},{name:'Top-5',color:'#ea580c',values:rows.map(r=>r.topk_acc2[4])}];chart($("study001-quick-chart"),rows.map(r=>chartLabels[r.group]||r.group),series,{yTitle:'Acc@2°',fixed:true});legend('study001-quick-legend',series);$("study001-quick-cards").innerHTML=rows.map(r=>`<div class="card"><strong>${pct(r.topk_acc2[0])} → ${pct(r.topk_acc2[4])}</strong><span>${labels[r.group]||r.group} · N=${r.samples}</span></div>`).join('')}
+function drawStudy001PeakExample(){const e=DATA.study_001.peak_example;if(!e)return;$("study001-example-note").innerHTML=`样本 <code>${e.sample_id}</code>；倾角 ${num(e.tilt_deg,3)}°，倾转方位 ${num(e.tilt_azimuth_deg,3)}°，面内旋转 ${num(e.in_plane_rotation_deg,3)}°；oracle 共 ${e.oracle_peaks.length} 个盘。该样本固定选择为 exact [001] 中 sample_id 排序的第一个，不按检峰性能挑选。`;$("study001-example-grid").innerHTML=e.detectors.map(d=>`<article class="study001-example-card"><h4>${DETECTOR_LABEL[d.detector]}</h4><div class="study001-example-stage"><img src="${e.image_url}" alt="${DETECTOR_LABEL[d.detector]} exact [001] diffraction image"><canvas id="study001-overlay-${d.detector}" width="512" height="512"></canvas></div><div class="study001-example-metrics"><span><b>${d.peak_metrics.true_positive}</b>TP</span><span><b>${d.peak_metrics.false_negative}</b>FN</span><span><b>${d.peak_metrics.false_positive}</b>FP</span><span><b>${pct(d.peak_metrics.precision)}</b>Precision</span><span><b>${pct(d.peak_metrics.recall)}</b>Recall</span><span><b>${num(d.peak_metrics.position_rmse_px,3)} px</b>RMSE</span></div></article>`).join("");for(const d of e.detectors){const m=d.peak_metrics,{ctx,W,H}=canvasSurface($("study001-overlay-"+d.detector)),matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.clearRect(0,0,W,H);ctx.strokeStyle="rgba(124,58,237,.72)";ctx.lineWidth=1;for(const pair of m.matches){const a=qToPixel(e,e.oracle_peaks[pair.oracle_index].qx,e.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(e,d.detected_peaks[pair.detected_index].qx,d.detected_peaks[pair.detected_index].qy,W,H);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}ctx.strokeStyle="#0891b2";ctx.lineWidth=1.7;for(const peak of e.oracle_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#ea580c";ctx.lineWidth=1.7;for(const peak of d.detected_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()}ctx.strokeStyle="#eab308";ctx.lineWidth=3;for(let i=0;i<e.oracle_peaks.length;i++)if(!matchedO.has(i)){const peak=e.oracle_peaks[i],p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],7,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#dc2626";ctx.lineWidth=3;for(let i=0;i<d.detected_peaks.length;i++)if(!matchedD.has(i)){const peak=d.detected_peaks[i],p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-6,p[1]-6);ctx.lineTo(p[0]+6,p[1]+6);ctx.moveTo(p[0]+6,p[1]-6);ctx.lineTo(p[0]-6,p[1]+6);ctx.stroke()}}}
+drawStudy001PeakExample=function(){const e=DATA.study_001.peak_example;if(!e)return;const m=e.comparison,c=e.acom_candidate,matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedP=new Set(m.matches.map(x=>x.predicted_index));$("study001-example-note").innerHTML=`样本 <code>${e.sample_id}</code>；倾角 ${num(e.tilt_deg,3)}°，面内旋转 ${num(e.in_plane_rotation_deg,3)}°。ACOM 输入为 physical oracle 峰，因此这张图不包含自动检峰误差；橙色点是 ACOM Top‑1 预测取向重新生成的模板峰。样本固定选择为 exact [001] 中 sample_id 排序的第一个。`;$("study001-example-grid").innerHTML=`<article class="study001-example-card"><div class="study001-example-stage"><img src="${e.image_url}" alt="exact [001] GT and ACOM predicted peaks"><canvas id="study001-acom-overlay" width="512" height="512"></canvas></div></article><article class="study001-example-card"><h4>ACOM + physical oracle · Top‑1</h4><div class="study001-example-metrics"><span><b>${e.oracle_peaks.length}</b>GT peaks</span><span><b>${e.acom_predicted_peaks.length}</b>ACOM peaks</span><span><b>${m.matched_count}</b>q matched</span><span><b>${pct(m.oracle_match_fraction)}</b>GT matched</span><span><b>${pct(m.predicted_match_fraction)}</b>ACOM matched</span><span><b>${num(m.q_rmse_Ainv,4)} Å⁻¹</b>q RMSE</span></div><div class="formula" style="margin-top:12px">correlation = ${num(c.correlation,6)}\nstrict error = ${num(c.strict_error_deg,3)}°\nsymmetry+Friedel error = ${num(c.friedel_error_deg,3)}°\nplan index = [${c.plan_index.join(", ")}]\nmirror branch = ${c.mirror_match?"used":"not used"}\nq assignment tolerance = ${num(m.matching_tolerance_Ainv,3)} Å⁻¹</div><p class="small muted">“GT matched”只表示标准峰附近存在 ACOM 模板峰，不等于取向正确。高对称 [001] 下，不同取向可以产生高度重合的二维点阵，而 HKL 标记和三维取向仍不同。</p></article>`;const {ctx,W,H}=canvasSurface($("study001-acom-overlay"));ctx.clearRect(0,0,W,H);ctx.strokeStyle="rgba(124,58,237,.68)";ctx.lineWidth=1;for(const pair of m.matches){const a=qToPixel(e,e.oracle_peaks[pair.oracle_index].qx,e.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(e,e.acom_predicted_peaks[pair.predicted_index].qx,e.acom_predicted_peaks[pair.predicted_index].qy,W,H);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}ctx.strokeStyle="#0891b2";ctx.lineWidth=1.8;for(const peak of e.oracle_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#ea580c";ctx.lineWidth=1.8;for(const peak of e.acom_predicted_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()}ctx.strokeStyle="#eab308";ctx.lineWidth=3;for(let i=0;i<e.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(e,e.oracle_peaks[i].qx,e.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],7,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#dc2626";ctx.lineWidth=3;for(let i=0;i<e.acom_predicted_peaks.length;i++)if(!matchedP.has(i)){const p=qToPixel(e,e.acom_predicted_peaks[i].qx,e.acom_predicted_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-6,p[1]-6);ctx.lineTo(p[0]+6,p[1]+6);ctx.moveTo(p[0]+6,p[1]-6);ctx.lineTo(p[0]-6,p[1]+6);ctx.stroke()}};
 function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5",study_001:"[001] independent study"};const show=v=>typeof v==="object"?JSON.stringify(v,null,2):String(v);$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]||k}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><pre class="file">${show(b)}</pre></div>`).join("")}</div>`).join("")}
 function cleanERow(scope,method){return method==="pyxem"?aggregateScoped(scope,"pyxem","track",{track:"Clean-E"}):aggregateScoped(scope,"acom","clean_e_input",{track:"Clean-E",input:method})}
 function renderSummary(){const headlineDose=1000000,noise="poisson_only",methods=METHOD_ORDER,rows=methods.map(m=>({m,row:cleanCRow(m,headlineDose,noise)})),best=[...rows].sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-headline").textContent=`${METHODS[best.m].label}: ${pct(best.row.top_k[4].accuracy_all_inputs_within_2deg)}`;const s001=["oracle","autodisk","dog_rgm","py4dstem","pyxem"].map(m=>({m,row:cleanERow("study001",m)})).sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-001").textContent=`${s001.m==="pyxem"?"Pyxem":DETECTOR_LABEL[s001.m]||"Oracle"}: ${pct(s001.row.top_k[4].accuracy_all_inputs_within_2deg)}`;$("summary-disks").textContent=`${DATA.disk_recovery.headline.num_conditions} + ${DATA.disk_recovery.study_001.num_conditions} conditions`;const endpointSeries=metricSeries(rows.map(x=>x.row),"acc2");groupedBarChart($("summary-endpoint-chart"),methods.map(m=>METHOD_SHORT[m]),endpointSeries,{yTitle:"Top‑K Acc@2°",fixed:true});legend("summary-endpoint-legend",endpointSeries);const detectors=Object.keys(DETECTOR_LABEL),diskSeries=[{name:"Recall",color:"#2563eb",values:detectors.map(d=>diskRow("headline",d,headlineDose,noise).recall_mean)},{name:"Precision",color:"#ea580c",values:detectors.map(d=>diskRow("headline",d,headlineDose,noise).precision_mean)}];groupedBarChart($("summary-disk-chart"),detectors.map(d=>DETECTOR_LABEL[d]),diskSeries,{yTitle:"检峰率",fixed:true});legend("summary-disk-legend",diskSeries);const doseColors=["#2563eb","#ea580c","#15803d","#7c3aed"],doseSeries=methods.map((m,i)=>({name:METHODS[m].label,color:doseColors[i],values:DATA.dataset.doses.map(d=>cleanCRow(m,d,noise).top_k[4].accuracy_all_inputs_within_2deg)}));chart($("summary-dose-chart"),DATA.dataset.doses,doseSeries,{logX:true,yTitle:"Top‑5 Acc@2°",fixed:true});legend("summary-dose-legend",doseSeries);const images=Object.fromEntries((DATA.noise_gallery?.images||[]).map(x=>[x.id,x])),imageTargets={expectation:"expectation",noiseless:"noiseless",poisson_only:"poisson"};for(const [id,target] of Object.entries(imageTargets)){const image=images[id];if(image)$("summary-image-"+target).src=image.image_url}}
@@ -2166,8 +2395,8 @@ function renderStudy001(){
  drawStudy001()
 }
 function renderLegacy(){const rows=DATA.legacy_v3,series=[{name:"Headline Acc@2°",color:"#2563eb",values:rows.map(r=>r.headline.accuracy_within_2deg)},{name:"40 grid probes Acc@2°",color:"#ea580c",values:rows.map(r=>r.grid_probe.accuracy_within_2deg)}];chart($("legacy-chart"),rows.map(r=>`${r.angle_step_deg}°`),series,{yTitle:"V3 Acc@2°",fixed:true});legend("legacy-legend",series);$("legacy-table").innerHTML=rows.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${r.headline.num_samples}</td><td>${pct(r.headline.accuracy_within_2deg)}</td><td>${num(r.headline.median_misorientation_deg)}°</td><td>${r.grid_probe.num_samples}</td><td>${pct(r.grid_probe.accuracy_within_2deg)}</td><td>${num(r.grid_probe.median_misorientation_deg)}°</td></tr>`).join("")}
-function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderImageComparison();renderParameterTables();renderFiles();renderStudy001();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();drawStudy001Summary();drawStudy001Quick();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));["study001-angle-rank","study001-angle-threshold","study001-disk-angle-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001Summary));$("study001-quick-method").addEventListener("change",drawStudy001Quick);$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
-let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();drawStudy001Summary();drawStudy001Quick();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes();drawComparisonOverlay()},120)});
+function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderImageComparison();renderParameterTables();renderFiles();renderStudy001();drawStudy001PeakExample();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();drawStudy001Summary();drawStudy001Quick();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));["study001-angle-rank","study001-angle-threshold","study001-disk-angle-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001Summary));$("study001-quick-method").addEventListener("change",drawStudy001Quick);$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
+let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();drawStudy001Summary();drawStudy001Quick();drawStudy001PeakExample();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes();drawComparisonOverlay()},120)});
 init();
 drawMethodComparison();
 ["method-comparison-scope","method-comparison-dose","method-comparison-noise","method-comparison-metric","detection-comparison-metric"].forEach(id=>$(id).addEventListener("change",drawMethodComparison));
