@@ -29,6 +29,7 @@ from kinematic_cbed import (  # noqa: E402
     render_kinematic_cbed_batch_cuda,
 )
 from or4d_common import cif_path, load_config, read_jsonl, write_peak_h5  # noqa: E402
+from v6_runtime import enforce_server_write_scope  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -224,6 +225,11 @@ def main() -> None:
     image_path, oracle_path, raw_path = resolved_outputs(
         args, subset, forward_model
     )
+    if "v6" in config:
+        image_path, oracle_path, raw_path = (
+            enforce_server_write_scope(path, config)
+            for path in (image_path, oracle_path, raw_path)
+        )
     for path in (image_path, oracle_path, raw_path):
         path.parent.mkdir(parents=True, exist_ok=True)
 
@@ -625,6 +631,8 @@ def main() -> None:
         else REPORT_DIR
         / f"clean_image_generation{report_model_suffix}{report_suffix}.json"
     )
+    if "v6" in config:
+        report_path = enforce_server_write_scope(report_path, config)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(json.dumps(report, indent=2), encoding="utf-8")
     print(f"Images: {image_path}")

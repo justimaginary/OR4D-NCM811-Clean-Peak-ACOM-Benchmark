@@ -79,13 +79,25 @@ v6:
   headline_orientation_count: 16384
   trace_intermediates: true
   large_artifacts_server_only: true
+  paths:
+    server_root: /mnt/data/xietianhong/or4d-clean-v6
+    orientations: /mnt/data/xietianhong/or4d-clean-v6/manifests/orientations.jsonl
+    orientation_summary: /mnt/data/xietianhong/or4d-clean-v6/manifests/orientation_summary.json
+    expectation: /mnt/data/xietianhong/or4d-clean-v6/datasets/clean_expectation.h5
+    physical_oracle_peaks: /mnt/data/xietianhong/or4d-clean-v6/oracle/physical_oracle_peaks.h5
+    physical_oracle_reflections: /mnt/data/xietianhong/or4d-clean-v6/oracle/physical_oracle_reflections.h5
+    observation_manifest: /mnt/data/xietianhong/or4d-clean-v6/manifests/observations.json
+    observation_shards: /mnt/data/xietianhong/or4d-clean-v6/observations/poisson
+    peak_root: /mnt/data/xietianhong/or4d-clean-v6/peaks
+    acom_root: /mnt/data/xietianhong/or4d-clean-v6/acom
+    diagnostics_root: /mnt/data/xietianhong/or4d-clean-v6/diagnostics
+    run_record_root: /mnt/data/xietianhong/or4d-clean-v6/run_records
   study_001:
     enabled: true
     included_in_headline_count: false
   effective_probe_area:
     definition: intensity_participation_ratio
     real_space_oversampling: 4
-    integration_extent_factor: 8.0
     normalization_tolerance: 1.0e-7
   observation_store:
     root: /mnt/data/xietianhong/or4d-clean-v6
@@ -97,6 +109,11 @@ v6:
     sparse_codec: zstd
     sparse_codec_level: 5
     sparse_switch_fraction: 0.35
+    dense_chunk_patterns: 1
+    sample_block_size: 8
+    sparse_value_chunk_length: 32768
+    minimum_free_GiB: 5.0
+    sha256_read_block_MiB: 8
     persist_expectation: true
     persist_poisson_realizations: true
     factorize_deterministic_counts: true
@@ -122,6 +139,10 @@ v6:
     equivalence_intensity_rtol: 0.0001
   runtime:
     server_id: SL3053
+    enforce_write_scope_for_users: [xietianhong]
+    allowed_write_roots:
+      - /home/xietianhong
+      - /mnt/data/xietianhong
     conda_environment: or4d-clean
     max_gpus: 4
     require_empty_gpu: true
@@ -151,4 +172,3 @@ v6:
       azimuth_valid_min_tilt_deg: 1.0
       beam_accuracy_thresholds_deg: [1.0, 2.0, 5.0]
       azimuth_accuracy_thresholds_deg: [2.0, 5.0, 10.0]
-

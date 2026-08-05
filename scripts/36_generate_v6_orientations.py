@@ -16,6 +16,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from or4d_common import cif_path, load_config, write_jsonl  # noqa: E402
 from v6_orientations import build_v6_orientation_records  # noqa: E402
+from v6_runtime import enforce_server_write_scope  # noqa: E402
 
 
 def parse_args() -> argparse.Namespace:
@@ -49,7 +50,7 @@ def main() -> None:
     if len(records) != expected:
         raise RuntimeError(f"Generated {len(records)} records, expected {expected}")
 
-    output = args.output.resolve()
+    output = enforce_server_write_scope(args.output, config)
     write_jsonl(output, records)
     matrices = np.asarray(
         [record["orientation_matrix_sample_to_crystal"] for record in records]
@@ -66,7 +67,7 @@ def main() -> None:
             "determinant_max": float(determinants.max()),
         }
     )
-    summary_output = args.summary_output.resolve()
+    summary_output = enforce_server_write_scope(args.summary_output, config)
     summary_output.parent.mkdir(parents=True, exist_ok=True)
     summary_output.write_text(
         json.dumps(summary, indent=2, ensure_ascii=False),
@@ -90,4 +91,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
