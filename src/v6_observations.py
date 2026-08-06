@@ -189,6 +189,34 @@ def poisson_count_image(
     return counts.astype(np.uint32)
 
 
+def poisson_count_image_cuda(
+    expectation: np.ndarray,
+    expected_total: float,
+    seed: int,
+    *,
+    seed_modulus: int,
+) -> tuple[np.ndarray, int]:
+    """Generate one persisted Poisson realization with CuPy's cuRAND backend."""
+    if float(expected_total) <= 0.0:
+        raise ValueError("expected_total must be positive")
+    if int(seed_modulus) <= 0:
+        raise ValueError("CUDA seed modulus must be positive")
+    try:
+        import cupy as cp
+    except ImportError as error:
+        raise RuntimeError("CUDA Poisson generation requires CuPy") from error
+    backend_seed = int(seed) % int(seed_modulus)
+    probability = normalized_expectation(expectation)
+    rng = cp.random.RandomState(seed=backend_seed)
+    counts_gpu = rng.poisson(
+        cp.asarray(probability) * float(expected_total)
+    )
+    maximum = int(cp.asnumpy(counts_gpu.max()))
+    if maximum > np.iinfo(np.uint32).max:
+        raise OverflowError("Poisson count exceeds uint32 range")
+    return cp.asnumpy(counts_gpu.astype(cp.uint32)), backend_seed
+
+
 def read_noise_sigma_e_per_pixel(level: dict[str, Any], config: dict[str, Any]) -> float:
     frames = int(level["summed_frame_count"])
     if frames < 0:
@@ -311,7 +339,10 @@ def _iter_counts(
     expected_total: float,
     repeats: int,
     seed_base: int,
-) -> Iterator[tuple[int, int, int, np.ndarray]]:
+    *,
+    compute_backend: str,
+    cuda_seed_modulus: int,
+) -> Iterator[tuple[int, int, int, int, np.ndarray]]:
     for local_index, source_index in enumerate(range(sample_start, sample_stop)):
         probability = np.asarray(expectation[source_index], dtype=np.float64)
         for repeat in range(repeats):
@@ -322,10 +353,21 @@ def _iter_counts(
                 dose,
                 repeat,
             )
-            counts = poisson_count_image(
-                probability, expected_total, np.random.default_rng(seed)
-            )
-            yield local_index, repeat, seed, counts
+            if compute_backend == "cpu":
+                counts = poisson_count_image(
+                    probability, expected_total, np.random.default_rng(seed)
+                )
+                backend_seed = seed
+            elif compute_backend == "cuda":
+                counts, backend_seed = poisson_count_image_cuda(
+                    probability,
+                    expected_total,
+                    seed,
+                    seed_modulus=cuda_seed_modulus,
+                )
+            else:
+                raise ValueError(f"Unsupported Poisson compute backend: {compute_backend}")
+            yield local_index, repeat, seed, backend_seed, counts
 
 
 def write_observation_shard(
@@ -335,6 +377,7 @@ def write_observation_shard(
     *,
     sample_start: int,
     sample_stop: int,
+    compute_backend: str = "cpu",
 ) -> dict[str, Any]:
     """Persist all independent V6 Poisson realizations for one sample shard."""
     source_path = Path(expectation_file).resolve()
@@ -347,6 +390,14 @@ def write_observation_shard(
     repeats = int(counting["stochastic_repeats"])
     seed_base = int(counting["seed_base"])
     read_seed_base = int(config["clean_image"]["instrument_noise"]["seed_base"])
+    if compute_backend not in ("cpu", "cuda"):
+        raise ValueError(f"Unsupported Poisson compute backend: {compute_backend}")
+    cuda_seed_modulus = int(counting["cuda_seed_modulus"])
+    selected_rng_algorithm = (
+        str(counting["rng_algorithm"])
+        if compute_backend == "cpu"
+        else str(counting["cuda_rng_algorithm"])
+    )
     store_config = config["v6"]["observation_store"]
     pilot_samples = int(store_config["sample_block_size"])
     sparse_threshold = float(store_config["sparse_switch_fraction"])
@@ -391,6 +442,9 @@ def write_observation_shard(
         poisson_seeds = np.empty(
             (sample_count, len(doses), repeats), dtype=np.uint64
         )
+        poisson_backend_seeds = np.empty(
+            (sample_count, len(doses), repeats), dtype=np.uint64
+        )
         poisson_totals = np.empty(
             (sample_count, len(doses), repeats), dtype=np.uint64
         )
@@ -417,7 +471,10 @@ def write_observation_shard(
             target.attrs["sample_start"] = sample_start
             target.attrs["sample_stop"] = sample_stop
             target.attrs["source_expectation_file"] = str(source_path)
-            target.attrs["rng_algorithm"] = str(counting["rng_algorithm"])
+            target.attrs["poisson_compute_backend"] = compute_backend
+            target.attrs["rng_algorithm"] = selected_rng_algorithm
+            target.attrs["stable_seed_algorithm"] = str(counting["rng_algorithm"])
+            target.attrs["cuda_seed_modulus"] = cuda_seed_modulus
             target.attrs["logical_hash_definition"] = (
                 "SHA-256 of persisted pixels for expectation/Poisson; SHA-256 of "
                 "the lossless reconstruction recipe for deterministic/read-noise layers"
@@ -459,11 +516,13 @@ def write_observation_shard(
                     expected_total,
                     repeats,
                     seed_base,
+                    compute_backend=compute_backend,
+                    cuda_seed_modulus=cuda_seed_modulus,
                 )
                 pilot_count = min(sample_count, pilot_samples) * repeats
                 pilot = [next(iterator) for _ in range(pilot_count)]
                 nonzero_fraction = float(
-                    np.mean([np.count_nonzero(row[3]) / row[3].size for row in pilot])
+                    np.mean([np.count_nonzero(row[4]) / row[4].size for row in pilot])
                 )
                 sparse = nonzero_fraction <= sparse_threshold
                 group.attrs["pilot_nonzero_fraction"] = nonzero_fraction
@@ -519,8 +578,11 @@ def write_observation_shard(
                     sparse_indices: list[np.ndarray] = []
                     sparse_values: list[np.ndarray] = []
                     batch_offsets = [cursor]
-                    for local_index, repeat, seed, counts in batch:
+                    for local_index, repeat, seed, backend_seed, counts in batch:
                         poisson_seeds[local_index, dose_index, repeat] = seed
+                        poisson_backend_seeds[
+                            local_index, dose_index, repeat
+                        ] = backend_seed
                         poisson_totals[local_index, dose_index, repeat] = int(
                             counts.sum()
                         )
@@ -560,6 +622,9 @@ def write_observation_shard(
                     )
 
             target.create_dataset("poisson/seed", data=poisson_seeds)
+            target.create_dataset(
+                "poisson/backend_seed", data=poisson_backend_seeds
+            )
             target.create_dataset("poisson/actual_total_electrons", data=poisson_totals)
             target.create_dataset("poisson/pixel_sha256", data=poisson_hashes)
 
@@ -647,6 +712,8 @@ def write_observation_shard(
         "logical_observation_count": sample_count * len(conditions),
         "effective_illumination_area_A2": area,
         "expected_total_electrons": expected_totals.tolist(),
+        "poisson_compute_backend": compute_backend,
+        "poisson_rng_algorithm": selected_rng_algorithm,
         "encodings": encodings,
     }
 

@@ -66,6 +66,7 @@ def test_v6_condition_grid_matches_specification() -> None:
     config = load_config(ROOT / "config" / "benchmark_v6.yaml")
     assert config["clean_image"]["gpts"] == [512, 512]
     assert config["v6"]["expectation_generation"]["expected_shard_count"] == 4
+    assert config["clean_image"]["counting"]["cuda_seed_modulus"] == 2**32
     assert config["clean_image"]["dog_rgm"]["threshold_abs"] == 0.001
     assert config["clean_image"]["py4dstem_find_bragg_disks"][
         "normalize_for_detection"
@@ -127,7 +128,9 @@ def test_compressed_shard_roundtrip(tmp_path: Path) -> None:
         config,
         sample_start=0,
         sample_stop=2,
+        compute_backend="cpu",
     )
+    assert report["poisson_compute_backend"] == "cpu"
     assert report["logical_observation_count"] == 2 * (1 + 2 * 10)
     assert set(report["encodings"].values()) <= {
         "dense_uint32",

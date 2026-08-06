@@ -49,6 +49,8 @@ clean_image:
     stochastic_repeats: 3
     seed_base: 26080502
     rng_algorithm: PCG64
+    cuda_rng_algorithm: cupy.RandomState.CURAND_RNG_PSEUDO_DEFAULT
+    cuda_seed_modulus: 4294967296
   instrument_noise:
     model: empad_g2_gaussian_read_noise_after_frame_sum
     reference_detector: EMPAD-G2
@@ -125,6 +127,7 @@ v6:
     factorize_deterministic_counts: true
     factorize_read_noise: true
     reconstruction_audit_samples_per_shard: 2
+    formal_poisson_compute_backend: cuda
   expectation_generation:
     orientation_shard_size: 4096
     expected_shard_count: 4

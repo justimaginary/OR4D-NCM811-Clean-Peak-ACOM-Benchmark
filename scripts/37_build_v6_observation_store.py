@@ -21,7 +21,10 @@ from v6_observations import (  # noqa: E402
     logical_observation_count,
     write_observation_shard,
 )
-from v6_runtime import enforce_server_write_scope  # noqa: E402
+from v6_runtime import (  # noqa: E402
+    enforce_server_write_scope,
+    require_empty_bound_gpu,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -33,6 +36,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--config", type=Path, default=ROOT / "config" / "benchmark_v6.yaml"
+    )
+    parser.add_argument(
+        "--compute-backend",
+        choices=("cpu", "cuda"),
+        help="Override the configured Poisson realization backend.",
     )
     parser.add_argument("--expectation-file", type=Path)
     parser.add_argument("--output-dir", type=Path)
@@ -144,6 +152,11 @@ def build_selected_shards(
     expectation: Path,
     output_dir: Path,
 ) -> None:
+    physical_gpu = (
+        require_empty_bound_gpu(config)
+        if args.compute_backend == "cuda"
+        else "not_applicable"
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     with h5py.File(expectation, "r") as h5:
         sample_count = int(h5["expectation/intensity"].shape[0])
@@ -172,6 +185,7 @@ def build_selected_shards(
             saved = json.loads(fragment.read_text(encoding="utf-8"))
             if (
                 saved.get("config_sha256") == exact_config_sha
+                and saved.get("poisson_compute_backend") == args.compute_backend
                 and saved.get("file_sha256") == configured_sha256(output, config)
                 and int(saved.get("sample_start", -1)) == start
                 and int(saved.get("sample_stop", -1)) == stop
@@ -196,6 +210,7 @@ def build_selected_shards(
             config,
             sample_start=start,
             sample_stop=stop,
+            compute_backend=args.compute_backend,
         )
         report.update(
             {
@@ -203,6 +218,7 @@ def build_selected_shards(
                 "file_sha256": configured_sha256(output, config),
                 "file_size_bytes": output.stat().st_size,
                 "config_sha256": exact_config_sha,
+                "physical_gpu": physical_gpu,
             }
         )
         fragment.write_text(json.dumps(report, indent=2), encoding="utf-8")
@@ -252,6 +268,16 @@ def assemble_manifest(
     }
     if len(area_values) != 1:
         raise RuntimeError("Effective illumination area differs between shards")
+    backends = {str(row["poisson_compute_backend"]) for row in fragments}
+    if len(backends) != 1:
+        raise RuntimeError(f"Poisson compute backends differ between shards: {backends}")
+    formal_backend = str(
+        config["v6"]["observation_store"]["formal_poisson_compute_backend"]
+    )
+    if backends != {formal_backend}:
+        raise RuntimeError(
+            f"Formal observation manifest requires {formal_backend}, got {backends}"
+        )
     payload = {
         "schema_version": config["v6"]["schema_version"],
         "dataset_id": config["dataset"]["id"],
@@ -271,6 +297,7 @@ def assemble_manifest(
         ],
         "expected_total_electrons": fragments[0]["expected_total_electrons"],
         "storage": config["v6"]["observation_store"],
+        "poisson_compute_backend": formal_backend,
         "shards": fragments,
     }
     manifest.parent.mkdir(parents=True, exist_ok=True)
@@ -282,6 +309,10 @@ def main() -> None:
     args = parse_args()
     config_path = args.config.resolve()
     config = load_config(config_path)
+    if args.compute_backend is None:
+        args.compute_backend = str(
+            config["v6"]["observation_store"]["formal_poisson_compute_backend"]
+        )
     expectation, output_dir, manifest = resolved_paths(args, config)
     if args.assemble_manifest:
         assemble_manifest(
