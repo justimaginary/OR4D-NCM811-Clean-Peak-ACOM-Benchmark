@@ -159,7 +159,10 @@ v6:
     output_compression: zstd
     output_compression_level: 5
     output_shuffle: bitshuffle
-    py4dstem_batch_size: 8
+    # Larger batches reduce per-call DataCube/CUDA overhead.  The detector
+    # algorithm and post-processing are unchanged; this is only a throughput
+    # setting and is recorded in every shard manifest.
+    py4dstem_batch_size: 64
     cpu_sample_workers: 8
     failure_message_max_characters: 2000
     progress_every_observations: 256
