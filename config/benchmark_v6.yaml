@@ -163,7 +163,10 @@ v6:
     # algorithm and post-processing are unchanged; this is only a throughput
     # setting and is recorded in every shard manifest.
     py4dstem_batch_size: 64
-    cpu_sample_workers: 8
+    # Four detector processes per CPU method use four threads each.  This
+    # keeps the 32-core server budget while reducing Python thread-pool
+    # contention and allowing independent HDF5 shards to run concurrently.
+    cpu_sample_workers: 4
     failure_message_max_characters: 2000
     progress_every_observations: 256
   runtime:
