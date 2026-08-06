@@ -50,6 +50,8 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--sample-id", action="append", help="Generate only this sample ID.")
     parser.add_argument("--limit", type=int, help="Limit selected samples for smoke tests.")
+    parser.add_argument("--sample-start", type=int, help="Inclusive selected-row index.")
+    parser.add_argument("--sample-stop", type=int, help="Exclusive selected-row index.")
     parser.add_argument("--output", type=Path, help="Image HDF5 output path.")
     parser.add_argument("--oracle-output", type=Path, help="Analytic peak HDF5 output path.")
     parser.add_argument("--raw-output", type=Path, help="Raw reflection HDF5 output path.")
@@ -76,7 +78,13 @@ def parse_args() -> argparse.Namespace:
 
 def selected_orientations(args: argparse.Namespace) -> tuple[list[dict], bool]:
     rows = read_jsonl(args.orientation_file.resolve())
-    subset = bool(args.role or args.sample_id or args.limit is not None)
+    subset = bool(
+        args.role
+        or args.sample_id
+        or args.limit is not None
+        or args.sample_start is not None
+        or args.sample_stop is not None
+    )
     if args.role:
         roles = set(args.role)
         rows = [row for row in rows if row["sample_role"] in roles]
@@ -87,6 +95,18 @@ def selected_orientations(args: argparse.Namespace) -> tuple[list[dict], bool]:
             for row in rows
             if f"clean_{row['orientation_id']}" in ids or row["orientation_id"] in ids
         ]
+    if (args.sample_start is None) != (args.sample_stop is None):
+        raise ValueError("--sample-start and --sample-stop must be supplied together")
+    if args.sample_start is not None:
+        if args.limit is not None:
+            raise ValueError("--limit cannot be combined with an explicit sample range")
+        start = int(args.sample_start)
+        stop = int(args.sample_stop)
+        if not 0 <= start < stop <= len(rows):
+            raise ValueError(
+                f"Invalid selected-row range [{start}, {stop}) for {len(rows)} rows"
+            )
+        rows = rows[start:stop]
     if args.limit is not None:
         if args.limit <= 0:
             raise ValueError("--limit must be positive")
@@ -582,6 +602,8 @@ def main() -> None:
             cuda_batch_size if args.compute_backend == "cuda" else None
         ),
         "roles": sorted({row["sample_role"] for row in orientations}),
+        "selected_sample_start": args.sample_start,
+        "selected_sample_stop": args.sample_stop,
         "image_path": str(image_path),
         "physical_oracle_path": str(oracle_path),
         "raw_reflections_path": str(raw_path),

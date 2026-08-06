@@ -65,6 +65,7 @@ def write_tiny_expectation(path: Path) -> None:
 def test_v6_condition_grid_matches_specification() -> None:
     config = load_config(ROOT / "config" / "benchmark_v6.yaml")
     assert config["clean_image"]["gpts"] == [512, 512]
+    assert config["v6"]["expectation_generation"]["expected_shard_count"] == 4
     assert config["clean_image"]["dog_rgm"]["threshold_abs"] == 0.001
     assert config["clean_image"]["py4dstem_find_bragg_disks"][
         "normalize_for_detection"

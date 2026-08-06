@@ -90,6 +90,8 @@ v6:
     physical_oracle_peaks: /mnt/data/xietianhong/or4d-clean-v6/oracle/physical_oracle_peaks.h5
     physical_oracle_reflections: /mnt/data/xietianhong/or4d-clean-v6/oracle/physical_oracle_reflections.h5
     observation_manifest: /mnt/data/xietianhong/or4d-clean-v6/manifests/observations.json
+    expectation_shards: /mnt/data/xietianhong/or4d-clean-v6/datasets/expectation_shards
+    expectation_merge_manifest: /mnt/data/xietianhong/or4d-clean-v6/manifests/expectation_merge.json
     observation_shards: /mnt/data/xietianhong/or4d-clean-v6/observations/poisson
     peak_root: /mnt/data/xietianhong/or4d-clean-v6/peaks
     acom_root: /mnt/data/xietianhong/or4d-clean-v6/acom
@@ -123,6 +125,11 @@ v6:
     factorize_deterministic_counts: true
     factorize_read_noise: true
     reconstruction_audit_samples_per_shard: 2
+  expectation_generation:
+    orientation_shard_size: 4096
+    expected_shard_count: 4
+    merge_chunk_patterns: 8
+    smoke_orientation_count: 17
   ubragg_x:
     repository_path: /home/xietianhong/UBragg
     repository_commit: 3d9ea143e1d09907a5fa27dff7e4e230e9f88931
