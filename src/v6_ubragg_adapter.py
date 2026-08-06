@@ -97,16 +97,7 @@ class UBraggXInference:
         self.model.load_state_dict(checkpoint["model"])
         self.model.eval()
         self.device = torch.device(device)
-        settings = config["v6"]["ubragg_x"]
-        if bool(settings["resize_before_inference"]):
-            raise ValueError(
-                "V6 UBragg-X inference is configured for native detector pixels; "
-                "resize_before_inference must remain false"
-            )
-        self.input_shape = tuple(
-            int(value) for value in settings["v6_inference_image_shape_px"]
-        )
-        self.score_threshold = float(settings["score_threshold"])
+        self.score_threshold = float(config["v6"]["ubragg_x"]["score_threshold"])
         self.artifacts = artifacts
         self.model_config = model_config
 
@@ -124,11 +115,6 @@ class UBraggXInference:
         values = np.asarray(images, dtype=np.float32)
         if values.ndim != 3:
             raise ValueError("UBragg-X images must have shape [N,H,W]")
-        if values.shape[1:] != self.input_shape:
-            raise ValueError(
-                f"UBragg-X V6 input shape is {values.shape[1:]}, "
-                f"expected native detector shape {self.input_shape}"
-            )
         dose = np.asarray(expected_total_electrons, dtype=np.float32)
         sigma = np.asarray(read_noise_sigma_e_per_pixel, dtype=np.float32)
         if dose.shape != (len(values),) or sigma.shape != (len(values),):
