@@ -42,7 +42,7 @@ clean_image:
   convergence_semiangle_mrad: 1.2
   thickness_nm: 5.0
   cuda_first_born:
-    batch_size: 64
+    batch_size: 32
   counting:
     model: poisson_expected_total_from_areal_dose
     doses_e_per_A2: [0.1, 0.3, 1.0, 3.0, 10.0, 30.0, 100.0, 300.0, 1000.0]
