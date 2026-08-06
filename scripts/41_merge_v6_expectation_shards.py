@@ -153,18 +153,22 @@ def merge_images(
             handle.close()
 
 
-def merge_oracles(shards: list[Path], output_path: Path) -> int:
+def merge_oracles(
+    shards: list[Path], output_path: Path, merged_image_path: Path
+) -> int:
     samples = []
     attributes = None
     for path in shards:
         with h5py.File(path, "r") as handle:
             current = dict(handle.attrs)
+            current.pop("source_image_file", None)
             if attributes is None:
                 attributes = current
             elif current != attributes:
                 raise ValueError(f"Oracle shard attributes differ: {path}")
         samples.extend(read_peak_h5(path))
     assert attributes is not None
+    attributes["source_image_file"] = str(merged_image_path)
     attributes["merged_v6_shards"] = [str(path) for path in shards]
     write_peak_h5(output_path, samples, attributes)
     return len(samples)
@@ -275,7 +279,7 @@ def main() -> None:
         args.manifest or paths["expectation_merge_manifest"], config
     )
     merged_ids = merge_images(image_shards, output_image, expected_sample_ids, config)
-    oracle_count = merge_oracles(oracle_shards, output_oracle)
+    oracle_count = merge_oracles(oracle_shards, output_oracle, output_image)
     reflection_count = merge_reflections(reflection_shards, output_reflections)
     if oracle_count != len(merged_ids) or reflection_count != len(merged_ids):
         raise RuntimeError("Merged V6 image/oracle/reflection sample counts differ")

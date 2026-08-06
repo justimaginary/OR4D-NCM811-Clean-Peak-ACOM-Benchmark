@@ -86,7 +86,10 @@ def test_merge_v6_expectation_products(tmp_path: Path) -> None:
                     "intensity": np.asarray([1.0]),
                 }
             ],
-            {"k_max_Ainv": 1.5},
+            {
+                "k_max_Ainv": 1.5,
+                "source_image_file": str(image_shards[index]),
+            },
         )
 
     config = copy.deepcopy(load_config(ROOT / "config" / "benchmark_v6.yaml"))
@@ -98,7 +101,9 @@ def test_merge_v6_expectation_products(tmp_path: Path) -> None:
     assert module.merge_images(
         image_shards, output_image, sample_ids, config
     ) == sample_ids
-    assert module.merge_oracles(oracle_shards, output_oracle) == 2
+    assert module.merge_oracles(
+        oracle_shards, output_oracle, output_image
+    ) == 2
     assert module.merge_reflections(reflection_shards, output_reflections) == 2
 
     with h5py.File(output_image, "r") as h5:
@@ -106,6 +111,8 @@ def test_merge_v6_expectation_products(tmp_path: Path) -> None:
         assert np.all(h5["expectation/intensity"][0] == 1.0)
         assert np.all(h5["expectation/intensity"][1] == 2.0)
     assert [row["sample_id"] for row in read_peak_h5(output_oracle)] == sample_ids
+    with h5py.File(output_oracle, "r") as h5:
+        assert h5.attrs["source_image_file"] == str(output_image)
     with h5py.File(output_reflections, "r") as h5:
         assert h5["reflections/offsets"][:].tolist() == [0, 2, 4]
         assert h5["reflections/qx_Ainv"][:].tolist() == [0.0, 1.0, 1.0, 2.0]
