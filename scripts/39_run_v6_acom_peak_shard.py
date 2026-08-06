@@ -102,6 +102,12 @@ def main() -> None:
     run_record = enforce_server_write_scope(
         output_dir / f"{args.job_id}_run.json", config
     )
+    polar_h5 = enforce_server_write_scope(
+        output_dir / f"{args.job_id}_polar.h5", config
+    )
+    polar_json = enforce_server_write_scope(
+        output_dir / f"{args.job_id}_polar.json", config
+    )
     ground_truth = expanded_ground_truth(peak_file, orientation_file)
     write_jsonl(expanded_gt, ground_truth)
     command = [
@@ -131,6 +137,28 @@ def main() -> None:
     environment["OR4D_CONFIG"] = str(config_path)
     started = time.perf_counter()
     completed = subprocess.run(command, cwd=ROOT, env=environment, check=False)
+    polar_command = [
+        sys.executable,
+        str(ROOT / "scripts" / "40_evaluate_v6_acom_polar.py"),
+        "--config",
+        str(config_path),
+        "--candidate-file",
+        str(candidates),
+        "--ground-truth-file",
+        str(expanded_gt),
+        "--output-h5",
+        str(polar_h5),
+        "--output-json",
+        str(polar_json),
+    ]
+    polar_completed = None
+    if completed.returncode == 0:
+        polar_completed = subprocess.run(
+            polar_command,
+            cwd=ROOT,
+            env=environment,
+            check=False,
+        )
     report = {
         "schema": "or4d-clean-v6-acom-shard-run-v1",
         "job_id": args.job_id,
@@ -141,17 +169,27 @@ def main() -> None:
         "logical_observation_count": len(ground_truth),
         "command": command,
         "returncode": completed.returncode,
+        "polar_command": polar_command,
+        "polar_returncode": (
+            polar_completed.returncode if polar_completed is not None else None
+        ),
         "wall_seconds": time.perf_counter() - started,
         "outputs": {
             "prediction": str(prediction),
             "details": str(details),
             "candidates": str(candidates),
             "audit": str(audit),
+            "polar_h5": str(polar_h5),
+            "polar_json": str(polar_json),
         },
     }
     run_record.write_text(json.dumps(report, indent=2), encoding="utf-8")
     if completed.returncode != 0:
         raise subprocess.CalledProcessError(completed.returncode, command)
+    if polar_completed is not None and polar_completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            polar_completed.returncode, polar_command
+        )
     print(json.dumps(report, indent=2))
 
 
