@@ -819,7 +819,11 @@ def render_kinematic_cbed_batch_cuda(
         component,
         thickness_amplitude,
     )
-    cp.get_default_memory_pool().free_all_blocks()
+    # Reusing the CuPy pool avoids a host-side allocation/synchronization gap
+    # between successive batches.  V6 disables pool eviction between batches;
+    # callers can restore the conservative behavior for memory-constrained runs.
+    if bool(config.get("cuda_free_memory_pool_after_batch", True)):
+        cp.get_default_memory_pool().free_all_blocks()
 
     results: list[RenderedPattern] = []
     hkl_all = np.asarray(library.hkl, dtype=np.int32)
