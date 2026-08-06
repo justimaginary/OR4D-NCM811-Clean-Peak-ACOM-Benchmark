@@ -4,8 +4,6 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
-import os
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -27,7 +25,10 @@ from v6_detection import (  # noqa: E402
     successful_detection_record,
     write_v6_peak_h5,
 )
-from v6_runtime import enforce_server_write_scope  # noqa: E402
+from v6_runtime import (  # noqa: E402
+    enforce_server_write_scope,
+    require_empty_bound_gpu,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -61,40 +62,6 @@ def sha256_file(path: Path, block_mib: int) -> str:
         for block in iter(lambda: handle.read(block_mib * 1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
-
-
-def require_empty_bound_gpu(config: dict) -> str:
-    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
-    if not visible.isdigit():
-        raise RuntimeError(
-            "CUDA V6 runs require CUDA_VISIBLE_DEVICES to expose one physical GPU"
-        )
-    rows = subprocess.run(
-        [
-            "nvidia-smi",
-            "--query-gpu=index,memory.used,utilization.gpu",
-            "--format=csv,noheader,nounits",
-        ],
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-    status = {}
-    for row in rows.splitlines():
-        fields = [value.strip() for value in row.split(",")]
-        if len(fields) == 3:
-            status[fields[0]] = (int(fields[1]), int(fields[2]))
-    if visible not in status:
-        raise RuntimeError(f"Physical GPU {visible} is absent from nvidia-smi")
-    memory, utilization = status[visible]
-    runtime = config["v6"]["runtime"]
-    if memory > int(runtime["empty_gpu_max_memory_MiB"]) or utilization > int(
-        runtime["empty_gpu_max_utilization_percent"]
-    ):
-        raise RuntimeError(
-            f"Physical GPU {visible} is not empty: {memory} MiB, {utilization}%"
-        )
-    return visible
 
 
 def selected_conditions(args: argparse.Namespace, count: int) -> list[int]:

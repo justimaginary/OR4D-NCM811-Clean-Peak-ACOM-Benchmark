@@ -28,6 +28,30 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
     return result
 
 
+def _load_config_overlay(
+    path: Path, *, inheritance_stack: tuple[Path, ...] = ()
+) -> dict[str, Any]:
+    resolved = path.resolve()
+    if resolved in inheritance_stack:
+        cycle = " -> ".join(str(value) for value in (*inheritance_stack, resolved))
+        raise ValueError(f"Config inheritance cycle: {cycle}")
+    with resolved.open("r", encoding="utf-8") as handle:
+        overlay = yaml.safe_load(handle)
+    if not isinstance(overlay, dict):
+        raise ValueError(f"Config overlay must contain a mapping: {resolved}")
+    parent = overlay.pop("extends", None)
+    if parent is None:
+        return overlay
+    parent_path = Path(parent)
+    if not parent_path.is_absolute():
+        parent_path = resolved.parent / parent_path
+    inherited = _load_config_overlay(
+        parent_path,
+        inheritance_stack=(*inheritance_stack, resolved),
+    )
+    return _deep_merge(inherited, overlay)
+
+
 def load_config(path: Path | str | None = None) -> dict[str, Any]:
     """Load the frozen base config and, optionally, a version overlay.
 
@@ -45,10 +69,7 @@ def load_config(path: Path | str | None = None) -> dict[str, Any]:
         overlay_path = project_root() / overlay_path
     if overlay_path.resolve() == base_path.resolve():
         return config
-    with overlay_path.open("r", encoding="utf-8") as f:
-        overlay = yaml.safe_load(f)
-    if not isinstance(overlay, dict):
-        raise ValueError(f"Config overlay must contain a mapping: {overlay_path}")
+    overlay = _load_config_overlay(overlay_path)
     return _deep_merge(config, overlay)
 
 

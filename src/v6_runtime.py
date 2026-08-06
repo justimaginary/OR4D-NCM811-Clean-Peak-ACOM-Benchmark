@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import getpass
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -59,3 +60,56 @@ def enforce_server_write_scopes(
         enforce_server_write_scope(path, config, operation=operation)
         for path in paths
     ]
+
+
+def require_empty_bound_gpu(config: dict[str, Any]) -> str:
+    """Validate the one physical GPU exposed to a CUDA worker before use."""
+    visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
+    if not visible.isdigit():
+        raise RuntimeError(
+            "CUDA V6 runs require CUDA_VISIBLE_DEVICES to expose one physical GPU"
+        )
+    rows = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-gpu=index,uuid,memory.used,utilization.gpu",
+            "--format=csv,noheader,nounits",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    status: dict[str, tuple[str, int, int]] = {}
+    for row in rows.splitlines():
+        fields = [value.strip() for value in row.split(",")]
+        if len(fields) == 4:
+            status[fields[0]] = (fields[1], int(fields[2]), int(fields[3]))
+    if visible not in status:
+        raise RuntimeError(f"Physical GPU {visible} is absent from nvidia-smi")
+    gpu_uuid, memory, utilization = status[visible]
+    process_rows = subprocess.run(
+        [
+            "nvidia-smi",
+            "--query-compute-apps=gpu_uuid,pid",
+            "--format=csv,noheader,nounits",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    active_pids = []
+    for row in process_rows.splitlines():
+        fields = [value.strip() for value in row.split(",")]
+        if len(fields) == 2 and fields[0] == gpu_uuid:
+            active_pids.append(fields[1])
+    runtime = config["v6"]["runtime"]
+    if (
+        active_pids
+        or memory > int(runtime["empty_gpu_max_memory_MiB"])
+        or utilization > int(runtime["empty_gpu_max_utilization_percent"])
+    ):
+        raise RuntimeError(
+            f"Physical GPU {visible} is not empty: {memory} MiB, {utilization}%, "
+            f"compute PIDs={active_pids}"
+        )
+    return visible
