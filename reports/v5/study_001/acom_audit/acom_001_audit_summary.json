@@ -1,0 +1,197 @@
+{
+  "schema": "or4d-v5-001-acom-audit-summary-v1",
+  "purpose": "Root-cause audit of exact-[001] ACOM failures; no formal V5 result was overwritten.",
+  "created_unix": 1785933122.5795188,
+  "duration_seconds": 59.39884066581726,
+  "hostname": "SL3053",
+  "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.39",
+  "pid": 3143550,
+  "command": [
+    "/home/xietianhong/miniconda3/envs/or4d-clean/bin/python",
+    "scripts/34_audit_v5_001_acom.py",
+    "--data-root",
+    "/mnt/data/xietianhong/or4d-clean-v5",
+    "--output-dir",
+    "/mnt/data/xietianhong/or4d-clean-v5/results/v5_001_audit",
+    "--compact-output-dir",
+    "/home/xietianhong/or4d-acom-run/reports/v5/study_001/acom_audit",
+    "--save-surface-groups",
+    "exact_001"
+  ],
+  "cuda_visible_devices": "4",
+  "cpu_thread_limits": {
+    "OMP_NUM_THREADS": "16",
+    "OPENBLAS_NUM_THREADS": "16",
+    "MKL_NUM_THREADS": "16",
+    "NUMEXPR_NUM_THREADS": "16"
+  },
+  "versions": {
+    "python": "3.11.15",
+    "numpy": "1.26.4",
+    "py4DSTEM": "0.14.18"
+  },
+  "inputs": {
+    "expectation": {
+      "path": "/mnt/data/xietianhong/or4d-clean-v5/datasets/clean_v5_001_first_born_expectation_512.h5",
+      "sha256": "91763c7d8640e040283c5d37f73b1a059c68e88fd2d80150f200a4b162f5f80a"
+    },
+    "oracle": {
+      "path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_001_first_born_oracle_512.h5",
+      "sha256": "fde82c2f958adb347bd95e89af14fe949052b8159b175a11811149ba0dd5c29f"
+    },
+    "trace": {
+      "path": "/mnt/data/xietianhong/or4d-clean-v5/intermediates/clean_v5_001_first_born_trace_512.h5",
+      "sha256": "0c6f1bbe4298a79944f45790aaca6fe878ac9da5e245d29d820c458ad2364263"
+    },
+    "manifest": {
+      "path": "/mnt/data/xietianhong/or4d-clean-v5/manifests/clean_v5_001_orientations.jsonl",
+      "sha256": "fbc2557c1bca240270bc5b959e8ae78631394694d61180a72cfd4532a1c6b0b0"
+    }
+  },
+  "selection": {
+    "groups": [
+      "exact_001",
+      "transition_001"
+    ],
+    "limit_per_group": 0,
+    "sample_counts": {
+      "exact_001": 32,
+      "transition_001": 96
+    }
+  },
+  "acom": {
+    "kmax_Ainv": 1.5,
+    "angle_step_zone_axis_deg": 2.0,
+    "angle_step_in_plane_deg": 2.0,
+    "correlation_kernel_Ainv": 0.08,
+    "power_intensity_simulated": 0.25,
+    "power_intensity_experiment": 0.25,
+    "inversion_symmetry": true,
+    "num_zone_axes": 1081,
+    "num_in_plane_steps": 180,
+    "num_scored_cells": 389160,
+    "plan_seconds": 0.5172395501285791
+  },
+  "variants": {
+    "physical_oracle": "V5 image-matched physical oracle positions and intensities.",
+    "physical_uniform_intensity": "Same physical positions with every peak intensity set to one.",
+    "acom_exact_gt": "py4DSTEM kinematical peaks generated at the exact GT matrix.",
+    "acom_discrete_seed": "py4DSTEM kinematical peaks generated at the nearest searched ACOM seed."
+  },
+  "metrics": {
+    "orientation_equivalence": "proper crystal point-group symmetry plus detector-plane Friedel equivalence",
+    "correct_seed_tolerance_deg": 2.0,
+    "rank": "global rank over every zone, in-plane bin, and normal/inverse correlation cell before zone-axis Top-K suppression"
+  },
+  "aggregate": {
+    "exact_001/acom_discrete_seed": {
+      "sample_count": 32,
+      "native_acc_at_2deg": 0.0,
+      "native_median_error_deg": 72.00480592791064,
+      "raw_cell_acc_at_2deg_top1": 0.0,
+      "raw_cell_acc_at_2deg_top5": 0.0,
+      "best_correct_seed_rank_median": 73.0,
+      "best_correct_seed_rank_p95": 73.0,
+      "best_correct_seed_in_top1": 0.0,
+      "best_correct_seed_in_top5": 0.0,
+      "best_correct_seed_in_top100": 1.0,
+      "best_correct_score_ratio_median": 0.8563113100104176
+    },
+    "exact_001/acom_exact_gt": {
+      "sample_count": 32,
+      "native_acc_at_2deg": 0.0,
+      "native_median_error_deg": 72.00633259132842,
+      "raw_cell_acc_at_2deg_top1": 0.0,
+      "raw_cell_acc_at_2deg_top5": 0.0,
+      "best_correct_seed_rank_median": 109.0,
+      "best_correct_seed_rank_p95": 121.0,
+      "best_correct_seed_in_top1": 0.0,
+      "best_correct_seed_in_top5": 0.0,
+      "best_correct_seed_in_top100": 0.4375,
+      "best_correct_score_ratio_median": 0.8363004126907876
+    },
+    "exact_001/physical_oracle": {
+      "sample_count": 32,
+      "native_acc_at_2deg": 0.0,
+      "native_median_error_deg": 72.00707973360514,
+      "raw_cell_acc_at_2deg_top1": 0.0,
+      "raw_cell_acc_at_2deg_top5": 0.0,
+      "best_correct_seed_rank_median": 82.0,
+      "best_correct_seed_rank_p95": 97.0,
+      "best_correct_seed_in_top1": 0.0,
+      "best_correct_seed_in_top5": 0.0,
+      "best_correct_seed_in_top100": 1.0,
+      "best_correct_score_ratio_median": 0.8389985576938073
+    },
+    "exact_001/physical_uniform_intensity": {
+      "sample_count": 32,
+      "native_acc_at_2deg": 0.0,
+      "native_median_error_deg": 6.000044181161385,
+      "raw_cell_acc_at_2deg_top1": 0.0,
+      "raw_cell_acc_at_2deg_top5": 0.0,
+      "best_correct_seed_rank_median": 61.0,
+      "best_correct_seed_rank_p95": 106.59999999999997,
+      "best_correct_seed_in_top1": 0.0,
+      "best_correct_seed_in_top5": 0.0,
+      "best_correct_seed_in_top100": 0.9375,
+      "best_correct_score_ratio_median": 0.9457680737227755
+    },
+    "transition_001/acom_discrete_seed": {
+      "sample_count": 96,
+      "native_acc_at_2deg": 0.7916666666666666,
+      "native_median_error_deg": 1.045399457714321,
+      "raw_cell_acc_at_2deg_top1": 0.7916666666666666,
+      "raw_cell_acc_at_2deg_top5": 0.7916666666666666,
+      "best_correct_seed_rank_median": 1.0,
+      "best_correct_seed_rank_p95": 27.0,
+      "best_correct_seed_in_top1": 0.7916666666666666,
+      "best_correct_seed_in_top5": 0.7916666666666666,
+      "best_correct_seed_in_top100": 1.0,
+      "best_correct_score_ratio_median": 1.0
+    },
+    "transition_001/acom_exact_gt": {
+      "sample_count": 96,
+      "native_acc_at_2deg": 0.5416666666666666,
+      "native_median_error_deg": 1.0439998337179417,
+      "raw_cell_acc_at_2deg_top1": 0.5416666666666666,
+      "raw_cell_acc_at_2deg_top5": 0.9375,
+      "best_correct_seed_rank_median": 1.0,
+      "best_correct_seed_rank_p95": 7.0,
+      "best_correct_seed_in_top1": 0.5416666666666666,
+      "best_correct_seed_in_top5": 0.9375,
+      "best_correct_seed_in_top100": 1.0,
+      "best_correct_score_ratio_median": 1.0
+    },
+    "transition_001/physical_oracle": {
+      "sample_count": 96,
+      "native_acc_at_2deg": 0.22916666666666666,
+      "native_median_error_deg": 10.706410435692138,
+      "raw_cell_acc_at_2deg_top1": 0.22916666666666666,
+      "raw_cell_acc_at_2deg_top5": 0.7291666666666666,
+      "best_correct_seed_rank_median": 3.0,
+      "best_correct_seed_rank_p95": 41.0,
+      "best_correct_seed_in_top1": 0.22916666666666666,
+      "best_correct_seed_in_top5": 0.7291666666666666,
+      "best_correct_seed_in_top100": 1.0,
+      "best_correct_score_ratio_median": 0.9714809690707671
+    },
+    "transition_001/physical_uniform_intensity": {
+      "sample_count": 96,
+      "native_acc_at_2deg": 0.020833333333333332,
+      "native_median_error_deg": 17.789991108491964,
+      "raw_cell_acc_at_2deg_top1": 0.020833333333333332,
+      "raw_cell_acc_at_2deg_top5": 0.16666666666666666,
+      "best_correct_seed_rank_median": 204.0,
+      "best_correct_seed_rank_p95": 611.0,
+      "best_correct_seed_in_top1": 0.020833333333333332,
+      "best_correct_seed_in_top5": 0.16666666666666666,
+      "best_correct_seed_in_top100": 0.25,
+      "best_correct_score_ratio_median": 0.8991100050606643
+    }
+  },
+  "artifacts": {
+    "compact_rows": "/home/xietianhong/or4d-acom-run/reports/v5/study_001/acom_audit/acom_001_correlation_audit.jsonl",
+    "projection_diagnostics": "/home/xietianhong/or4d-acom-run/reports/v5/study_001/acom_audit/acom_001_projection_diagnostics.jsonl",
+    "large_correlation_surfaces": "/mnt/data/xietianhong/or4d-clean-v5/results/v5_001_audit/correlation_surfaces.h5"
+  }
+}

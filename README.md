@@ -4,8 +4,7 @@
 >
 > V3 is the direct peak-input baseline. V4 and V5 add the Clean diffraction
 > image and dose/noise observation tracks; their compact results and pages are
-> included below. For the original benchmark contract, see [OR4D NCM811
-> Clean-Peak ACOM Benchmark Report v3](OR4D_NCM811_CleanPeak_ACOM_Benchmark_Report_v3.pdf).
+> included below. For the original benchmark contract, see [OR4D_NCM811_CleanImage_v5_Benchmark_Report](OR4D_NCM811_CleanImage_v5_Benchmark_Report.pdf).
 
 > **Status**
 >

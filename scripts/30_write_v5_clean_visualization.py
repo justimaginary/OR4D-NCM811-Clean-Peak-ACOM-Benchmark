@@ -160,7 +160,11 @@ def image_data_url(
     ).decode("ascii")
 
 
-def difference_data_url(array: np.ndarray) -> str:
+def difference_data_url(
+    array: np.ndarray,
+    *,
+    ceiling: float | None = None,
+) -> str:
     """Render a non-negative residual with a white-to-red scale.
 
     This is a display-only image for comparing a counted realization with its
@@ -168,7 +172,11 @@ def difference_data_url(array: np.ndarray) -> str:
     """
     values = np.maximum(np.asarray(array, dtype=np.float64), 0.0)
     positive = values[values > 0]
-    ceiling = float(np.percentile(positive, 99.7)) if positive.size else 1.0
+    ceiling = (
+        float(ceiling)
+        if ceiling is not None
+        else (float(np.percentile(positive, 99.7)) if positive.size else 1.0)
+    )
     normalized = np.clip(values / max(ceiling, 1e-12), 0.0, 1.0) ** 0.55
     rgb = np.empty((*normalized.shape, 3), dtype=np.uint8)
     rgb[..., 0] = (255 - 35 * normalized).astype(np.uint8)
@@ -569,7 +577,7 @@ def build_noise_gallery(
                 (
                     level,
                     f"EMPAD-G2 · {frame_label}",
-                    "同一 Poisson 图叠加确定性高斯读出噪声；只改变读出噪声等级。",
+                    "同一 Poisson 图叠加固定随机种子的零均值高斯读出噪声；只改变读出噪声等级。",
                     noisy,
                     noisy,
                     sigma,
@@ -587,7 +595,12 @@ def build_noise_gallery(
                 dtype=np.float32,
             )
             normalized_sampled = sampled / max(float(dose_value), 1.0)
-            residual = np.abs(normalized_sampled - probability)
+            expected_residual = np.abs(
+                np.asarray(expected, dtype=np.float64)
+                / max(float(dose_value), 1.0)
+                - probability
+            )
+            sampled_residual = np.abs(normalized_sampled - probability)
             comparison_arrays.append(
                 {
                     "id": f"dose_{dose_value}_noiseless",
@@ -597,7 +610,7 @@ def build_noise_gallery(
                         "同时给出绝对计数和归一化结构。"
                     ),
                     "values": expected,
-                    "difference_values": residual,
+                    "difference_values": expected_residual,
                     "dose_electrons": dose_value,
                     "kind": "noiseless",
                 }
@@ -611,7 +624,7 @@ def build_noise_gallery(
                         " |n/Nₑ − P(q)|。"
                     ),
                     "values": sampled,
-                    "difference_values": residual,
+                    "difference_values": sampled_residual,
                     "dose_electrons": dose_value,
                     "kind": "poisson",
                 }
@@ -651,6 +664,18 @@ def build_noise_gallery(
                 "read_noise_sigma_e_rms_per_pixel": sigma,
             }
         )
+    residual_values = [
+        np.asarray(item["difference_values"], dtype=np.float64)
+        for item in comparison_arrays
+    ]
+    residual_positive = np.concatenate(
+        [values[values > 0] for values in residual_values if np.any(values > 0)]
+    ) if any(np.any(values > 0) for values in residual_values) else np.asarray([], dtype=float)
+    residual_ceiling = (
+        float(np.percentile(residual_positive, 99.7))
+        if residual_positive.size
+        else 1.0
+    )
     comparisons = []
     for item in comparison_arrays:
         values = item["values"]
@@ -663,7 +688,9 @@ def build_noise_gallery(
             }
             | {
                 "image_url": image_data_url(values),
-                "difference_url": difference_data_url(residual),
+                "difference_url": difference_data_url(
+                    residual, ceiling=residual_ceiling
+                ),
                 "sum": float(np.sum(values)),
                 "minimum": float(np.min(values)),
                 "maximum": float(np.max(values)),
@@ -686,6 +713,12 @@ def build_noise_gallery(
                     "display only; stored values and reported statistics are "
                     "unchanged."
                 ),
+                "difference_display": {
+                    "formula": "|n(q)/Nₑ − P(q)|",
+                    "color_scale": "shared across all comparison cards; white=0, pale red=small, dark red=large",
+                    "ceiling_p99_7": residual_ceiling,
+                    "note": "colors are display bins for the absolute normalized residual, not physical intensity or ACOM confidence",
+                },
             },
             "images": images,
             "comparison": comparisons,
@@ -711,6 +744,7 @@ def topk_metrics(errors: np.ndarray) -> dict:
 def build_study_001_topk_groups(
     data_root: Path,
     pyxem_details_path: Path,
+    detector_rows: list[dict],
 ) -> dict:
     manifest = load_jsonl(
         data_root / "manifests/clean_v5_001_orientations.jsonl"
@@ -746,7 +780,15 @@ def build_study_001_topk_groups(
 
     group_rows = []
     tilt_rows = []
+    disk_tilt_rows = []
     groups = sorted({str(row["study_group"]) for row in manifest})
+    tilt_values = sorted(
+        {
+            float(row["tilt_deg"])
+            for row in manifest
+            if str(row["study_group"]).endswith("_001")
+        }
+    )
     for method, by_id in methods.items():
         for group in groups:
             members = [
@@ -761,13 +803,6 @@ def build_study_001_topk_groups(
                     ),
                 }
             )
-        tilt_values = sorted(
-            {
-                float(row["tilt_deg"])
-                for row in manifest
-                if str(row["study_group"]).endswith("_001")
-            }
-        )
         for tilt in tilt_values:
             members = [
                 row
@@ -784,16 +819,64 @@ def build_study_001_topk_groups(
                     ),
                 }
             )
+    for detector in detector_rows:
+        per_sample = {
+            str(row["sample_id"]): row for row in detector["per_sample"]
+        }
+        if set(per_sample) != set(sample_ids):
+            raise ValueError(
+                f"[001] disk sample IDs differ for {detector['detector']}"
+            )
+        for tilt in tilt_values:
+            member_ids = [
+                str(row["sample_id"])
+                for row in manifest
+                if str(row["study_group"]).endswith("_001")
+                and np.isclose(float(row["tilt_deg"]), tilt)
+            ]
+            rows = [per_sample[sample_id] for sample_id in member_ids]
+            oracle_count = sum(int(row["oracle_count"]) for row in rows)
+            detected_count = sum(int(row["detected_count"]) for row in rows)
+            true_positive = sum(int(row["true_positive"]) for row in rows)
+            high_angle_oracle_count = sum(
+                int(row["high_angle_oracle_count"]) for row in rows
+            )
+            high_angle_true_positive = sum(
+                float(row["high_angle_oracle_count"])
+                * float(row["high_angle_recall"])
+                for row in rows
+            )
+            disk_tilt_rows.append(
+                {
+                    "detector": str(detector["detector"]),
+                    "tilt_deg": tilt,
+                    "samples": len(rows),
+                    "precision": (
+                        true_positive / detected_count
+                        if detected_count
+                        else 0.0
+                    ),
+                    "recall": (
+                        true_positive / oracle_count if oracle_count else 0.0
+                    ),
+                    "high_angle_recall": (
+                        high_angle_true_positive / high_angle_oracle_count
+                        if high_angle_oracle_count
+                        else 0.0
+                    ),
+                }
+            )
     return rounded(
         {
             "groups": group_rows,
             "tilts": tilt_rows,
+            "disk_tilts": disk_tilt_rows,
             "method_labels": {
                 "oracle": "ACOM + oracle peaks",
                 "autodisk": "ACOM + AutoDisk",
                 "dog_rgm": "ACOM + DoG-RGM",
                 "py4dstem": "ACOM + find_Bragg_disks",
-                "pyxem": "Pyxem image matching",
+                "pyxem": "Pyxem accelerated template matching",
             },
         }
     )
@@ -1175,6 +1258,259 @@ def build_cases(
     return rounded(cases), basis, np.asarray(qx)
 
 
+def _match_acom_prediction_peaks(
+    observed: list[dict],
+    predicted: list[dict],
+    tolerance_Ainv: float,
+) -> dict:
+    """One-to-one q assignment used only for the GT/ACOM visualization."""
+    from scipy.optimize import linear_sum_assignment
+
+    observed_q = np.asarray(
+        [[row["qx"], row["qy"]] for row in observed], dtype=float
+    )
+    predicted_q = np.asarray(
+        [[row["qx"], row["qy"]] for row in predicted], dtype=float
+    )
+    if not len(observed_q) or not len(predicted_q):
+        matches = []
+    else:
+        distances = np.linalg.norm(
+            observed_q[:, None, :] - predicted_q[None, :, :], axis=2
+        )
+        observed_indices, predicted_indices = linear_sum_assignment(distances)
+        matches = [
+            {
+                "oracle_index": int(observed_index),
+                "predicted_index": int(predicted_index),
+                "distance_Ainv": float(distances[observed_index, predicted_index]),
+            }
+            for observed_index, predicted_index in zip(
+                observed_indices, predicted_indices
+            )
+            if distances[observed_index, predicted_index] <= tolerance_Ainv
+        ]
+    matched_observed = {row["oracle_index"] for row in matches}
+    matched_predicted = {row["predicted_index"] for row in matches}
+    distances_Ainv = np.asarray(
+        [row["distance_Ainv"] for row in matches], dtype=float
+    )
+    return {
+        "matching_tolerance_Ainv": float(tolerance_Ainv),
+        "matched_count": len(matches),
+        "unmatched_oracle_count": len(observed) - len(matched_observed),
+        "unmatched_predicted_count": len(predicted) - len(matched_predicted),
+        "oracle_match_fraction": (
+            len(matches) / len(observed) if observed else 0.0
+        ),
+        "predicted_match_fraction": (
+            len(matches) / len(predicted) if predicted else 0.0
+        ),
+        "q_rmse_Ainv": (
+            float(np.sqrt(np.mean(distances_Ainv**2)))
+            if distances_Ainv.size
+            else float("nan")
+        ),
+        "matches": matches,
+    }
+
+
+def build_study_001_peak_example(data_root: Path, config: dict) -> dict:
+    """Build one exact-[001] GT-versus-ACOM Top-1 peak overlay."""
+    import py4DSTEM
+
+    expectation_path = (
+        data_root / "datasets/clean_v5_001_first_born_expectation_512.h5"
+    )
+    oracle_path = (
+        data_root / "intermediates/clean_v5_001_first_born_oracle_512.h5"
+    )
+    manifest = load_jsonl(
+        data_root / "manifests/clean_v5_001_orientations.jsonl"
+    )
+    exact_rows = [
+        row for row in manifest if str(row["study_group"]) == "exact_001"
+    ]
+    if not exact_rows:
+        raise ValueError("[001] manifest has no exact_001 samples")
+    sample_row = min(exact_rows, key=lambda row: str(row["sample_id"]))
+    sample_id = str(sample_row["sample_id"])
+    with h5py.File(expectation_path, "r") as expectation:
+        sample_ids = decode(expectation["sample_id"][:])
+        sample_index = sample_ids.index(sample_id)
+        image = np.asarray(
+            expectation["expectation/intensity"][sample_index],
+            dtype=np.float32,
+        )
+        qx = np.asarray(expectation["detector/qx_Ainv"][:], dtype=float)
+        qy = np.asarray(expectation["detector/qy_Ainv"][:], dtype=float)
+        ground_truth_matrix = np.asarray(
+            expectation[
+                "orientation/canonical_matrix_sample_to_crystal"
+            ][sample_index],
+            dtype=float,
+        )
+    oracle = ragged_peaks(oracle_path, sample_id)
+    trace, _ = reflection_trace(
+        data_root
+        / "intermediates/clean_v5_001_first_born_trace_512.h5",
+        sample_index,
+    )
+    candidate_path = (
+        data_root
+        / "results/v5_001_suite/acom_001/oracle_candidates.h5"
+    )
+    with h5py.File(candidate_path, "r") as candidates:
+        candidate_ids = decode(candidates["sample_id"][:])
+        candidate_index = candidate_ids.index(sample_id)
+        predicted_matrix = np.asarray(
+            candidates["orientation_matrix_sample_to_crystal"][
+                candidate_index, 0
+            ],
+            dtype=float,
+        )
+        candidate = {
+            "rank": 1,
+            "input": "physical oracle peaks",
+            "correlation": float(candidates["correlation"][candidate_index, 0]),
+            "strict_error_deg": float(
+                candidates["strict_misorientation_deg"][candidate_index, 0]
+            ),
+            "friedel_error_deg": float(
+                candidates["friedel_equivalent_misorientation_deg"][
+                    candidate_index, 0
+                ]
+            ),
+            "mirror_match": bool(
+                candidates["mirror_match"][candidate_index, 0]
+            ),
+            "plan_index": np.asarray(
+                candidates["plan_index"][candidate_index, 0], dtype=int
+            ),
+            "orientation_matrix_sample_to_crystal": predicted_matrix,
+        }
+
+    structure = Structure.from_file(str(cif_path(config)))
+    symmetries = proper_point_group_rotations(structure)
+    alignment = best_alignment(
+        predicted_matrix, ground_truth_matrix, symmetries
+    )
+    best_symmetry = symmetries[alignment["symmetry_index"]]
+    candidate.update(
+        {
+            "orientation_matrix_sample_to_crystal": predicted_matrix,
+            "symmetry_index": alignment["symmetry_index"],
+            "symmetry_aligned_matrix": best_symmetry.T @ predicted_matrix,
+            "symmetry_friedel_aligned_matrix": alignment["aligned_matrix"],
+            "recomputed_friedel_error_deg": alignment["error_deg"],
+        }
+    )
+    crystal = py4DSTEM.process.diffraction.Crystal.from_pymatgen_structure(
+        structure=structure,
+        conventional_standard_structure=False,
+    )
+    common = config["common"]
+    clean = config["clean"]
+    k_max = float(common["k_max_Ainv"])
+    crystal.setup_diffraction(
+        accelerating_voltage=float(common["accelerating_voltage_V"])
+    )
+    crystal.calculate_structure_factors(
+        k_max=k_max,
+        tol_structure_factor=float(clean["tol_structure_factor"]),
+    )
+    point_list = crystal.generate_diffraction_pattern(
+        orientation_matrix=predicted_matrix,
+        sigma_excitation_error=float(clean["sigma_excitation_error_Ainv"]),
+        tol_excitation_error_mult=float(clean["tol_excitation_error_mult"]),
+        tol_intensity=float(clean["tol_intensity"]),
+        k_max=k_max,
+    )
+    data = point_list.data
+    predicted_qx = np.asarray(data["qx"], dtype=float)
+    predicted_qy = np.asarray(data["qy"], dtype=float)
+    predicted_intensity = np.asarray(data["intensity"], dtype=float)
+    radius = np.hypot(predicted_qx, predicted_qy)
+    keep = (
+        np.isfinite(predicted_qx)
+        & np.isfinite(predicted_qy)
+        & np.isfinite(predicted_intensity)
+        & (radius >= float(common["central_beam_exclusion_Ainv"]))
+        & (radius <= k_max + 1e-8)
+        & (predicted_intensity > 0)
+    )
+    kept_intensity = predicted_intensity[keep]
+    intensity_scale = float(kept_intensity.max(initial=1.0))
+    predicted = [
+        {
+            "qx": float(qx_value),
+            "qy": float(qy_value),
+            "intensity": float(intensity / intensity_scale),
+            "hkl": [int(h), int(k), int(l)],
+        }
+        for qx_value, qy_value, intensity, h, k, l in zip(
+            predicted_qx[keep],
+            predicted_qy[keep],
+            kept_intensity,
+            np.asarray(data["h"], dtype=int)[keep],
+            np.asarray(data["k"], dtype=int)[keep],
+            np.asarray(data["l"], dtype=int)[keep],
+        )
+    ]
+    tolerance_Ainv = float(
+        config["evaluation"]["coordinate_match_tolerance_Ainv"]
+    )
+    comparison = _match_acom_prediction_peaks(
+        oracle, predicted, tolerance_Ainv
+    )
+    selected_reflection = trace[0] if trace else None
+    selected_oracle_index = None
+    if selected_reflection and oracle:
+        selected_q = np.asarray(selected_reflection["q_Ainv"][:2])
+        oracle_q = np.asarray(
+            [[row["qx"], row["qy"]] for row in oracle], dtype=float
+        )
+        selected_oracle_index = int(
+            np.argmin(np.linalg.norm(oracle_q - selected_q, axis=1))
+        )
+    return rounded(
+        {
+            "sample_id": sample_id,
+            "sample_index": sample_index,
+            "selection_rule": (
+                "lexicographically first exact_001 sample; fixed, not "
+                "selected by detector performance"
+            ),
+            "study_group": sample_row["study_group"],
+            "tilt_deg": sample_row["tilt_deg"],
+            "tilt_azimuth_deg": sample_row["tilt_azimuth_deg"],
+            "in_plane_rotation_deg": sample_row["in_plane_rotation_deg"],
+            "image_url": image_data_url(image),
+            "image_stats": {
+                "shape": list(image.shape),
+                "dtype": str(image.dtype),
+                "sum": float(np.sum(image)),
+                "minimum": float(np.min(image)),
+                "maximum": float(np.max(image)),
+            },
+            "q_axis": {
+                "qx_min": float(qx[0]),
+                "qx_max": float(qx[-1]),
+                "qy_min": float(qy[0]),
+                "qy_max": float(qy[-1]),
+                "q_pixel_size_Ainv": abs(float(np.median(np.diff(qx)))),
+            },
+            "ground_truth_matrix": ground_truth_matrix,
+            "selected_reflection": selected_reflection,
+            "selected_oracle_index": selected_oracle_index,
+            "oracle_peaks": oracle,
+            "acom_predicted_peaks": predicted,
+            "acom_candidate": candidate,
+            "comparison": comparison,
+        }
+    )
+
+
 def aggregate_payload(summary: dict) -> list[dict]:
     return rounded(summary["aggregates"])
 
@@ -1188,6 +1524,26 @@ def parameter_tables(config: dict, v5_config: dict) -> dict[str, list[list[str]]
     counting = image["counting"]
     instrument = image["instrument_noise"]
     fmt = lambda value: str(value)
+    reference_sigma = float(
+        instrument["reference_read_noise_primary_e_rms_per_pixel"]
+    )
+    noise_display = {
+        "noiseless": "确定性期望 / noiseless",
+        "poisson_only": "电子散粒 / Poisson only",
+        "empad_g2_1frame": "EMPAD-G2 · 1 frame",
+        "empad_g2_4frames": "EMPAD-G2 · 4 frames",
+        "empad_g2_16frames": "EMPAD-G2 · 16 frames",
+        "empad_g2_64frames": "EMPAD-G2 · 64 frames",
+    }
+    noise_level_rows = [
+        [
+            noise_display.get(level["id"], level["id"]),
+            f"Poisson={'Yes' if bool(level['poisson_shot_noise']) else 'No'}; "
+            f"frames={int(level['summed_frame_count'])}",
+            f"σ={reference_sigma * np.sqrt(int(level['summed_frame_count'])):.6f} e⁻/pixel",
+        ]
+        for level in instrument["levels"]
+    ]
     return {
         "dataset": [
             ["数据集 / Dataset", "dataset.id", v5_config["dataset"]["id"]],
@@ -1219,6 +1575,7 @@ def parameter_tables(config: dict, v5_config: dict) -> dict[str, list[list[str]]
             ["噪声阶梯 / Noise levels", "instrument_noise.levels", "noiseless · Poisson · 1/4/16/64 frames"],
             ["电子总量是否固定 / Fixed total dose", "counting.model", "Poisson expected total; total fluctuates"],
         ],
+        "noise_levels": noise_level_rows,
         "acom": [
             ["晶带轴角步长 / Zone-axis step", "acom.angle_step_zone_axis_deg", f"{acom['angle_step_zone_axis_deg']}°"],
             ["面内角步长 / In-plane step", "acom.angle_step_in_plane_deg", f"{acom['angle_step_in_plane_deg']}°"],
@@ -1232,6 +1589,58 @@ def parameter_tables(config: dict, v5_config: dict) -> dict[str, list[list[str]]
             ["晶体/Friedel 等价 / Symmetry + Friedel", "evaluation", "best proper crystal symmetry × Friedel branch"],
             ["返回候选数 / Candidates returned", "acom.num_matches_return", fmt(acom["num_matches_return"])],
             ["GPU / CUDA", "acom.cuda", fmt(acom["cuda"])],
+        ],
+        "pyxem": [
+            [
+                "软件 / Software",
+                "clean_image.pyxem_template_matching.package_version",
+                "Pyxem 0.21.0",
+            ],
+            [
+                "官方接口 / Official API",
+                "pyxem.utils.indexation_utils.index_dataset_with_template_rotation",
+                "Pyxem accelerated template matching",
+            ],
+            [
+                "模板库 / Template library",
+                "clean_image.pyxem_template_matching",
+                "diffsims diffraction library + orix reduced fundamental zone",
+            ],
+            [
+                "输入 / Input",
+                "datasets/*expectation*.h5 or counted images",
+                "二维 HDF5 图像；不先生成 (qx,qy,intensity) 峰列表",
+            ],
+            [
+                "中心束处理 / Direct beam",
+                "central_beam_exclusion_Ainv",
+                "中心区域置零，再补齐一行一列以对齐 Pyxem 的 shape/2 原点",
+            ],
+            [
+                "强度变换 / Intensity transform",
+                "intensity_transform_function",
+                "max(I, 0)^0.25",
+            ],
+            [
+                "归一化 / Normalization",
+                "normalize_images / normalize_templates",
+                "两者均为 True；只影响相关匹配尺度，不改变原始 HDF5 图像",
+            ],
+            [
+                "候选数 / Candidates",
+                "n_best",
+                "5；按模板相关分数返回 Top‑5 Euler/rotation candidates",
+            ],
+            [
+                "输出 / Output",
+                "orientation, correlation, mirrored_template, template_index",
+                "取向候选及相关分数；不输出可供 ACOM 使用的盘坐标列表",
+            ],
+            [
+                "计算目标 / Compute target",
+                "target",
+                "结果文件记录 GPU 或 CPU；本页只读取已保存结果",
+            ],
         ],
     }
 
@@ -1266,7 +1675,12 @@ def build_payload(args: argparse.Namespace) -> dict:
         REPORT_DIR / "study_001/clean_v5_001_manifest_summary.json"
     )
     study_001_topk_groups = build_study_001_topk_groups(
-        args.data_root.resolve(), args.study_001_pyxem_details.resolve()
+        args.data_root.resolve(),
+        args.study_001_pyxem_details.resolve(),
+        study_001["detectors"],
+    )
+    study_001_peak_example = build_study_001_peak_example(
+        args.data_root.resolve(), config
     )
     noise_gallery = build_noise_gallery(args.data_root.resolve())
     legacy_v3 = []
@@ -1355,6 +1769,7 @@ def build_payload(args: argparse.Namespace) -> dict:
         "cases": cases,
         "study_001": {
             "manifest": rounded(study_001_manifest),
+            "peak_example": study_001_peak_example,
             "evaluation": rounded(
                 {
                     key: value
@@ -1459,19 +1874,30 @@ HTML_TEMPLATE = r"""<!doctype html>
 <title>OR4D Clean V5 · Diffraction Image → Top-5 Orientation</title>
 <style>
 :root{--ink:#172033;--muted:#64748b;--line:#dbe3ef;--panel:#f7f9fc;--blue:#2563eb;--cyan:#0891b2;--orange:#ea580c;--green:#15803d;--purple:#7c3aed;--red:#dc2626}
-*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
-.summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
-.definitions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{margin:7px 0}.definition .tag{display:inline-block;background:#eef2ff;border-radius:99px;padding:3px 8px;font-size:12px}.formation{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}.formation>div{border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--panel);min-height:112px}.formation b{display:block;color:var(--blue);margin-bottom:5px}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px}.input-schema>section{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}.schema-note{padding:12px;border-radius:9px;background:#f8fafc;border:1px solid var(--line)}.input-examples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.input-example{border:1px solid var(--line);border-radius:12px;padding:10px}.input-example img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.image-comparison-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.comparison-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.comparison-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.comparison-card .diff{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.comparison-card .diff img{width:100%;aspect-ratio:1;object-fit:contain}.compare-stage{position:relative;max-width:680px;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#f8fafc}.compare-stage img,.compare-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.comparison-layout{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:16px;align-items:start}.parameter-table-wrap{overflow:auto}.parameter-table-wrap table{font-size:13px}.parameter-table-wrap td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:left}.study-quick{border:2px solid #c4b5fd;background:linear-gradient(135deg,#faf5ff,#fff);border-radius:14px;padding:18px}.study-quick .cards{margin:12px 0}.study-quick canvas{height:330px}@media(max-width:1100px){.definitions,.formation,.image-comparison-grid{grid-template-columns:1fr 1fr}.input-schema,.comparison-layout{grid-template-columns:1fr}}@media(max-width:650px){.definitions,.formation,.image-comparison-grid,.input-examples{grid-template-columns:1fr}}
-.image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
+*{box-sizing:border-box}body{margin:0;background:#fff;color:var(--ink);font:15px/1.58 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}main{max-width:1500px;margin:auto;padding:28px 34px 70px}h1{font-size:31px;line-height:1.2;margin:0 0 8px}h2{font-size:22px;margin:0 0 15px}h3{font-size:17px;margin:0 0 8px}.subtitle,.muted{color:var(--muted)}.topbar{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:24px}.nav{display:flex;flex-wrap:wrap;gap:8px}.nav a,.pill,.toggle button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;text-decoration:none;color:var(--ink);background:#fff}.nav a.active,.toggle button.active{background:var(--ink);color:#fff;border-color:var(--ink)}.section{border-top:1px solid var(--line);padding-top:28px;margin-top:32px}.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.card,.panel{border:1px solid var(--line);border-radius:14px;background:#fff;padding:16px}.card strong{display:block;font-size:24px}.card span{color:var(--muted)}.pipeline{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}.step{border:1px solid var(--line);border-radius:12px;padding:12px;background:var(--panel);min-height:110px}.step b{display:block;margin-bottom:5px}.step code{font-size:12px}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}.grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.formula{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f5f7fb;border:1px solid var(--line);border-radius:10px;padding:12px;white-space:pre-wrap}.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:12px 0 16px}.control label{display:block;font-weight:650;font-size:13px;margin-bottom:5px}.control select{min-width:210px;border:1px solid #cbd5e1;border-radius:9px;padding:9px 10px;background:#fff;color:var(--ink)}canvas.chart{width:100%;height:390px;border:1px solid var(--line);border-radius:12px;background:#fff}.chart-note{font-size:13px;color:var(--muted);margin-top:8px}.legend{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}.legend span:before{content:"";display:inline-block;width:14px;height:3px;background:var(--c);margin-right:5px;vertical-align:middle}.table-wrap{overflow:auto;border:1px solid var(--line);border-radius:12px}table{border-collapse:collapse;width:100%;font-variant-numeric:tabular-nums}th,td{padding:9px 11px;border-bottom:1px solid #e8edf5;text-align:right;white-space:nowrap}th:first-child,td:first-child{text-align:left}th{background:#f7f9fc;font-size:13px}.status-ok{color:var(--green)}.status-no{color:var(--red)}details{border:1px solid var(--line);border-radius:12px;padding:12px 14px;background:#fff}details+details{margin-top:10px}summary{cursor:pointer;font-weight:700}.matrix{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;white-space:pre}.case-layout{display:grid;grid-template-columns:minmax(480px,1.2fr) minmax(420px,1fr);gap:18px}.image-wrap{position:relative;aspect-ratio:1;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:#f8fafc;max-width:720px}.image-wrap img,.image-wrap canvas{position:absolute;inset:0;width:100%;height:100%}.image-wrap img{image-rendering:pixelated}.metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.metric{background:var(--panel);border-radius:9px;padding:9px}.metric b{display:block}.candidate-tabs{display:flex;gap:8px;margin-bottom:10px}.candidate-tabs button{border:1px solid var(--line);border-radius:8px;background:#fff;padding:7px 10px}.candidate-tabs button.active{background:var(--ink);color:#fff}.warning{border-left:4px solid #f59e0b;background:#fffbeb;padding:12px 14px;border-radius:8px}.good{border-left:4px solid var(--green);background:#f0fdf4;padding:12px 14px;border-radius:8px}.file{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;overflow-wrap:anywhere}.small{font-size:12px}.axis-controls{display:flex;gap:8px;margin:8px 0}.axis-controls button{border:1px solid var(--line);background:#fff;padding:6px 9px;border-radius:8px}.axis-controls button.active{background:#172033;color:#fff}.small-multiples{display:grid;grid-template-columns:1fr 1fr;gap:14px}.mini-chart{border:1px solid var(--line);border-radius:12px;padding:11px}.mini-chart h3{font-size:14px}.mini-chart canvas{width:100%;height:240px}.trace-canvas{width:100%;height:320px;border:1px solid var(--line);border-radius:12px;background:#fff}@media(max-width:1050px){.cards{grid-template-columns:1fr 1fr}.pipeline{grid-template-columns:1fr 1fr}.grid2,.case-layout{grid-template-columns:1fr}}@media(max-width:900px){.small-multiples{grid-template-columns:1fr}}@media(max-width:650px){main{padding:20px 14px}.cards,.grid3{grid-template-columns:1fr}.topbar{display:block}.nav{margin-top:14px}.metrics{grid-template-columns:1fr 1fr}}
+.summary-banner{margin-top:18px;padding:20px;border:1px solid #bfd2ff;border-radius:16px;background:linear-gradient(135deg,#eff6ff,#fff 58%,#f0fdf4)}.summary-banner h2{margin-bottom:6px}.findings{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:14px}.finding{padding:13px;border-radius:11px;background:rgba(255,255,255,.86);border:1px solid var(--line)}.finding b{display:block;font-size:18px}.scope-badge{display:inline-block;padding:2px 8px;border-radius:999px;background:#e0e7ff;color:#3730a3;font-size:12px;font-weight:700}.fold{padding:0;overflow:hidden}.fold>summary{padding:16px 18px;background:var(--panel);font-size:19px;list-style-position:inside}.fold[open]>summary{border-bottom:1px solid var(--line)}.fold-body{padding:18px}.gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.gallery-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.gallery-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.gallery-card b{display:block;margin-top:7px}.gallery-card code{font-size:11px;color:var(--muted)}.two-charts{display:grid;grid-template-columns:1fr 1fr;gap:16px}.two-charts canvas.chart{height:340px}.result-callout{padding:13px 15px;border-radius:10px;background:#f8fafc;border:1px solid var(--line);margin:12px 0}.parameter-json{max-height:480px;overflow:auto;font-size:11px}.chart-wide{height:440px!important}.section-intro{max-width:1050px}.nowrap{white-space:nowrap}@media(max-width:1100px){.findings,.gallery{grid-template-columns:1fr 1fr}.two-charts{grid-template-columns:1fr}}@media(max-width:650px){.findings,.gallery{grid-template-columns:1fr}}
+.definitions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.definition{border:1px solid var(--line);border-radius:12px;padding:16px;background:#fff}.definition.v3{border-top:4px solid var(--purple)}.definition.e{border-top:4px solid var(--blue)}.definition.c{border-top:4px solid var(--orange)}.definition h3{margin:7px 0}.definition .tag{display:inline-block;background:#eef2ff;border-radius:99px;padding:3px 8px;font-size:12px}.formation{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.formation>div{border:1px solid var(--line);border-radius:9px;padding:11px;background:var(--panel);min-height:112px}.formation b{display:block;color:var(--blue);margin-bottom:5px}.input-schema{display:grid;grid-template-columns:1fr 1fr;gap:12px}.input-schema>section{border:1px solid var(--line);border-radius:10px;padding:13px;background:#fff}.schema-note{padding:12px;border-radius:9px;background:#f8fafc;border:1px solid var(--line)}.input-examples{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.input-example{border:1px solid var(--line);border-radius:12px;padding:10px}.input-example img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.image-comparison-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.comparison-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.comparison-card img{width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px}.comparison-card .diff{border-top:1px solid var(--line);margin-top:8px;padding-top:8px}.comparison-card .diff img{width:100%;aspect-ratio:1;object-fit:contain}.compare-stage{position:relative;max-width:680px;aspect-ratio:1;border-radius:12px;overflow:hidden;background:#f8fafc}.compare-stage img,.compare-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.comparison-layout{display:grid;grid-template-columns:minmax(420px,1fr) minmax(360px,.8fr);gap:16px;align-items:start}.parameter-table-wrap{overflow:auto}.parameter-table-wrap table{font-size:13px}.parameter-table-wrap td:nth-child(2){font-family:ui-monospace,SFMono-Regular,Menlo,monospace;text-align:left}.study-quick{border:2px solid #c4b5fd;background:linear-gradient(135deg,#faf5ff,#fff);border-radius:14px;padding:18px}.study-quick .cards{margin:12px 0}.study-quick canvas{height:330px}@media(max-width:1100px){.definitions,.formation,.image-comparison-grid{grid-template-columns:1fr 1fr}.input-schema,.comparison-layout{grid-template-columns:1fr}}@media(max-width:650px){.definitions,.formation,.image-comparison-grid,.input-examples{grid-template-columns:1fr}}
+.study001-peak-example{margin:16px 0;padding:16px;border:1px solid #c4b5fd;border-radius:14px;background:#fff}.study001-example-grid{display:grid;grid-template-columns:minmax(480px,1.15fr) minmax(320px,.85fr);gap:16px;align-items:start}.study001-example-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff;min-width:0}.study001-example-stage{position:relative;width:100%;aspect-ratio:1;overflow:hidden;border-radius:9px;background:#f8fafc}.study001-example-stage img,.study001-example-stage canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated}.study001-example-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:9px}.study001-example-metrics span{padding:8px 4px;border-radius:7px;background:#f1f5f9;text-align:center;font-size:12px}.study001-example-metrics b{display:block;font-size:15px;color:var(--ink)}@media(max-width:900px){.study001-example-grid{grid-template-columns:1fr}}
+.image-comparison-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison-thumbs{display:grid;grid-template-columns:1fr 1fr;gap:8px}.comparison-thumbs figure{margin:0}.comparison-thumbs figcaption{font-size:11px;color:var(--muted);margin:3px 0}.comparison-thumbs img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.comparison-card .comparison-stats{font-size:12px;line-height:1.5;margin-top:8px}.comparison-card .comparison-stats b{color:var(--ink)}.comparison-color-key{display:flex;align-items:center;gap:7px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin:10px 0 12px}.comparison-color-key i{display:inline-block;width:28px;height:14px;border:1px solid #d8dee8;border-radius:3px}@media(max-width:700px){.image-comparison-grid{grid-template-columns:1fr}}
 .method-comparison-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.method-comparison-plot{min-width:0}.method-comparison-plot canvas{height:420px}.method-comparison-note{padding:11px 13px;border-left:4px solid var(--blue);background:#eff6ff;border-radius:8px;margin:12px 0}.method-comparison-table td,.method-comparison-table th{text-align:right}.method-comparison-table td:first-child,.method-comparison-table th:first-child{text-align:left}.method-comparison-table td:not(:first-child){font-variant-numeric:tabular-nums}@media(max-width:1100px){.method-comparison-grid{grid-template-columns:1fr}}
-.naming-guide table th:first-child,.naming-guide table td:first-child{white-space:nowrap}.naming-guide table td:nth-child(2){text-align:left}.naming-guide .panel h3{margin-bottom:10px}.recall-definition{margin-top:14px;border-left-color:var(--blue);background:#eff6ff}
+.indexer-compare{margin:12px 0 14px}.indexer-compare table{table-layout:fixed}.indexer-compare th,.indexer-compare td{white-space:normal;text-align:left;vertical-align:top;overflow-wrap:anywhere}.indexer-compare th:first-child{width:19%}.indexer-compare th:nth-child(2),.indexer-compare th:nth-child(3){width:40.5%}.indexer-compare td:first-child{font-weight:650;color:#334155}
+.naming-guide table th:first-child,.naming-guide table td:first-child{white-space:nowrap}.naming-guide table td:nth-child(2){text-align:left}.naming-guide .panel h3{margin-bottom:10px}.recall-definition{margin-top:14px;border-left-color:var(--blue);background:#eff6ff}.dataset-overview .panel{height:100%}.dataset-overview .panel h3{color:var(--blue)}.noise-provenance .step{min-height:135px}.noise-provenance .step b{color:var(--blue)}.noise-provenance .formula{font-size:13px}.noise-table td,.noise-table th{white-space:normal;text-align:left}.noise-table td:nth-child(2),.noise-table td:nth-child(3),.noise-table td:nth-child(4){text-align:right}.parameter-table-wrap{overflow-x:hidden}.parameter-table-wrap table{table-layout:fixed}.parameter-table-wrap th,.parameter-table-wrap td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}.parameter-table-wrap th:nth-child(1){width:26%}.parameter-table-wrap th:nth-child(2){width:34%}.parameter-table-wrap th:nth-child(3){width:40%}
 html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.grid2,.grid3,.two-charts,.method-comparison-grid,.case-layout,.comparison-layout,.input-schema,.definitions,.formation,.pipeline,.findings,.controls,.control{min-width:0}.grid2>*,.grid3>*,.two-charts>*,.method-comparison-grid>*,.case-layout>*,.comparison-layout>*,.input-schema>*,.definitions>*,.formation>*,.pipeline>*,.findings>*{min-width:0}pre{max-width:100%;overflow-x:auto}code{overflow-wrap:anywhere}canvas{max-width:100%}.control select{width:min(100%,360px);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:650px){.control{width:100%}.control select{width:100%;min-width:0;max-width:none}}
 .naming-guide .table-wrap,.physics-scope .table-wrap{overflow:visible}.naming-guide table,.physics-scope table{table-layout:fixed}.naming-guide th,.naming-guide td,.physics-scope th,.physics-scope td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}.naming-guide table th:first-child,.naming-guide table td:first-child{white-space:normal}.naming-guide table:nth-child(1) th:nth-child(1){width:14%}.naming-guide table:nth-child(1) th:nth-child(2){width:36%}.naming-guide table:nth-child(1) th:nth-child(3){width:50%}.naming-guide table:nth-child(2) th:nth-child(1){width:22%}.naming-guide table:nth-child(2) th:nth-child(2){width:42%}.naming-guide table:nth-child(2) th:nth-child(3){width:36%}.physics-scope table th:first-child{width:30%}.physics-scope table th:nth-child(2){width:70%}
+.table-wrap,.naming-guide .table-wrap,.physics-scope .table-wrap{overflow:hidden}.table-wrap table{table-layout:fixed;width:100%}.table-wrap th,.table-wrap td{white-space:normal;overflow-wrap:anywhere;word-break:break-word;vertical-align:top}
+.tag-explainer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0}.tag-definition{border:1px solid var(--line);border-left:4px solid var(--blue);border-radius:11px;padding:13px;background:#f8fafc}.tag-definition h3{margin:0 0 5px;font-size:16px}.tag-definition p{margin:0;font-size:13px}.tag-definition code{font-size:12px}@media(max-width:900px){.tag-explainer{grid-template-columns:1fr 1fr}}@media(max-width:650px){.tag-explainer{grid-template-columns:1fr}}
+.naming-guide table:nth-child(2) th:nth-child(1){width:28%}.naming-guide table:nth-child(2) th:nth-child(2){width:36%}.naming-guide table:nth-child(2) th:nth-child(3){width:36%}
+.naming-guide .version-table th:nth-child(1){width:15%}.naming-guide .version-table th:nth-child(2){width:35%}.naming-guide .version-table th:nth-child(3){width:50%}.naming-guide .observation-table th:nth-child(1){width:28%}.naming-guide .observation-table th:nth-child(2){width:36%}.naming-guide .observation-table th:nth-child(3){width:36%}
+.naming-guide .observation-table td:first-child{white-space:nowrap;word-break:normal}
+.naming-guide .observation-table{table-layout:auto}
+.summary-visuals{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.summary-figure{border:1px solid var(--line);border-radius:12px;padding:12px;background:#fff}.summary-figure h3{margin-bottom:4px}.summary-figure p{margin:0 0 8px;color:var(--muted);font-size:12px}.summary-figure canvas{width:100%;height:300px;border:1px solid var(--line);border-radius:9px;background:#fff}.summary-figure.summary-wide{grid-column:1 / -1}.summary-figure.summary-wide canvas{height:300px}.summary-key-images{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-top:14px}.summary-image-card{border:1px solid var(--line);border-radius:12px;padding:10px;background:#fff}.summary-image-card img{display:block;width:100%;aspect-ratio:1;object-fit:contain;background:#f8fafc;border-radius:8px;image-rendering:pixelated}.summary-image-card b{display:block;margin-top:7px}.summary-image-card p{margin:4px 0 0;color:var(--muted);font-size:12px}@media(max-width:900px){.summary-visuals{grid-template-columns:1fr}.summary-figure.summary-wide{grid-column:auto}}@media(max-width:650px){.summary-key-images{grid-template-columns:1fr}}
+.study-group-defs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;margin:14px 0}.study-group-defs article{border:1px solid var(--line);border-top:4px solid #4f46e5;border-radius:10px;padding:11px;background:#fff;min-width:0}.study-group-defs b,.study-group-defs span{display:block}.study-group-defs span{margin-top:6px;color:var(--muted);font-size:12px;line-height:1.55}.study-summary-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}.study-summary-grid .chart{height:360px}@media(max-width:1100px){.study-group-defs{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:850px){.study-summary-grid{grid-template-columns:1fr}.study-group-defs{grid-template-columns:1fr 1fr}}@media(max-width:560px){.study-group-defs{grid-template-columns:1fr}}
+.study001-v3-controls{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:12px;margin:14px 0}.study001-v3-control{display:flex;flex-wrap:wrap;align-items:center;gap:8px}.study001-v3-control strong{margin-right:5px}.study001-v3-tabs{display:flex;flex-wrap:wrap;gap:8px}.study001-v3-tabs button{border:1px solid var(--line);border-radius:9px;padding:8px 12px;background:#fff;color:var(--ink);font:inherit;cursor:pointer}.study001-v3-tabs button.active{background:var(--ink);border-color:var(--ink);color:#fff}.study001-v3-plots{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px}.study001-v3-plot{min-width:0}.study001-v3-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;font-weight:700;margin-bottom:4px}.study001-v3-head .legend{justify-content:flex-end;margin:0;font-size:12px;font-weight:500}.study001-v3-plot svg{display:block;width:100%;height:auto;aspect-ratio:1.4;background:#fff}.study001-v3-note{min-height:42px;text-align:center;color:var(--muted);font-size:12px}.study001-v3-metrics{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:14px}.study001-v3-metrics span{padding:9px 5px;border-radius:8px;background:#f1f5f9;text-align:center;font-size:12px}.study001-v3-metrics b{display:block;font-size:15px}.study001-v3-detail{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.study001-v3-detail .formula{font-size:12px}.study001-v3-legend-dot,.study001-v3-legend-ring{display:inline-block;width:11px;height:11px;border-radius:50%;border:2px solid #2563eb;vertical-align:-1px;margin-right:4px}.study001-v3-legend-ring{border-color:#d97706}.study001-v3-legend-cross{display:inline-block;color:#ea580c;font-size:20px;font-weight:700;line-height:10px;vertical-align:-2px;margin-right:3px}.study001-v3-legend-cross.only{color:#dc2626}.study001-v3-legend-line{display:inline-block;width:22px;border-top:2px solid #2563eb;vertical-align:3px;margin-right:4px}.study001-v3-legend-line.acom{border-color:#ea580c;border-top-style:dashed}@media(max-width:1000px){.study001-v3-plots,.study001-v3-detail{grid-template-columns:1fr}.study001-v3-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:650px){.study001-v3-controls{align-items:flex-start}.study001-v3-control{width:100%}.study001-v3-tabs button{flex:1}.study001-v3-head{display:block}.study001-v3-head .legend{justify-content:flex-start;margin-top:6px}.study001-v3-metrics{grid-template-columns:1fr 1fr}}
 </style>
 </head>
 <body><main>
 <header class="topbar">
- <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · 3 disk detectors + Pyxem · ACOM Top‑1…Top‑5</p></div>
+ <div><h1>Clean V5：二维衍射图 → Top‑5 取向</h1><p class="subtitle">2,048 orientations · First‑Born Clean images · 9 electron doses · 3 disk detectors + Pyxem accelerated template matching · ACOM/Pyxem Top‑1…Top‑5</p></div>
  <nav class="nav"><a href="../v3/ACOM_COORDINATE_VISUALIZATION.html">V3 · 直接峰</a><a href="../v4/CLEAN_IMAGE_ACOM_VISUALIZATION.html">V4 · 图像接口</a><a class="active" href="ACOM_CLEAN_V5_VISUALIZATION.html">V5 · 剂量/噪声/Top‑5</a></nav>
 </header>
 
@@ -1485,21 +1911,62 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 <section class="summary-banner">
  <span class="scope-badge">执行摘要 / Executive summary</span>
  <h2>检峰质量与最终取向质量</h2>
- <p class="section-intro"><b>V5 不是一种新的检峰器。</b>它是本 benchmark 的第五版数据流程：图像模型为 coherent First‑Born 运动学衍射；V4 使用的是与 ACOM 计划匹配的运动学图像。Poisson、noiseless 和 EMPAD‑G2 也不是新的散射模型，而是同一张 V5 期望图经过不同观测层得到的输入。所有百分比直接来自已保存全量结果，不做平滑或结果美化。</p>
+ <p class="section-intro">图像模型为 coherent First‑Born 运动学衍射；V4 使用的是与 ACOM 计划匹配的运动学图像。Poisson、noiseless 和 EMPAD‑G2 是同一张 V5 期望图经过不同观测层得到的输入。所有百分比直接来自已保存全量结果，不做平滑或结果美化。</p>
  <div class="findings">
   <div class="finding"><span>Headline 高剂量</span><b id="summary-headline">—</b><small>2,048 样本，Top‑5 Acc@2°</small></div>
   <div class="finding"><span>[001] Clean‑E</span><b id="summary-001">—</b><small>512 个独立样本，不混入 headline</small></div>
   <div class="finding"><span>检峰全量条件</span><b id="summary-disks">—</b><small>Precision / Recall / 位置误差可独立查看</small></div>
  </div>
+ <div class="result-callout"><b>关键图的统一条件：</b>端到端和检峰柱状图使用 Headline 2,048、1,000,000 e⁻、Poisson only；剂量曲线固定为 Poisson only，横轴为每张图的电子数。下方三张图展示同一取向在 Clean‑E、无噪声计数和 Poisson 计数下的输入变化。</div>
+ <div class="summary-visuals">
+  <article class="summary-figure"><h3>端到端 Top‑K Acc@2°</h3><p>Headline · 1,000,000 e⁻ · Poisson only；四条方法路径在同一分母下比较。</p><canvas id="summary-endpoint-chart" width="900" height="300" role="img" aria-label="Headline Top-K orientation accuracy summary"></canvas><div class="legend" id="summary-endpoint-legend"></div></article>
+  <article class="summary-figure"><h3>衍射盘恢复 Recall / Precision</h3><p>Headline · 1,000,000 e⁻ · Poisson only；只比较三个显式检峰器。</p><canvas id="summary-disk-chart" width="900" height="300" role="img" aria-label="Headline disk recovery summary"></canvas><div class="legend" id="summary-disk-legend"></div></article>
+  <article class="summary-figure summary-wide"><h3>电子剂量对端到端 Top‑5 的影响</h3><p>Headline · Poisson only；每条线对应一条完整方法路径，反映剂量变化而不是单张图的显示亮度。</p><canvas id="summary-dose-chart" width="1400" height="300" role="img" aria-label="Headline dose response summary"></canvas><div class="legend" id="summary-dose-legend"></div></article>
+ </div>
+ <div class="summary-key-images">
+  <article class="summary-image-card"><img id="summary-image-expectation" alt="Clean-E expectation summary image"><b>Clean‑E · 期望图</b><p>物理模型输出的归一化期望概率图。</p></article>
+  <article class="summary-image-card"><img id="summary-image-noiseless" alt="Clean-C noiseless summary image"><b>Clean‑C · noiseless</b><p>同一取向按剂量缩放后的确定性计数期望。</p></article>
+  <article class="summary-image-card"><img id="summary-image-poisson" alt="Clean-C Poisson summary image"><b>Clean‑C · Poisson only</b><p>同一剂量下的整数电子计数，包含散粒涨落。</p></article>
+ </div>
+</section>
+
+<section class="section dataset-overview" aria-labelledby="dataset-overview-title">
+ <h2 id="dataset-overview-title">数据集构成 / Dataset overview</h2>
+ <p class="section-intro">V5 由一套主数据集和一套独立的 [001] 研究集组成。两套数据都从同一 NCM811 CIF 和同一 Clean 图像模型生成，但取向列表、HDF5 文件和评价分母分别保存；[001] 结果不并入 headline。</p>
+ <div class="grid3">
+  <div class="panel"><h3>Headline · 2,048</h3><p>SO(3) Sobol 取向；构建时进行晶体对称性与 Friedel canonicalization。每个取向保存一张 512×512 Clean‑E 期望图，并派生 9 个电子剂量、每档 5 个重复的 Clean‑C 计数图。</p><p class="small muted">用途：主 benchmark、剂量曲线、三种检峰器和 Pyxem 的全量比较。</p></div>
+  <div class="panel"><h3>独立 [001] · 512</h3><p>exact [001] 32、near [001] 320、transition [001] 96、[100] control 32、[110] control 32。该集合专门用于高对称取向异常的分组分析。</p><p class="small muted">用途：区分检峰损失、候选排序、晶体对称性和坐标/评价接口问题。</p></div>
+  <div class="panel"><h3>统一实验矩阵</h3><p>每个输入包含 512×512 二维倒空间图像，q 范围为 ±1.6 Å⁻¹，峰筛选 Kmax=1.5 Å⁻¹。ACOM 使用三种检峰器；Pyxem 直接读取图像模板匹配。</p><p class="small muted">所有结果使用相同的 Top‑1…Top‑5、对称性/Friedel 评价和已保存分母。</p></div>
+ </div>
+ <div class="grid2" style="margin-top:14px">
+  <div class="panel"><h3>主数据文件</h3><div class="table-wrap"><table><thead><tr><th>文件</th><th>内容</th><th>形状 / 类型</th></tr></thead><tbody>
+   <tr><td><code>clean_v5_first_born_expectation_2048.h5</code></td><td>Clean‑E 期望概率图</td><td><code>expectation/intensity</code><br>2048×512×512 · float32</td></tr>
+   <tr><td><code>clean_v5_first_born_counted_2048.h5</code></td><td>Clean‑C Poisson 计数</td><td><code>images/counts</code><br>2048×9×5×512×512 · uint32</td></tr>
+   <tr><td><code>clean_v5_instrument_noise_manifest_2048.h5</code></td><td>读出噪声级别、sigma、随机种子</td><td>与 sample、dose、level、repeat 对齐</td></tr>
+  </tbody></table></div></div>
+  <div class="panel"><h3>中间结果与评价文件</h3><div class="table-wrap"><table><thead><tr><th>文件</th><th>用途</th><th>是否作为输入</th></tr></thead><tbody>
+   <tr><td>physical oracle HDF5</td><td>理论衍射盘坐标和强度</td><td>上限比较与 Recall 分母</td></tr>
+   <tr><td>detected peaks HDF5</td><td>三种检峰器的输出</td><td>ACOM 输入</td></tr>
+   <tr><td>ACOM/Pyxem Top‑5 HDF5/JSON</td><td>候选取向、相关分数和评价指标</td><td>最终结果，不回写图像</td></tr>
+  </tbody></table></div></div>
+ </div>
 </section>
 
 <section class="section naming-guide" aria-labelledby="naming-guide-title">
  <h2 id="naming-guide-title">版本、图像与观测层 / Versions, image model and observation layers</h2>
- <p class="section-intro">页面中的名称分为四层：benchmark 版本、图像生成模型、电子计数方式和读出噪声。它们对应数据流程的不同阶段，不是四个互相竞争的模型。</p>
+ <p class="section-intro">下面的标签对应数据流程中的不同对象。V3、V4、V5 是 benchmark 版本；Clean‑E 和 Clean‑C 是输入图像层；noiseless、Poisson only 和 EMPAD‑G2 是 Clean‑C 的观测方式。</p>
+ <div class="tag-explainer" aria-label="标签说明 / Label definitions">
+  <article class="tag-definition"><h3>V3 · 直接峰输入</h3><p>输入已经是 <code>(qₓ,qᵧ,intensity)</code> 峰列表，只测试 ACOM 取向搜索。</p></article>
+  <article class="tag-definition"><h3>V4 · 旧图像接口</h3><p>输入是按旧 ACOM 反射计划生成的运动学 CBED 图像，主要验证图像接口。</p></article>
+  <article class="tag-definition"><h3>V5 · 当前图像模型</h3><p>输入是 coherent First‑Born 运动学 CBED 图像，加入有限厚度相干散射。</p></article>
+  <article class="tag-definition"><h3>Clean‑E · 期望图</h3><p>物理模型输出的 <code>float32 P<sub>E</sub>(q)</code>，没有电子随机抽样和读出噪声。</p></article>
+  <article class="tag-definition"><h3>Clean‑C · 计数观测</h3><p>从同一张 Clean‑E 按电子剂量生成计数图，再选择具体观测层。</p></article>
+  <article class="tag-definition"><h3>观测层 · 噪声方式</h3><p><b>noiseless</b> 只缩放；<b>Poisson only</b> 只做电子计数抽样；<b>EMPAD‑G2</b> 再加入读出噪声。</p></article>
+ </div>
  <div class="grid2">
   <div class="panel">
    <h3>版本与图像模型</h3>
-   <div class="table-wrap"><table><thead><tr><th>标签</th><th>定义</th><th>与下一版的主要差别</th></tr></thead><tbody>
+   <div class="table-wrap"><table class="version-table"><thead><tr><th>标签</th><th>定义</th><th>与下一版的主要差别</th></tr></thead><tbody>
     <tr><td>V3</td><td>直接输入 <code>(qₓ,qᵧ,intensity)</code> 峰列表</td><td>没有二维图像形成和自动检峰</td></tr>
     <tr><td>V4</td><td>ACOM‑matched kinematical CBED 图像</td><td>反射集合按旧 ACOM 计划生成；1,081 个取向、3 个剂量档</td></tr>
     <tr><td>V5</td><td>coherent First‑Born kinematical CBED 图像</td><td>有限厚度相干散射、2,048 个 headline 取向、9 个剂量档；检峰器和 ACOM 评价接口保持一致</td></tr>
@@ -1507,12 +1974,12 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
   </div>
   <div class="panel">
    <h3>Clean‑E、Clean‑C 与观测层</h3>
-   <div class="table-wrap"><table><thead><tr><th>标签</th><th>输入形式</th><th>计数与噪声</th></tr></thead><tbody>
+   <div class="table-wrap"><table class="observation-table"><thead><tr><th>标签</th><th>输入形式</th><th>计数与噪声</th></tr></thead><tbody>
     <tr><td>Clean‑E</td><td>期望图 <code>P<sub>E</sub>(q)</code>，float32</td><td>没有；用于隔离图像形成和检峰损失</td></tr>
     <tr><td>Clean‑C</td><td>由同一张期望图按电子剂量得到的计数观测</td><td>可以选择下列观测层</td></tr>
     <tr><td>noiseless</td><td><code>I<sub>N</sub>(q)=N<sub>e</sub>P<sub>E</sub>(q)</code></td><td>确定性缩放，不抽样</td></tr>
     <tr><td>Poisson only</td><td><code>n(q)~Poisson(N<sub>e</sub>P<sub>E</sub>(q))</code></td><td>只有电子散粒噪声；总计数在剂量附近波动</td></tr>
-    <tr><td>EMPAD‑G2 · 1/4/16/64 frames</td><td>Poisson 计数再叠加读出噪声</td><td>frames 只改变读出噪声累积，不改变电子剂量</td></tr>
+    <tr><td>EMPAD‑G2<br><span class="small">1 / 4 / 16 / 64 frames</span></td><td>Poisson 计数再叠加读出噪声</td><td>frames 只改变读出噪声累积，不改变电子剂量</td></tr>
    </tbody></table></div>
   </div>
  </div>
@@ -1523,6 +1990,13 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 <section class="section physics-scope" aria-labelledby="physics-scope-title">
  <h2 id="physics-scope-title">V5 图像模型的物理范围 / Physical scope</h2>
  <p class="section-intro">V5 使用 coherent First‑Born 运动学 CBED。有限厚度通过反射振幅中的形状因子进入图像；该模型不是 multislice，也不包含多重散射。</p>
+ <div class="grid2" style="margin:14px 0">
+  <div class="panel"><h3>First‑Born：一阶单次散射</h3><p>First‑Born 近似把样品势当作弱扰动，只保留入射电子被晶体散射一次的项。它适合用来建立 Clean 的运动学基线，但不描述电子在晶体内继续散射形成的 dynamical / multislice 效应。</p><div class="formula">入射波 → 一次晶体散射 → 出射波
+不包含：散射 → 散射 → 散射</div></div>
+  <div class="panel"><h3>coherent：复振幅相干叠加</h3><p>每个反射先以带相位的复数振幅表示，再相加并取模平方。不同反射之间的干涉因此保留；这不同于先分别算强度再直接相加。</p><div class="formula">A(q) = Σ<sub>g</sub> A<sub>g</sub>(q)
+I(q) = |A(q)|²
+非相干近似：I(q) = Σ<sub>g</sub> |A<sub>g</sub>(q)|²</div></div>
+ </div>
  <div class="grid2">
   <div class="panel">
    <h3>当前生成中实际使用的因素</h3>
@@ -1553,7 +2027,31 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 
 <section class="section method-comparison" aria-labelledby="method-comparison-title">
  <h2 id="method-comparison-title">方法横向比较 / Method comparison</h2>
- <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及直接读二维图像的 Pyxem。左图比较最终取向 Top‑1～Top‑5；右图只比较三种检峰器的盘恢复指标。</p>
+ <p class="section-intro">这里把四条端到端路径放在同一张图里：ACOM + AutoDisk、ACOM + DoG‑RGM、ACOM + find_Bragg_disks，以及 Pyxem accelerated template matching。前三条路径先从二维图像恢复衍射盘，再把 <code>(qₓ,qᵧ,intensity)</code> 列表交给 ACOM；Pyxem 直接在二维图像与独立生成的取向模板库之间做相关匹配，不生成 ACOM 峰列表。左图比较最终取向 Top‑1～Top‑5；右图只比较前三条路径的盘恢复指标。</p>
+ <div class="table-wrap indexer-compare"><table><thead><tr><th>比较项</th><th>py4DSTEM ACOM</th><th>本 benchmark 的 Pyxem</th></tr></thead><tbody>
+  <tr><td>方法身份</td><td>py4DSTEM 的自动晶体取向映射（ACOM）</td><td>Pyxem 软件包中的 accelerated template matching</td></tr>
+  <tr><td>实际输入</td><td>检峰器输出的稀疏列表 <code>(qₓ,qᵧ,intensity)</code></td><td>屏蔽中心束并归一化后的二维衍射图</td></tr>
+  <tr><td>是否显式检峰</td><td>是；AutoDisk、DoG‑RGM 或 <code>find_Bragg_disks</code></td><td>否；不先恢复独立盘坐标</td></tr>
+  <tr><td>匹配方式</td><td>观测峰与 py4DSTEM orientation plan 的稀疏相关</td><td>图像与 diffsims 取向模板的旋转归一化相关</td></tr>
+  <tr><td>主要诊断能力</td><td>可以把错误拆成检峰、峰强度和 ACOM 候选排序</td><td>保留图像层联合信息，但较难归因到某一个衍射盘</td></tr>
+  <tr><td>Top‑5 含义</td><td>五个不同晶带轴邻域的相关候选</td><td>相关分数最高的五个模板候选</td></tr>
+ </tbody></table></div>
+ <p class="small muted">两条路径使用相同输入样本和相同的晶体对称性/Friedel 误差评价，但模板生成器及 Top‑5 候选机制不同；相关分数不能跨方法直接比较。</p>
+ <div class="grid3" style="margin:12px 0">
+  <div class="panel"><h3>AutoDisk</h3><p class="small">环形模板互相关定位衍射盘，随后用 LoG 初检和 RGM 中心精修，再积分盘强度。</p></div>
+  <div class="panel"><h3>DoG‑RGM</h3><p class="small"><b>DoG</b>（Difference of Gaussians，高斯差分）在多个尺度上增强局部亮斑并给出候选中心；<b>RGM</b>（radial gradient maximization，径向梯度最大化）用候选中心周围的内外环响应网格搜索亚像素中心，再积分圆盘强度。</p></div>
+  <div class="panel"><h3>find_Bragg_disks</h3><p class="small">调用 py4DSTEM 的 Bragg-disk 检测接口，完成候选峰定位、中心精修和盘强度积分；结果再转换为 ACOM 所需的峰列表。</p></div>
+ </div>
+ <details class="fold" style="margin:12px 0"><summary>Pyxem accelerated template matching：输入、计算和输出</summary><div class="fold-body">
+  <div class="pipeline" style="grid-template-columns:repeat(5,1fr)">
+   <div class="step"><b>① 二维图像</b>读取与 ACOM 相同的 Clean‑E/C 图像数组；不读取峰列表。</div>
+   <div class="step"><b>② 几何预处理</b>屏蔽中心束，补齐一行一列，使偶数尺寸图像与 Pyxem 的 <code>shape/2</code> 原点一致。</div>
+   <div class="step"><b>③ 模板库</b>由 CIF、<code>diffsims</code> 和 <code>orix</code> 生成独立的取向模板库，使用 2° 取向与面内角步长、Kmax=1.5 Å⁻¹。</div>
+   <div class="step"><b>④ 加速相关</b>调用 <code>index_dataset_with_template_rotation</code>；图像和模板均做 <code>max(I,0)^0.25</code> 变换及归一化。</div>
+   <div class="step"><b>⑤ 取向候选</b>直接返回 5 个 Euler/rotation 候选、相关分数、镜像标记和模板索引；评价时再做晶体对称性与 Friedel 等价搜索。</div>
+  </div>
+  <p class="small muted">Pyxem 是 4D‑STEM 衍射分析软件包；本页调用其 accelerated template matching 接口。这里的“无检峰步骤”仅指不经过 AutoDisk、DoG‑RGM 或 <code>find_Bragg_disks</code> 的显式盘坐标提取。它仍然使用由 CIF 生成的运动学衍射模板，因此不是无模型的图像分类器。Pyxem Top‑5 与 ACOM Top‑5 都按各自相关分数排序，网页不使用 GT 重排候选。</p>
+ </div></details>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="method-comparison-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="method-comparison-dose"></select></div>
@@ -1571,7 +2069,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
 
 <section class="section dose-response" aria-labelledby="dose-response-title">
  <h2 id="dose-response-title">剂量响应：检峰与端到端取向 / Dose response</h2>
- <p class="section-intro">这两张图沿用 V4 的读法：横轴是每张图的电子数，纵轴随选择的指标变化。左图同时画三个检峰器，右图同时画 ACOM 三条检峰路径和 Pyxem；因此可以直接区分“盘没找好”与“盘找到了但取向仍有歧义”。</p>
+ <p class="section-intro">这两张图沿用 V4 的读法：横轴是每张图的电子数，纵轴随选择的指标变化。左图同时画三个检峰器，右图同时画三条 ACOM 检峰路径和 Pyxem accelerated template matching。左图反映盘坐标恢复；右图反映最终取向候选质量，两者使用同一数据集、剂量和观测层。</p>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="dose-response-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
   <div class="control"><label>噪声 / Noise</label><select id="dose-response-noise"></select></div>
@@ -1590,7 +2088,7 @@ html,body{max-width:100%;overflow-x:hidden}.topbar,main,.section,.panel,.card,.g
  <div class="definitions">
   <article class="definition v3"><span class="tag">V3 · direct peak list</span><h3>直接峰输入</h3><p>输入已经是 <code>(qₓ,qᵧ,intensity)</code> 浮点峰列表。它测试 ACOM 的取向搜索，不测试二维图像形成和检峰。</p><p class="small muted">文件：private/oracle peaks HDF5；ACOM 直接读取 PointList。</p></article>
   <article class="definition e"><span class="tag">Clean‑E · expectation</span><h3>物理期望图</h3><p>由 CIF、取向和 First‑Born 运动学模型得到的 <code>float32 P(q)</code>。没有电子抽样和读出噪声，是图像接口的确定性基线。</p><p class="small muted">目标：隔离图像形成与自动检峰对 ACOM 的影响。</p></article>
-  <article class="definition c"><span class="tag">Clean‑C · counted observation</span><h3>电子计数图</h3><p>从同一张 Clean‑E 图按电子剂量产生 <code>uint32 counts</code>；随后可叠加确定性 EMPAD‑G2 读出噪声。</p><p class="small muted">目标：测量剂量和噪声对检峰及最终取向的影响。</p></article>
+  <article class="definition c"><span class="tag">Clean‑C · counted observation</span><h3>电子计数图</h3><p>从同一张 Clean‑E 图按电子剂量产生 <code>uint32 counts</code>；随后可叠加固定随机种子、可复现的 EMPAD‑G2 高斯读出噪声。</p><p class="small muted">目标：测量剂量和噪声对检峰及最终取向的影响。</p></article>
  </div>
  <div class="warning" style="margin-top:12px"><b>比较顺序：</b>V3 → Clean‑E 判断图像形成/检峰损失；Clean‑E → Clean‑C 判断电子计数与读出噪声损失。三层不混为一个指标。</div>
 </section>
@@ -1615,6 +2113,30 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  </div>
 </section>
 
+<section class="section noise-provenance" aria-labelledby="noise-provenance-title">
+ <h2 id="noise-provenance-title">噪声构造与剂量定义 / Noise and dose construction</h2>
+ <p class="section-intro">电子剂量和噪声是两个独立变量。每个取向先固定同一张物理期望图，再改变电子数或读出噪声级别；这样可以区分散射模型、电子计数和探测器读出噪声的影响。</p>
+ <div class="pipeline">
+  <div class="step"><b>① 期望概率</b><code>P<sub>E</sub>(q)</code> 来自 Clean‑E，非负且全图总和为 1。它不含随机采样。</div>
+  <div class="step"><b>② 剂量缩放</b>指定每张图的期望电子数 <code>N<sub>e</sub></code>，得到 <code>λ(q)=N<sub>e</sub>P<sub>E</sub>(q)</code>。</div>
+  <div class="step"><b>③ Poisson 计数</b>逐像素采样 <code>n(q)~Poisson(λ(q))</code>。总电子数围绕 <code>N<sub>e</sub></code> 波动；这不是无噪声图。</div>
+  <div class="step"><b>④ 读出噪声</b>在同一张 Poisson 计数图上逐像素加入零均值高斯读出噪声；不同噪声级别复用同一计数 realization。</div>
+ </div>
+ <div class="grid2" style="margin-top:14px">
+  <div class="panel"><h3>观测层的区别</h3><div class="table-wrap"><table class="noise-table"><thead><tr><th>层级</th><th>生成方式</th><th>随机性</th></tr></thead><tbody>
+   <tr><td><b>Clean‑E</b></td><td><code>P<sub>E</sub>(q)</code></td><td>无</td></tr>
+   <tr><td><b>Clean‑C · noiseless</b></td><td><code>I<sub>N</sub>=N<sub>e</sub>P<sub>E</sub></code></td><td>无；只是确定性缩放</td></tr>
+   <tr><td><b>Clean‑C · Poisson only</b></td><td><code>n~Poisson(N<sub>e</sub>P<sub>E</sub>)</code></td><td>有；只有电子散粒噪声</td></tr>
+   <tr><td><b>Clean‑C · EMPAD‑G2</b></td><td><code>y=n+ε<sub>read</sub></code></td><td>Poisson 计数 + 读出噪声</td></tr>
+  </tbody></table></div></div>
+  <div class="panel"><h3>噪声级别的来源</h3><p>读出噪声参考 EMPAD‑G2 的 primary‑electron 等效 RMS 参数。配置中的参考值为 0.008666 e⁻/pixel；累计帧数只改变读出噪声的 RMS，不改变电子剂量。</p><div class="formula">σ_read(F) = 0.008666… × √F  e⁻/pixel
+F ∈ {0, 1, 4, 16, 64}
+同一剂量、取向和重复次数下，五个读出噪声级别复用同一张 Poisson 计数图
+随机种子 = blake2b(seed_base, sample_id, dose, noise_level, repeat)</div><p class="small muted">当前只加入零均值高斯读出噪声；未加入电荷扩散、坏点、饱和、背景或 DQE 修正。该范围与配置和 noise manifest 一致。</p></div>
+ </div>
+ <div class="panel" style="margin-top:14px"><h3>每个噪声级别的实际参数</h3><div class="parameter-table-wrap" id="noise-level-table"></div></div>
+</section>
+
 <section class="section"><h2>二维图像输入格式 / HDF5 interface</h2>
  <div class="panel">
   <p>检峰器输入的是 HDF5 数值数组，不是 PNG、截图或网页中的峰坐标。像素 <code>[row,col]</code> 通过 <code>detector/qx_Ainv[col]</code> 与 <code>detector/qy_Ainv[row]</code> 转回 Å⁻¹。</p>
@@ -1622,12 +2144,13 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
    <section><h3>Clean‑E</h3><p><code>datasets/clean_v5_first_born_expectation_2048.h5</code></p><p><code>expectation/intensity</code> · float32 · <code>[2048,512,512]</code></p><p class="small muted">每个样本是一张确定性概率/期望图，另存 sample_id、q 轴、beam center 和 vacuum probe。</p></section>
    <section><h3>Clean‑C</h3><p><code>datasets/clean_v5_first_born_counted_2048.h5</code></p><p><code>images/counts</code> · uint32 · <code>[2048,9,5,512,512]</code></p><p class="small muted">维度依次为 sample、dose、repeat、row、col；噪声 manifest 记录读出噪声种子和 σ。</p></section>
   </div>
-  <div class="schema-note" style="margin-top:12px"><b>实际读取链：</b>HDF5 二维数组 → AutoDisk / DoG‑RGM / py4DSTEM <code>find_Bragg_disks</code> → <code>(qx,qy,intensity)</code> PointList → 现有 ACOM。Pyxem 路径直接读取二维图像做模板匹配。</div>
+ <div class="schema-note" style="margin-top:12px"><b>实际读取链：</b>HDF5 二维数组 → AutoDisk / DoG‑RGM / py4DSTEM <code>find_Bragg_disks</code> → <code>(qx,qy,intensity)</code> PointList → 现有 ACOM；或 HDF5 二维数组 → Pyxem accelerated template matching → Top‑5 取向候选。两条路径的输入图像相同，后续计算接口不同。</div>
  </div>
 </section>
 
 <section class="section"><details class="fold" open><summary>同一取向的图像差异 / Same-orientation image comparison</summary><div class="fold-body">
- <p class="section-intro">这里不把每幅图单独拉伸后并排比较，而是同时显示：实际图像、归一化后与 Clean‑E 的差异图、总电子数和相对 RMS。这样可以直接看出“剂量改变计数精度”，而不是误把显示亮度当作物理强度。</p>
+ <p class="section-intro">这里不把每幅图单独拉伸后并排比较，而是同时显示：实际图像、归一化后与 Clean‑E 的差异图、总电子数和相对 RMS。右侧残差图的定义是 <code>|n(q)/Nₑ − P(q)|</code>：白色为零或接近零，颜色越红表示该像素的归一化计数偏离期望概率越大。四张残差图共用同一个色标；红色不表示物理强度、衍射盘强弱或 ACOM 置信度。无噪声期望计数应为全白，Poisson 图中的红色来自电子落点涨落。</p>
+ <div class="comparison-color-key"><span>残差色标 / residual scale</span><i style="background:#ffffff"></i><span>0</span><i style="background:#f7b8b8"></i><span>小</span><i style="background:#dc3232"></i><span>大</span><span class="small muted">单位：归一化概率差；共用 P99.7 显示上限</span></div>
  <div class="image-comparison-grid" id="image-comparison-grid"></div>
  <div class="comparison-layout" style="margin-top:16px">
   <div><h3>检峰结果叠加 / Detection overlay</h3><div class="compare-stage"><img id="comparison-base-image" alt="comparison diffraction image"><canvas id="comparison-overlay" width="512" height="512"></canvas></div><div class="legend"><span style="--c:#16a34a">绿色圆/线：TP</span><span style="--c:#eab308">黄色圆：FN 漏检</span><span style="--c:#dc2626">红色叉：FP 误检</span></div></div>
@@ -1636,11 +2159,37 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </div></details></section>
 
 <section class="section study-quick"><h2>[001] 独立测试集 / Separate [001] study</h2>
- <p><b>512 个样本独立构建，未混入 2,048 headline。</b>其中 exact [001]、near [001]、transition [001] 和 [100]/[110] control 分组分别报告；下图直接比较这套研究集的 Top‑1 与 Top‑5，而不是把它藏在 headline 曲线里。</p>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-quick-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div></div>
+ <p><b>512 个样本独立构建，未混入 2,048 headline。</b>方括号 <code>[uvw]</code> 表示电子束在晶体坐标中的 zone axis 方向，不表示晶面 <code>(hkl)</code>。五组样本用于观察高对称 <code>[001]</code> 附近的取向误差如何随倾角变化，并用 <code>[100]</code>/<code>[110]</code> 排除普遍性失效。</p>
+ <div class="study-group-defs">
+  <article><b>exact [001] · 32</b><span>束轴严格沿 [001]；倾角 0°；32 个 0–60° 面内旋转。</span></article>
+  <article><b>near [001] · 320</b><span>倾角 0.125°、0.25°、0.5°、1°、2°；每档 8 个倾转方位 × 8 个面内角。</span></article>
+  <article><b>transition [001] · 96</b><span>倾角 3°、4°、6°；每档 8 个倾转方位 × 4 个面内角。</span></article>
+  <article><b>[100] control · 32</b><span>以 [100] 为 zone axis 的非 [001] 对照组。</span></article>
+  <article><b>[110] control · 32</b><span>以 [110] 为 zone axis 的非 [001] 对照组。</span></article>
+ </div>
+ <div class="study001-peak-example">
+  <h3>exact [001]：GT 与 ACOM Top‑1 预测峰 / Prediction overlay</h3>
+  <p id="study001-example-note" class="small muted"></p>
+  <div class="legend"><span style="--c:#0891b2">青色圆：GT physical-oracle 峰</span><span style="--c:#ea580c">橙色叉：ACOM Top‑1 取向生成的模板峰</span><span style="--c:#7c3aed">紫色线：q 空间一对一匹配</span><span style="--c:#eab308">黄色粗圈：未匹配 GT 峰</span><span style="--c:#dc2626">红色粗叉：未匹配 ACOM 峰</span></div>
+  <div class="study001-example-grid" id="study001-example-grid"></div>
+  <p class="chart-note">蓝色 GT 点来自 V5 First‑Born 图像对应的 physical oracle。橙色 ACOM 点由保存的 Top‑1 预测矩阵重新调用与 ACOM 基线一致的 py4DSTEM 运动学峰生成器得到。全部 <code>Kmax ≤ 1.5 Å⁻¹</code> 峰均显示；中心透射盘不计入比较。</p>
+ </div>
+ <div class="result-callout" id="study001-trend-callout"></div>
+ <div class="study-summary-grid">
+  <article class="panel"><h3 id="study001-angle-summary-title">随倾角变化的 Top‑5 Acc@2°</h3><p class="small muted">横轴 0°–6°；每条线使用对应倾角的同一批 Clean‑E 样本。分组平均值随离开 [001] 明显恢复，但逐角度结果并非严格单调。</p><div class="controls compact"><div class="control"><label>候选范围 / Rank</label><select id="study001-angle-rank"><option value="1">Top‑1</option><option value="2">Top‑2</option><option value="3">Top‑3</option><option value="4">Top‑4</option><option value="5" selected>Top‑5</option></select></div><div class="control"><label>正确阈值 / Accuracy</label><select id="study001-angle-threshold"><option value="acc1">Acc@1°</option><option value="acc2" selected>Acc@2°</option><option value="acc5">Acc@5°</option></select></div></div><canvas class="chart" id="study001-angle-summary-chart" width="760" height="360"></canvas><div class="legend" id="study001-angle-summary-legend"></div></article>
+  <article class="panel"><h3 id="study001-disk-angle-title">相同倾角样本的检峰 Recall</h3><p class="small muted">横轴与左图完全一致；比较 AutoDisk、DoG‑RGM、find_Bragg_disks 对相同样本的盘恢复结果，不包含 ACOM 取向匹配。</p><div class="controls compact"><div class="control"><label>检峰指标 / Disk metric</label><select id="study001-disk-angle-metric"><option value="recall" selected>Recall</option><option value="precision">Precision</option><option value="high_angle_recall">High-angle Recall</option></select></div></div><canvas class="chart" id="study001-disk-angle-chart" width="760" height="360"></canvas><div class="legend" id="study001-disk-angle-legend"></div></article>
+ </div>
+ <div class="study-summary-grid">
+  <article class="panel"><h3>ACOM + oracle：分组与阈值</h3><p class="small muted">Top‑1/Top‑5 Acc@2° 与 Top‑5 Acc@5° 同图；oracle peaks 绕过二维图像检峰，可用于定位 ACOM 下游问题。</p><canvas class="chart" id="study001-group-summary-chart" width="760" height="360"></canvas><div class="legend" id="study001-group-summary-legend"></div></article>
+  <article class="panel"><h3>三个检峰器在五个分组上的 Recall</h3><p class="small muted">分组平均结果用于对应 exact、near、transition 和两个 control；逐倾角细节见上方折线图。</p><canvas class="chart" id="study001-detector-summary-chart" width="760" height="360"></canvas><div class="legend" id="study001-detector-summary-legend"></div></article>
+ </div>
+ <div class="result-callout" id="study001-detector-conclusion"></div>
+ <div class="cards" id="study001-diagnostic-cards" style="margin-top:12px"></div>
+ <div class="table-wrap" style="margin:12px 0"><table><thead><tr><th>证据层 / Evidence layer</th><th>现有结果</th><th>能够排除或支持的解释</th></tr></thead><tbody id="study001-diagnostic-table"></tbody></table></div>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-quick-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div></div>
  <div class="cards" id="study001-quick-cards"></div>
  <canvas class="chart" id="study001-quick-chart" width="1280" height="330"></canvas><div class="legend" id="study001-quick-legend"></div>
- <p class="small muted">若 exact [001] 明显低于 controls，而检峰 Recall 仍高，优先归因于高对称投影下的 ACOM 模板歧义；若 Recall 同步下降，则是图像/检峰层问题。完整分组表和倾角曲线见下方独立研究板块。</p>
+ <p class="small muted">判读顺序：先比较 oracle 与自动检峰路径，再比较 exact/near/transition 与 controls。oracle 已失败而 exact [001] 检峰仍准确时，应优先审计 ACOM orientation plan、sample→crystal 矩阵约定以及 V5 Friedel canonicalization 与候选评价是否一致。高对称投影可能放大模板近简并，但当前数据尚未把它与坐标/表示问题单独消融。</p>
 </section>
 
 <section class="section"><h2>完整数据路径与处理链</h2>
@@ -1650,7 +2199,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  <div class="step"><b>③ Clean‑E</b>512×512 coherent First‑Born expectation image。</div>
  <div class="step"><b>④ Clean‑C</b>9 档剂量；无噪声 expected counts 或 Poisson 电子计数。</div>
  <div class="step"><b>⑤ Instrument noise</b>独立 EMPAD‑G2 read-noise 梯度，确定性 seed。</div>
- <div class="step"><b>⑥ Indexing</b>ACOM 读取检峰列表；Pyxem 直接读取二维图像模板匹配。</div>
+ <div class="step"><b>⑥ Indexing</b>ACOM 读取检峰列表；Pyxem 调用官方 accelerated template matching 直接生成取向候选。</div>
  <div class="step"><b>⑦ Top‑K metric</b>前 K 个候选中至少一个 symmetry/Friedel error ≤2°。</div>
 </div>
 <div class="warning" style="margin-top:14px"><b>重要：</b>网页读取已保存结果，不会重新运行 benchmark。图像亮度使用显示专用的 clip/log 映射；ACOM/Pyxem 输入仍是原始 HDF5 数组。</div>
@@ -1659,7 +2208,8 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 <section class="section"><details class="fold" open><summary>二维输入与受控噪声示例 / Image input and controlled noise</summary><div class="fold-body">
  <p class="section-intro"><b>Clean‑E</b> 是无随机采样的物理期望强度概率图；<b>Clean‑C noiseless</b> 是它乘以指定电子数后的确定性 expected counts；其余 Clean‑C 先进行 Poisson 电子计数，再独立叠加不同强度的 EMPAD‑G2 读出噪声。下面固定同一取向、同一剂量和同一显示尺度，只改变噪声层。</p>
  <div class="gallery" id="noise-gallery"></div>
- <p class="chart-note">显示变换仅用于网页可见性。算法读取 HDF5 中的原始 float32 / uint32 数组；图下方同时列出原始数组的 sum、min、max 与非零像素数。</p>
+ <div class="method-comparison-note" id="noise-gallery-interpretation"></div>
+ <p class="chart-note">七张图共用同一显示参考值和上限。显示过程先把负值裁为 0，再使用 <code>log1p</code> 和 0.65 gamma 增强弱信号；该变换会让遍布全图的微小正读出噪声变得醒目。算法读取 HDF5 中的原始 float32 / uint32 数组，图下方统计量也来自显示变换前的数组。</p>
 </div></details></section>
 
 <section class="section"><details class="fold" open><summary>衍射盘恢复准确率 / Disk-recovery accuracy</summary><div class="fold-body">
@@ -1682,7 +2232,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
  <p>每条曲线使用所选数据集的全部输入作为分母：headline 为 2,048，[001] 独立研究集为 512。ACOM 没有候选的样本计为错误；Pyxem 返回候选并不代表候选正确。</p>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="dose-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
-  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct-image template matching</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="dose-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div>
   <div class="control"><label>噪声梯度 / Noise level</label><select id="dose-noise"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="dose-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -1692,7 +2242,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </section>
 
 <section class="section"><details class="fold"><summary>全噪声 × 全方法小多图（24 张）</summary><div class="fold-body">
- <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem。每张图同时保留 Top‑1…Top‑5。</p>
+ <p>每个噪声等级分别绘制 ACOM + AutoDisk、ACOM + DoG-RGM、ACOM + find_Bragg_disks 与 Pyxem accelerated template matching。每张图同时保留 Top‑1…Top‑5。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="overview-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <div class="legend" id="overview-legend"></div>
  <div class="small-multiples" id="overview-grid"></div>
@@ -1701,7 +2251,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 <section class="section"><h2>固定电子剂量下的噪声阶梯</h2>
  <div class="controls">
   <div class="control"><label>数据集 / Dataset</label><select id="noise-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div>
-  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div>
+  <div class="control"><label>方法 / Method</label><select id="noise-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div>
   <div class="control"><label>电子剂量 / Dose</label><select id="noise-dose"></select></div>
   <div class="control"><label>纵轴指标 / Metric</label><select id="noise-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div>
  </div>
@@ -1711,7 +2261,7 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
 </section>
 
 <section class="section"><h2>Clean‑E 输入/检峰器与 Top‑K</h2>
- <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 直接读取图像。Clean‑C 的三种检峰器均已完成 234 个条件。</p>
+ <p>Clean‑E ACOM 全量比较 oracle、AutoDisk、DoG‑RGM、find_Bragg_disks；Pyxem 使用 accelerated template matching 直接处理二维图像。Clean‑C 的三种检峰器均已完成 234 个条件。</p>
  <div class="controls"><div class="control"><label>纵轴指标 / Metric</label><select id="cleane-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option><option value="median">Median equivalent error</option><option value="p95">P95 equivalent error</option><option value="coverage">Prediction coverage</option></select></div></div>
  <canvas class="chart" id="cleane-chart" width="1280" height="390"></canvas>
  <div class="legend" id="cleane-legend"></div>
@@ -1720,12 +2270,12 @@ q_pixel = 0.00625 Å⁻¹; Kmax = 1.5 Å⁻¹</div>
   <tr><td>ACOM + AutoDisk</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>环形互相关、LoG 初检、RGM 精修</td></tr>
   <tr><td>ACOM + DoG‑RGM</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>DoG 尺度空间初检、RGM 精修</td></tr>
   <tr><td>ACOM + find_Bragg_disks</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>Clean‑C ACOM 正式路径</td></tr>
-  <tr><td>Pyxem direct image</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>直接图像模板匹配，无检峰步骤</td></tr>
+  <tr><td>Pyxem accelerated template matching</td><td class="status-ok">✓ 2,048</td><td class="status-ok">✓ 234 conditions</td><td>官方二维图像模板匹配；不生成 ACOM 峰列表，直接返回 Top‑5 取向候选</td></tr>
  </tbody></table></div>
 </section>
 
 <section class="section"><h2>当前条件的精确 Top‑K 数值</h2>
- <div class="controls"><div class="control"><label>数据集 / Dataset</label><select id="condition-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem direct image</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
+ <div class="controls"><div class="control"><label>数据集 / Dataset</label><select id="condition-scope"><option value="headline">Headline · 2,048</option><option value="study001">[001] study · 512</option></select></div><div class="control"><label>方法 / Method</label><select id="condition-method"><option value="acom:autodisk">ACOM + AutoDisk</option><option value="acom:dog_rgm">ACOM + DoG-RGM</option><option value="acom:py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div><div class="control"><label>电子剂量 / Dose</label><select id="condition-dose"></select></div><div class="control"><label>噪声 / Noise</label><select id="condition-noise"></select></div></div>
  <p id="condition-caption"></p><div class="table-wrap"><table><thead><tr><th>K</th><th>Coverage</th><th>Acc@1°</th><th>Acc@2°</th><th>Acc@5°</th><th>Median error</th><th>P95 error</th></tr></thead><tbody id="condition-table"></tbody></table></div>
 </section>
 
@@ -1764,7 +2314,14 @@ q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
 <section class="section"><details class="fold"><summary>输入文件与中间变量 / Files and traceable intermediates</summary><div class="fold-body"><div class="grid2" id="file-grid"></div></div></details></section>
 
 <section class="section"><details class="fold" open><summary>[001] 独立研究集：全量 Top‑5 与失效分析</summary><div class="fold-body"><div id="study001"></div>
- <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem image matching</option></select></div><div class="control"><label>分组图指标 / Group metric</label><select id="study001-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option></select></div></div>
+ <details open><summary>异常的证据链与合理解释</summary><div class="fold-body">
+  <div class="grid2">
+   <div class="panel"><h3>数据已经证明的部分</h3><ol><li>Clean‑E 没有电子抽样和读出噪声，异常仍存在。</li><li>physical oracle 绕过了全部自动检峰器，ACOM 仍出现约 71.7° 的系统误差平台。</li><li><code>exact [001]</code> 的 AutoDisk Clean‑E 检峰 Precision/Recall 为 100%，位置 RMSE 约 0.146 px。</li><li>Top‑5 明显高于 Top‑1，说明候选集合包含更多正确解，但排序或取向表示仍不稳定。</li></ol></div>
+   <div class="panel"><h3>当前最合理的审计顺序</h3><ol><li>核对 ACOM orientation plan 是否以同一 sample→crystal 约定构建和返回。</li><li>分别计算原始矩阵、仅晶体对称对齐、晶体对称 + Friedel 对齐三种误差。</li><li>检查 V5 构建阶段的 Friedel canonical representative 与 ACOM candidate evaluator 是否使用同一左/右乘约定。</li><li>最后再用候选相关分数间隔和 HKL 重标记检验高对称投影的近简并。</li></ol></div>
+  </div>
+  <div class="result-callout"><b>解释边界：</b>[001] 高对称投影、Friedel 二义性和弱峰变化都是合理的物理放大因素；但 oracle 输入下高度集中的约 71.7° 误差不能仅凭“高对称”解释。当前应将其表述为待审计的 ACOM/坐标/canonicalization 系统异常，而不是已经证明的材料物理极限。</div>
+ </div></details>
+ <div class="controls"><div class="control"><label>方法 / Method</label><select id="study001-method"><option value="oracle">ACOM + oracle peaks</option><option value="autodisk">ACOM + AutoDisk</option><option value="dog_rgm">ACOM + DoG‑RGM</option><option value="py4dstem">ACOM + find_Bragg_disks</option><option value="pyxem">Pyxem accelerated template matching</option></select></div><div class="control"><label>分组图指标 / Group metric</label><select id="study001-metric"><option value="acc1">Top‑K Acc@1°</option><option value="acc2" selected>Top‑K Acc@2°</option><option value="acc5">Top‑K Acc@5°</option></select></div></div>
  <canvas class="chart chart-wide" id="study001-tilt-chart" width="1280" height="440"></canvas><div class="legend" id="study001-legend"></div>
  <div id="study001-tables"></div>
  <p class="warning"><b>边界说明：</b>这 512 个样本是单独构建、单独检峰、单独运行 ACOM/Pyxem Top‑5 的研究集，不混入 2,048 headline 指标。页面显示的是新全量实验，不是旧 Top‑1 冒烟结果。</p>
@@ -1781,6 +2338,7 @@ q = [g_sample,x, g_sample,y],   ‖q‖ ≤ 1.5 Å⁻¹</div>
  <details><summary>图像形成参数 / Image formation parameters</summary><div class="parameter-table-wrap" id="parameter-table-image"></div></details>
  <details><summary>电子计数与噪声参数 / Counting and noise parameters</summary><div class="parameter-table-wrap" id="parameter-table-counting"></div></details>
  <details><summary>ACOM 与评价参数 / ACOM and evaluation parameters</summary><div class="parameter-table-wrap" id="parameter-table-acom"></div></details>
+ <details><summary>Pyxem 加速模板匹配参数 / Pyxem accelerated template matching</summary><div class="parameter-table-wrap" id="parameter-table-pyxem"></div></details>
  <details open><summary>Top‑K、对称性与 Friedel branch</summary><p>“Top‑K 含有正确答案”定义为：算法按相关分数给出的前 K 个候选中，至少一个候选在 proper crystal point-group rotations 与 detector-plane Friedel branch 两类等价变换后，取向误差 ≤2°。Friedel branch 处理二维衍射图无法区分的探测器平面反演；V5 同时在数据构建时保存 canonical Friedel branch，评价仍做等价搜索以避免代表选择影响指标。</p></details>
  <details><summary>电子计数与噪声</summary><div class="formula">Clean‑E: P(q), Σq P(q)=1
 Noiseless expected counts: I_N(q)=N_e P(q)
@@ -1800,7 +2358,7 @@ const NOISE_LABEL={noiseless:"确定性期望计数 / Noiseless expected counts"
 const NOISE_SHORT={noiseless:"Noiseless",poisson_only:"Poisson",empad_g2_1frame:"EMPAD 1f",empad_g2_4frames:"EMPAD 4f",empad_g2_16frames:"EMPAD 16f",empad_g2_64frames:"EMPAD 64f"};
 const pct=v=>(100*v).toFixed(2)+"%";const num=(v,d=3)=>Number.isFinite(v)?Number(v).toFixed(d):"—";
 const METRIC={acc1:{field:"accuracy_all_inputs_within_1deg",label:"Acc@1°",fixed:true},acc2:{field:"accuracy_all_inputs_within_2deg",label:"Acc@2°",fixed:true},acc5:{field:"accuracy_all_inputs_within_5deg",label:"Acc@5°",fixed:true},median:{field:"median_misorientation_deg_indexed",label:"Median equivalent error (°)",fixed:false},p95:{field:"p95_misorientation_deg_indexed",label:"P95 equivalent error (°)",fixed:false},coverage:{field:"prediction_coverage",label:"Prediction coverage",fixed:true}};
-const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem direct image"}};
+const METHODS={"acom:autodisk":{summary:"acom",detector:"autodisk",label:"ACOM + AutoDisk"},"acom:dog_rgm":{summary:"acom",detector:"dog_rgm",label:"ACOM + DoG-RGM"},"acom:py4dstem":{summary:"acom",detector:"py4dstem",label:"ACOM + find_Bragg_disks"},pyxem:{summary:"pyxem",detector:null,label:"Pyxem accelerated template matching"}};
 const DETECTOR_LABEL={autodisk:"AutoDisk",dog_rgm:"DoG‑RGM",py4dstem:"find_Bragg_disks"};
 const METHOD_ORDER=["acom:autodisk","acom:dog_rgm","acom:py4dstem","pyxem"],METHOD_SHORT={"acom:autodisk":"AutoDisk","acom:dog_rgm":"DoG‑RGM","acom:py4dstem":"find_Bragg",pyxem:"Pyxem"};
 const DISK_METRIC={precision:{field:"precision_mean",label:"Disk Precision (matched / detected)",fixed:true},recall:{field:"recall_mean",label:"Disk Recall (matched oracle / all oracle)",fixed:true},high_angle_recall:{field:"high_angle_recall_mean",label:"High-angle disk Recall",fixed:true},position_rmse_px:{field:"position_rmse_px_mean",label:"Position RMSE (px)",fixed:false},position_p95_px:{field:"position_p95_px_mean",label:"Position P95 (px)",fixed:false},sample_detection_coverage:{field:"sample_detection_coverage_mean",label:"Sample detection coverage",fixed:true},false_positive_per_sample:{field:"false_positive_per_sample_mean",label:"False positives / sample",fixed:false},false_negative_per_sample:{field:"false_negative_per_sample_mean",label:"False negatives / sample",fixed:false}};
@@ -1825,7 +2383,7 @@ function drawDose(){const scope=$("dose-scope").value,method=$("dose-method").va
 function drawNoise(){const scope=$("noise-scope").value,method=$("noise-method").value,dose=Number($("noise-dose").value),m=METRIC[$("noise-metric").value];const rows=NOISE_ORDER.map(noise=>cleanCRow(method,dose,noise,scope)),series=metricSeries(rows,$("noise-metric").value);chart($("noise-chart"),NOISE_ORDER.map(n=>NOISE_SHORT[n]),series,{yTitle:`${scope==="study001"?"[001]":"Headline"} · ${m.label}`,fixed:m.fixed});legend("noise-legend",series)}
 function drawDiskDose(){const scope=$("disk-scope").value,noise=$("disk-noise").value,m=DISK_METRIC[$("disk-metric").value];const series=Object.keys(DETECTOR_LABEL).map((detector,i)=>({name:DETECTOR_LABEL[detector],color:["#2563eb","#ea580c","#15803d"][i],values:DATA.dataset.doses.map(d=>diskRow(scope,detector,d,noise)[m.field])}));chart($("disk-dose-chart"),DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed});legend("disk-dose-legend",series);drawDiskNoise()}
 function drawDiskNoise(){const scope=$("disk-scope").value,dose=Number($("disk-fixed-dose").value),detector=$("disk-detector").value,m=DISK_METRIC[$("disk-metric").value],series=[{name:`${DETECTOR_LABEL[detector]} · ${m.label}`,color:"#7c3aed",values:NOISE_ORDER.map(noise=>diskRow(scope,detector,dose,noise)[m.field])}];chart($("disk-noise-chart"),NOISE_ORDER.map(n=>NOISE_SHORT[n]),series,{yTitle:m.label,fixed:m.fixed});legend("disk-noise-legend",series)}
-function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem image"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
+function drawCleanE(){const inputs=[["oracle","ACOM oracle"],["autodisk","ACOM AutoDisk"],["dog_rgm","ACOM DoG-RGM"],["py4dstem","ACOM find_Bragg"],["pyxem","Pyxem accelerated"]],m=METRIC[$("cleane-metric").value];const rows=inputs.map(([key])=>key==="pyxem"?aggregate("pyxem","track",{track:"Clean-E"}):aggregate("acom","clean_e_input",{track:"Clean-E",input:key})),series=metricSeries(rows,$("cleane-metric").value);chart($("cleane-chart"),inputs.map(x=>x[1]),series,{yTitle:m.label,fixed:m.fixed});legend("cleane-legend",series)}
 function buildOverview(){const grid=$("overview-grid");grid.innerHTML="";for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const box=document.createElement("div");box.className="mini-chart";box.innerHTML=`<h3>${NOISE_LABEL[noise]} · ${METHODS[method].label}</h3><canvas width="620" height="240"></canvas>`;grid.append(box)}}drawOverview()}
 function drawOverview(){const key=$("overview-metric").value,m=METRIC[key],canvases=$("overview-grid").querySelectorAll("canvas");let index=0;for(const noise of NOISE_ORDER){for(const method of Object.keys(METHODS)){const rows=DATA.dataset.doses.map(d=>cleanCRow(method,d,noise)),series=metricSeries(rows,key);chart(canvases[index++],DATA.dataset.doses,series,{logX:true,yTitle:m.label,fixed:m.fixed})}}const dummy={top_k:[1,2,3,4,5].map(()=>({[m.field]:0}))};legend("overview-legend",metricSeries([dummy],key))}
 function drawCondition(){const scope=$("condition-scope").value,method=$("condition-method").value,noise=$("condition-noise").value,dose=Number($("condition-dose").value),row=cleanCRow(method,dose,noise,scope);$("condition-caption").textContent=`${scope==="study001"?"[001] study":"Headline"} · ${METHODS[method].label} · ${dose.toLocaleString()} e⁻ · ${NOISE_LABEL[noise]} · ${row.num_conditions} saved condition(s)`;$("condition-table").innerHTML=row.top_k.map(r=>`<tr><td>Top-${r.k}</td><td>${pct(r.prediction_coverage)}</td><td>${pct(r.accuracy_all_inputs_within_1deg)}</td><td><b>${pct(r.accuracy_all_inputs_within_2deg)}</b></td><td>${pct(r.accuracy_all_inputs_within_5deg)}</td><td>${num(r.median_misorientation_deg_indexed)}°</td><td>${num(r.p95_misorientation_deg_indexed)}°</td></tr>`).join("")}
@@ -1837,20 +2395,72 @@ function updateReflection(){const c=DATA.cases.find(x=>x.id===$("case-select").v
 let axisAligned=true;
 function drawAxes(){const c=DATA.cases.find(x=>x.id===$("case-select").value),{ctx,W,H}=canvasSurface($("axis-chart")),cx=W/2,cy=H/2,scale=Math.min(W/2-55,H/2-38)*.9;ctx.clearRect(0,0,W,H);ctx.fillStyle="#fff";ctx.fillRect(0,0,W,H);ctx.strokeStyle="#dbe3ef";ctx.beginPath();ctx.moveTo(40,cy);ctx.lineTo(W-40,cy);ctx.moveTo(cx,30);ctx.lineTo(cx,H-35);ctx.stroke();const sets=[["GT",c.ground_truth_matrix,"#2563eb"],["ACOM",c.acom_candidates.length?(axisAligned?c.acom_candidates[0].aligned_matrix:c.acom_candidates[0].matrix):null,"#ea580c"],["Pyxem",axisAligned?c.pyxem_candidates[0].aligned_matrix:c.pyxem_candidates[0].matrix,"#15803d"]];for(const [name,m,color] of sets){if(!m)continue;for(let j=0;j<3;j++){const x=cx+m[0][j]*scale,y=cy-m[1][j]*scale;ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=name==="GT"?3:2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.stroke();ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);ctx.fill();ctx.font="12px system-ui";ctx.fillText(`${name} ${["x","y","z"][j]}`,x+6,y-5)}}}
 function updateCase(){const c=DATA.cases.find(x=>x.id===$("case-select").value);$("case-description").textContent=c.description;$("image-title").textContent=`${c.sample_id} · ${c.track==="expectation"?"Clean-E":`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("case-image").src=c.image_url;const m=c.peak_metrics;$("peak-metrics").innerHTML=[["TP",m.true_positive],["FP",m.false_positive],["FN",m.false_negative],["P / R",`${pct(m.precision)} / ${pct(m.recall)}`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join("");$("image-stats").innerHTML=`<div class="formula">HDF5 sample index = ${c.sample_index}\nshape/dtype = ${c.image_stats.shape.join("×")} / ${c.image_stats.dtype}\nsum = ${num(c.image_stats.sum,6)}\nmin / max = ${num(c.image_stats.minimum,6)} / ${num(c.image_stats.maximum,6)}\nnonzero pixels = ${c.image_stats.nonzero_pixels.toLocaleString()}\nq pixel = ${num(c.q_axis.q_pixel_size_Ainv,8)} Å⁻¹</div><p class="small muted">${c.image_stats.display_transform}</p>`;$("reflection-select").innerHTML=c.reflections.map((r,i)=>`<option value="${i}">[${r.hkl.join(", ")}] · I=${num(r.intensity_normalized,4)}</option>`).join("");$("canonical-detail").innerHTML=`<p>class <code>${c.canonicalization.orientation_class_id}</code>; crystal symmetry index ${c.canonicalization.crystal_symmetry_index}; Friedel branch index ${c.canonicalization.friedel_branch_index}</p><div class="grid2"><div><b>raw R</b><pre class="matrix">${matrixText(c.raw_orientation_matrix)}</pre></div><div><b>canonical GT R</b><pre class="matrix">${matrixText(c.ground_truth_matrix)}</pre></div></div>`;$("acom-candidates").innerHTML=candidateTable(c.acom_candidates,"acom");$("pyxem-candidates").innerHTML=candidateTable(c.pyxem_candidates,"pyxem");updateReflection();drawOverlay();drawAxes();drawComparisonOverlay()}
-function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("")}
+function renderNoiseGallery(){const g=DATA.noise_gallery;$("noise-gallery").innerHTML=g.images.map(x=>`<article class="gallery-card"><img src="${x.image_url}" alt="${x.label}"><b>${x.label}</b><p class="small">${x.description}</p><code>sum=${num(x.sum,3)} · min=${num(x.minimum,3)} · max=${num(x.maximum,3)}<br>σread=${num(x.read_noise_sigma_e_rms_per_pixel,6)} e⁻/px · negative=${x.negative_pixels}</code></article>`).join("");const pixels=512*512,meanDose=g.dose_electrons/pixels,shotRms=Math.sqrt(meanDose),one=g.images.find(x=>x.id==="empad_g2_1frame"),negativeFraction=one?one.negative_pixels/pixels:null;$("noise-gallery-interpretation").innerHTML=`<b>这些雪花点的来源：</b>${g.dose_electrons.toLocaleString()} e⁻ / ${pixels.toLocaleString()} pixels 给出全图平均 ${num(meanDose,4)} e⁻/px，以及全图平均意义下 ${num(shotRms,4)} e⁻/px 的 Poisson RMS；但衍射强度集中在中心束和有限衍射盘内，这个平均值不代表大多数背景像素。Poisson only 在期望强度接近零的背景中仍几乎总是 0。EMPAD‑G2 高斯读出噪声则作用于每个像素；1-frame 图中 ${one?one.negative_pixels.toLocaleString():"—"} 个像素（${negativeFraction===null?"—":pct(negativeFraction)}）为负，另有近一半背景像素为微小正值。网页裁去负值并增强正值后形成密集颗粒。因此，<b>全图数值 RMS 可以由 Poisson 主导，而 EMPAD 面板肉眼可见的满屏背景雪花主要由读出噪声及显示映射产生</b>。`}
 function parameterTable(rows){if(!rows||!rows.length)return '<p class="muted">没有保存参数。</p>';return `<table><thead><tr><th>参数 / Parameter</th><th>Code name</th><th>Value</th></tr></thead><tbody>${rows.map(row=>`<tr><td>${row[0]}</td><td><code>${row[1]}</code></td><td>${row[2]}</td></tr>`).join('')}</tbody></table>`}
-function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom']])$(id).innerHTML=parameterTable(tables[key])}
-function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$("image-comparison-grid").innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>与 P(q) 的绝对差异 / residual</figcaption><img src="${x.difference_url}" alt="${x.label} residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
+function renderParameterTables(){const tables=DATA.parameter_tables||{};for(const [id,key] of [['parameter-table-dataset','dataset'],['parameter-table-image','image'],['parameter-table-counting','counting_noise'],['parameter-table-acom','acom'],['parameter-table-pyxem','pyxem']])$(id).innerHTML=parameterTable(tables[key]);$("noise-level-table").innerHTML=parameterTable(tables.noise_levels)}
+function renderImageComparison(){const items=(DATA.noise_gallery&&DATA.noise_gallery.comparison)||[];$('image-comparison-grid').innerHTML=items.map(x=>`<article class="comparison-card"><b>${x.label}</b><p class="small muted">${x.description}</p><div class="comparison-thumbs"><figure><figcaption>图像 / image</figcaption><img src="${x.image_url}" alt="${x.label} image"></figure><figure><figcaption>归一化绝对残差 / |n/Nₑ − P(q)|</figcaption><img src="${x.difference_url}" alt="${x.label} normalized absolute residual"></figure></div><div class="comparison-stats">总计 / sum: <b>${num(x.sum,3)}</b><br>相对 RMS: <b>${num(x.relative_rms,6)}</b> · P95: <b>${num(x.relative_p95,6)}</b></div></article>`).join('')||'<p class="muted">没有保存图像比较数据。</p>'}
 function drawComparisonOverlay(){const c=DATA.cases.find(x=>x.id===$("case-select").value);if(!c)return;$("comparison-base-image").src=c.image_url;$("comparison-case-title").textContent=`${c.sample_id} · ${c.track==='expectation'?'Clean-E':`${Number(c.dose).toLocaleString()} e⁻ · ${NOISE_LABEL[c.noise]}`}`;$("comparison-case-note").textContent=c.description;const m=c.peak_metrics;$("comparison-case-metrics").innerHTML=[['TP',m.true_positive],['FP',m.false_positive],['FN',m.false_negative],['Precision',pct(m.precision)],['Recall',pct(m.recall)],['RMSE',`${num(m.position_rmse_px,3)} px`]].map(x=>`<div class="metric"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');const {ctx,W,H}=canvasSurface($("comparison-overlay"));ctx.clearRect(0,0,W,H);const matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.lineWidth=1.5;for(const pair of m.matches){const a=qToPixel(c,c.oracle_peaks[pair.oracle_index].qx,c.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(c,c.detected_peaks[pair.detected_index].qx,c.detected_peaks[pair.detected_index].qy,W,H);ctx.strokeStyle='#16a34a';ctx.fillStyle='#16a34a';ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke();ctx.beginPath();ctx.arc(a[0],a[1],5,0,Math.PI*2);ctx.stroke();ctx.beginPath();ctx.arc(b[0],b[1],3,0,Math.PI*2);ctx.fill()}ctx.strokeStyle='#eab308';ctx.lineWidth=2;for(let i=0;i<c.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(c,c.oracle_peaks[i].qx,c.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],6,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle='#dc2626';ctx.lineWidth=2;for(let i=0;i<c.detected_peaks.length;i++)if(!matchedD.has(i)){const p=qToPixel(c,c.detected_peaks[i].qx,c.detected_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-5,p[1]-5);ctx.lineTo(p[0]+5,p[1]+5);ctx.moveTo(p[0]+5,p[1]-5);ctx.lineTo(p[0]-5,p[1]+5);ctx.stroke()}}
+function drawStudy001Summary(){const s=DATA.study_001,groups=s.topk_groups.groups||[],tilts=s.topk_groups.tilts||[],diskTilts=s.topk_groups.disk_tilts||[],order=['exact_001','near_001','transition_001','control_100','control_110'],short={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100]',control_110:'[110]'},row=(method,group)=>groups.find(x=>x.method===method&&x.group===group),oracle=order.map(g=>row('oracle',g)),rank=Number($("study001-angle-rank").value)-1,threshold=$("study001-angle-threshold").value,thresholdLabel={acc1:'Acc@1°',acc2:'Acc@2°',acc5:'Acc@5°'}[threshold],tiltKey=`topk_${threshold}`;const angleMethods=[['oracle','ACOM + oracle','#111827'],['autodisk','ACOM + AutoDisk','#2563eb'],['dog_rgm','ACOM + DoG‑RGM','#ea580c'],['py4dstem','ACOM + find_Bragg_disks','#15803d'],['pyxem','Pyxem','#7c3aed']],tiltValues=[...new Set(tilts.map(x=>x.tilt_deg))].sort((a,b)=>a-b),angleSeries=angleMethods.map(([method,name,color])=>({name,color,values:tiltValues.map(t=>tilts.find(x=>x.method===method&&x.tilt_deg===t)?.[tiltKey][rank]??null)})),orientationTitle=`Top‑${rank+1} ${thresholdLabel}`;$("study001-angle-summary-title").textContent=`随倾角变化的 ${orientationTitle}`;chart($("study001-angle-summary-chart"),tiltValues,angleSeries,{yTitle:orientationTitle,fixed:true});legend('study001-angle-summary-legend',angleSeries);const diskMetric=$("study001-disk-angle-metric").value,diskMetricLabel={recall:'Recall',precision:'Precision',high_angle_recall:'High-angle Recall'}[diskMetric],diskMethods=[['autodisk','AutoDisk','#2563eb'],['dog_rgm','DoG‑RGM','#ea580c'],['py4dstem','find_Bragg_disks','#15803d']],diskAngleSeries=diskMethods.map(([detector,name,color])=>({name,color,values:tiltValues.map(t=>diskTilts.find(x=>x.detector===detector&&x.tilt_deg===t)?.[diskMetric]??null)}));$("study001-disk-angle-title").textContent=`相同倾角样本的检峰 ${diskMetricLabel}`;chart($("study001-disk-angle-chart"),tiltValues,diskAngleSeries,{yTitle:`Disk ${diskMetricLabel}`,fixed:true});legend('study001-disk-angle-legend',diskAngleSeries);const groupSeries=[{name:'Top‑1 Acc@2°',color:'#dc2626',values:oracle.map(r=>r.topk_acc2[0])},{name:'Top‑5 Acc@2°',color:'#2563eb',values:oracle.map(r=>r.topk_acc2[4])},{name:'Top‑5 Acc@5°',color:'#15803d',values:oracle.map(r=>r.topk_acc5[4])}];groupedBarChart($("study001-group-summary-chart"),order.map(g=>short[g]),groupSeries,{yTitle:'Accuracy',fixed:true});legend('study001-group-summary-legend',groupSeries);const detectorColors=['#2563eb','#ea580c','#15803d'],detectorSeries=s.detectors.map((detector,i)=>({name:DETECTOR_LABEL[detector.detector],color:detectorColors[i],values:order.map(g=>(detector.study_group_summary||{})[g]?.recall??null)}));groupedBarChart($("study001-detector-summary-chart"),order.map(g=>short[g]),detectorSeries,{yTitle:'Disk Recall',fixed:true});legend('study001-detector-summary-legend',detectorSeries);const exact=row('oracle','exact_001'),near=row('oracle','near_001'),transition=row('oracle','transition_001'),c100=row('oracle','control_100'),c110=row('oracle','control_110'),pxExact=row('pyxem','exact_001'),pxNear=row('pyxem','near_001'),autoGroups=(s.detectors.find(x=>x.detector==='autodisk')?.study_group_summary||{});$("study001-trend-callout").innerHTML=`<b>离开 [001] 后总体恢复，但逐角度并非严格单调：</b>ACOM + physical oracle 的分组 Top‑5 Acc@2° 从 exact [001] 的 ${pct(exact.topk_acc2[4])}，上升到 near [001] 的 ${pct(near.topk_acc2[4])}，再到 3°–6° transition 的 ${pct(transition.topk_acc2[4])}。两个对照组在 2° 阈值下为 ${pct(c100.topk_acc2[4])} / ${pct(c110.topk_acc2[4])}，但 Top‑5 Acc@5° 均为 ${pct(c100.topk_acc5[4])}，说明对照组主要落在 2° 判定边界附近。Pyxem 的 exact/near Top‑5 Acc@2° 为 ${pct(pxExact.topk_acc2[4])} / ${pct(pxNear.topk_acc2[4])}，表明二维图像仍包含可用取向信息。`;$("study001-detector-conclusion").innerHTML=`<b>恢复不是因为检峰变得更容易：</b>AutoDisk Recall 从 exact [001] 的 ${pct(autoGroups.exact_001.recall)} 降到 near [001] 的 ${pct(autoGroups.near_001.recall)}，在 transition [001] 进一步降到 ${pct(autoGroups.transition_001.recall)}；同一过程中 ACOM + oracle 的 Top‑5 Acc@2° 却从 ${pct(exact.topk_acc2[4])} 升至 ${pct(transition.topk_acc2[4])}。两条趋势方向相反，进一步支持高对称候选简并、取向搜索或等价表示接口是主要异常来源。`}
 function drawStudy001Quick(){const method=$("study001-quick-method").value,groups=DATA.study_001.topk_groups.groups||[],order=['exact_001','near_001','transition_001','control_100','control_110'],labels={exact_001:'exact [001]',near_001:'near [001]',transition_001:'transition',control_100:'[100] control',control_110:'[110] control'},chartLabels={exact_001:'exact',near_001:'near',transition_001:'transition',control_100:'[100]',control_110:'[110]'},find=group=>groups.find(x=>x.method===method&&x.group===group);const rows=order.map(group=>find(group)).filter(Boolean);const series=[{name:'Top-1',color:'#7c3aed',values:rows.map(r=>r.topk_acc2[0])},{name:'Top-5',color:'#ea580c',values:rows.map(r=>r.topk_acc2[4])}];chart($("study001-quick-chart"),rows.map(r=>chartLabels[r.group]||r.group),series,{yTitle:'Acc@2°',fixed:true});legend('study001-quick-legend',series);$("study001-quick-cards").innerHTML=rows.map(r=>`<div class="card"><strong>${pct(r.topk_acc2[0])} → ${pct(r.topk_acc2[4])}</strong><span>${labels[r.group]||r.group} · N=${r.samples}</span></div>`).join('')}
+function drawStudy001PeakExample(){const e=DATA.study_001.peak_example;if(!e)return;$("study001-example-note").innerHTML=`样本 <code>${e.sample_id}</code>；倾角 ${num(e.tilt_deg,3)}°，倾转方位 ${num(e.tilt_azimuth_deg,3)}°，面内旋转 ${num(e.in_plane_rotation_deg,3)}°；oracle 共 ${e.oracle_peaks.length} 个盘。该样本固定选择为 exact [001] 中 sample_id 排序的第一个，不按检峰性能挑选。`;$("study001-example-grid").innerHTML=e.detectors.map(d=>`<article class="study001-example-card"><h4>${DETECTOR_LABEL[d.detector]}</h4><div class="study001-example-stage"><img src="${e.image_url}" alt="${DETECTOR_LABEL[d.detector]} exact [001] diffraction image"><canvas id="study001-overlay-${d.detector}" width="512" height="512"></canvas></div><div class="study001-example-metrics"><span><b>${d.peak_metrics.true_positive}</b>TP</span><span><b>${d.peak_metrics.false_negative}</b>FN</span><span><b>${d.peak_metrics.false_positive}</b>FP</span><span><b>${pct(d.peak_metrics.precision)}</b>Precision</span><span><b>${pct(d.peak_metrics.recall)}</b>Recall</span><span><b>${num(d.peak_metrics.position_rmse_px,3)} px</b>RMSE</span></div></article>`).join("");for(const d of e.detectors){const m=d.peak_metrics,{ctx,W,H}=canvasSurface($("study001-overlay-"+d.detector)),matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedD=new Set(m.matches.map(x=>x.detected_index));ctx.clearRect(0,0,W,H);ctx.strokeStyle="rgba(124,58,237,.72)";ctx.lineWidth=1;for(const pair of m.matches){const a=qToPixel(e,e.oracle_peaks[pair.oracle_index].qx,e.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(e,d.detected_peaks[pair.detected_index].qx,d.detected_peaks[pair.detected_index].qy,W,H);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}ctx.strokeStyle="#0891b2";ctx.lineWidth=1.7;for(const peak of e.oracle_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#ea580c";ctx.lineWidth=1.7;for(const peak of d.detected_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()}ctx.strokeStyle="#eab308";ctx.lineWidth=3;for(let i=0;i<e.oracle_peaks.length;i++)if(!matchedO.has(i)){const peak=e.oracle_peaks[i],p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],7,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#dc2626";ctx.lineWidth=3;for(let i=0;i<d.detected_peaks.length;i++)if(!matchedD.has(i)){const peak=d.detected_peaks[i],p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-6,p[1]-6);ctx.lineTo(p[0]+6,p[1]+6);ctx.moveTo(p[0]+6,p[1]-6);ctx.lineTo(p[0]-6,p[1]+6);ctx.stroke()}}}
+drawStudy001PeakExample=function(){const e=DATA.study_001.peak_example;if(!e)return;const m=e.comparison,c=e.acom_candidate,matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedP=new Set(m.matches.map(x=>x.predicted_index));$("study001-example-note").innerHTML=`样本 <code>${e.sample_id}</code>；倾角 ${num(e.tilt_deg,3)}°，面内旋转 ${num(e.in_plane_rotation_deg,3)}°。ACOM 输入为 physical oracle 峰，因此这张图不包含自动检峰误差；橙色点是 ACOM Top‑1 预测取向重新生成的模板峰。样本固定选择为 exact [001] 中 sample_id 排序的第一个。`;$("study001-example-grid").innerHTML=`<article class="study001-example-card"><div class="study001-example-stage"><img src="${e.image_url}" alt="exact [001] GT and ACOM predicted peaks"><canvas id="study001-acom-overlay" width="512" height="512"></canvas></div></article><article class="study001-example-card"><h4>ACOM + physical oracle · Top‑1</h4><div class="study001-example-metrics"><span><b>${e.oracle_peaks.length}</b>GT peaks</span><span><b>${e.acom_predicted_peaks.length}</b>ACOM peaks</span><span><b>${m.matched_count}</b>q matched</span><span><b>${pct(m.oracle_match_fraction)}</b>GT matched</span><span><b>${pct(m.predicted_match_fraction)}</b>ACOM matched</span><span><b>${num(m.q_rmse_Ainv,4)} Å⁻¹</b>q RMSE</span></div><div class="formula" style="margin-top:12px">correlation = ${num(c.correlation,6)}\nstrict error = ${num(c.strict_error_deg,3)}°\nsymmetry+Friedel error = ${num(c.friedel_error_deg,3)}°\nplan index = [${c.plan_index.join(", ")}]\nmirror branch = ${c.mirror_match?"used":"not used"}\nq assignment tolerance = ${num(m.matching_tolerance_Ainv,3)} Å⁻¹</div><p class="small muted">“GT matched”只表示标准峰附近存在 ACOM 模板峰，不等于取向正确。高对称 [001] 下，不同取向可以产生高度重合的二维点阵，而 HKL 标记和三维取向仍不同。</p></article>`;const {ctx,W,H}=canvasSurface($("study001-acom-overlay"));ctx.clearRect(0,0,W,H);ctx.strokeStyle="rgba(124,58,237,.68)";ctx.lineWidth=1;for(const pair of m.matches){const a=qToPixel(e,e.oracle_peaks[pair.oracle_index].qx,e.oracle_peaks[pair.oracle_index].qy,W,H),b=qToPixel(e,e.acom_predicted_peaks[pair.predicted_index].qx,e.acom_predicted_peaks[pair.predicted_index].qy,W,H);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.stroke()}ctx.strokeStyle="#0891b2";ctx.lineWidth=1.8;for(const peak of e.oracle_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],5,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#ea580c";ctx.lineWidth=1.8;for(const peak of e.acom_predicted_peaks){const p=qToPixel(e,peak.qx,peak.qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-4,p[1]-4);ctx.lineTo(p[0]+4,p[1]+4);ctx.moveTo(p[0]+4,p[1]-4);ctx.lineTo(p[0]-4,p[1]+4);ctx.stroke()}ctx.strokeStyle="#eab308";ctx.lineWidth=3;for(let i=0;i<e.oracle_peaks.length;i++)if(!matchedO.has(i)){const p=qToPixel(e,e.oracle_peaks[i].qx,e.oracle_peaks[i].qy,W,H);ctx.beginPath();ctx.arc(p[0],p[1],7,0,Math.PI*2);ctx.stroke()}ctx.strokeStyle="#dc2626";ctx.lineWidth=3;for(let i=0;i<e.acom_predicted_peaks.length;i++)if(!matchedP.has(i)){const p=qToPixel(e,e.acom_predicted_peaks[i].qx,e.acom_predicted_peaks[i].qy,W,H);ctx.beginPath();ctx.moveTo(p[0]-6,p[1]-6);ctx.lineTo(p[0]+6,p[1]+6);ctx.moveTo(p[0]+6,p[1]-6);ctx.lineTo(p[0]-6,p[1]+6);ctx.stroke()}};
+let study001ExampleDisplayMode="overlay";
+let study001ExampleOrientationMode="aligned";
+function study001ExampleMatrix(e){return study001ExampleOrientationMode==="raw"?e.acom_candidate.orientation_matrix_sample_to_crystal:study001ExampleOrientationMode==="symmetry"?e.acom_candidate.symmetry_aligned_matrix:e.acom_candidate.symmetry_friedel_aligned_matrix}
+function study001ExampleOrientationLabel(){return study001ExampleOrientationMode==="raw"?"raw":study001ExampleOrientationMode==="symmetry"?"symmetry":"symmetry+Friedel"}
+function study001ExampleQPoint(qx,qy){const scale=165/1.5;return [280+qx*scale,200-qy*scale]}
+function study001ExampleDetectorMarkup(e){
+ const m=e.comparison,matchedO=new Set(m.matches.map(x=>x.oracle_index)),matchedP=new Set(m.matches.map(x=>x.predicted_index));
+ let svg=`<line x1="82" y1="200" x2="500" y2="200" stroke="#cbd5e1"/><line x1="280" y1="22" x2="280" y2="378" stroke="#cbd5e1"/><circle cx="280" cy="200" r="165" fill="none" stroke="#cbd5e1"/><text x="495" y="222" text-anchor="end" fill="#64748b">qₓ (Å⁻¹)</text><text x="290" y="36" fill="#64748b">qᵧ (Å⁻¹)</text>`;
+ if(study001ExampleDisplayMode==="overlay")for(const pair of m.matches){const a=e.oracle_peaks[pair.oracle_index],b=e.acom_predicted_peaks[pair.predicted_index],p=study001ExampleQPoint(a.qx,a.qy),q=study001ExampleQPoint(b.qx,b.qy);svg+=`<line x1="${p[0]}" y1="${p[1]}" x2="${q[0]}" y2="${q[1]}" stroke="#d8dee8"/>`}
+ if(study001ExampleDisplayMode!=="acom")e.oracle_peaks.forEach((peak,index)=>{const p=study001ExampleQPoint(peak.qx,peak.qy),matched=matchedO.has(index),selected=index===e.selected_oracle_index,r=4+6*Math.sqrt(Math.max(peak.intensity,0)),stroke=selected?"#7c3aed":matched?"#2563eb":"#d97706",width=selected||!matched?3:1.8;svg+=`<circle cx="${p[0]}" cy="${p[1]}" r="${selected?r+3:r}" fill="none" stroke="${stroke}" stroke-width="${width}"><title>${selected?"诊断选择 · ":""}${matched?"已匹配":"仅 GT"} · I=${num(peak.intensity,5)}</title></circle>`});
+ if(study001ExampleDisplayMode!=="gt")e.acom_predicted_peaks.forEach((peak,index)=>{const p=study001ExampleQPoint(peak.qx,peak.qy),matched=matchedP.has(index),s=4+5*Math.sqrt(Math.max(peak.intensity,0)),stroke=matched?"#ea580c":"#dc2626",width=matched?2:3;svg+=`<path d="M ${p[0]-s} ${p[1]-s} L ${p[0]+s} ${p[1]+s} M ${p[0]-s} ${p[1]+s} L ${p[0]+s} ${p[1]-s}" stroke="${stroke}" stroke-width="${width}"><title>${matched?"已匹配":"仅 ACOM"} · HKL [${peak.hkl.join(", ")}] · I=${num(peak.intensity,5)}</title></path>`});
+ return svg;
+}
+function study001ExampleAxesMarkup(e){
+ const centerX=280,centerY=200,names=["x","y","z beam"],acomMatrix=study001ExampleMatrix(e);let svg=`<circle cx="${centerX}" cy="${centerY}" r="145" fill="none" stroke="#cbd5e1"/><line x1="80" y1="${centerY}" x2="480" y2="${centerY}" stroke="#cbd5e1"/><line x1="${centerX}" y1="22" x2="${centerX}" y2="378" stroke="#cbd5e1"/><text x="475" y="${centerY+22}" text-anchor="end" fill="#64748b">crystal X</text><text x="${centerX+10}" y="34" fill="#64748b">crystal Y</text>`;
+ [{matrix:e.ground_truth_matrix,key:"gt"},{matrix:acomMatrix,key:"acom"}].filter(item=>study001ExampleDisplayMode==="overlay"||study001ExampleDisplayMode===item.key).forEach((item,matrixIndex)=>{names.forEach((name,column)=>{const matrix=item.matrix,x=centerX+130*matrix[0][column],y=centerY-130*matrix[1][column],dx=x-centerX,dy=y-centerY,length=Math.hypot(dx,dy)||1,rx=dx/length,ry=dy/length,px=-ry,py=rx,side=item.key==="gt"?-1:1,labelX=Math.max(34,Math.min(526,x+rx*12+px*side*14)),labelY=Math.max(22,Math.min(378,y+ry*12+py*side*14)),color=item.key==="gt"?"#2563eb":"#ea580c",dash=item.key==="gt"?"":"7 5";svg+=`<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="${color}" stroke-width="2.5" stroke-dasharray="${dash}"/><circle cx="${x}" cy="${y}" r="3.5" fill="${color}"/><line x1="${x}" y1="${y}" x2="${labelX}" y2="${labelY}" stroke="${color}"/><text x="${labelX}" y="${labelY}" dy="0.35em" text-anchor="middle" fill="#172033" font-size="12">${item.key==="gt"?"GT":"ACOM"} ${name}</text>`})});
+ if(study001ExampleDisplayMode!=="acom"&&e.selected_reflection){const g=e.selected_reflection.g_crystal_Ainv,n=Math.hypot(g[0],g[1])||1,x=centerX+105*g[0]/n,y=centerY-105*g[1]/n;svg+=`<line x1="${centerX}" y1="${centerY}" x2="${x}" y2="${y}" stroke="#7c3aed" stroke-width="4"/><circle cx="${x}" cy="${y}" r="4" fill="#7c3aed"><title>selected GT HKL [${e.selected_reflection.hkl.join(", ")}]</title></circle>`}
+ return svg;
+}
+drawStudy001PeakExample=function(){
+ const e=DATA.study_001.peak_example;if(!e)return;const m=e.comparison,c=e.acom_candidate,section=document.querySelector(".study001-peak-example"),showGT=study001ExampleDisplayMode!=="acom",showACOM=study001ExampleDisplayMode!=="gt",selected=e.selected_reflection;
+ section.innerHTML=`<h3>exact [001]：V3 式 ACOM 坐标诊断 / Coordinate diagnosis</h3><p class="small muted">样本 <code>${e.sample_id}</code>；倾角 ${num(e.tilt_deg,3)}°，面内旋转 ${num(e.in_plane_rotation_deg,3)}°。ACOM 输入为 physical oracle 峰，因而排除了自动检峰误差。左图比较完整 GT 峰集与 ACOM Top‑1 预测取向生成的完整模板峰；右图比较两套取向矩阵的三列。</p><div class="study001-v3-controls"><div class="study001-v3-control"><strong>图层显示</strong><div class="study001-v3-tabs" id="study001-example-view-tabs">${[["gt","仅 Benchmark / GT"],["acom","仅 ACOM 预测"],["overlay","GT + ACOM 叠加"]].map(([mode,label])=>`<button type="button" data-mode="${mode}" class="${study001ExampleDisplayMode===mode?"active":""}">${label}</button>`).join("")}</div></div><div class="study001-v3-control"><strong>ACOM 取向代表</strong><div class="study001-v3-tabs" id="study001-example-orientation-tabs">${[["raw","① 原始"],["symmetry","② 仅晶体对称后"],["aligned","③ 对称 + Friedel 后"]].map(([mode,label])=>`<button type="button" data-mode="${mode}" class="${study001ExampleOrientationMode===mode?"active":""}">${label}</button>`).join("")}</div></div></div><div class="study001-v3-plots"><section class="study001-v3-plot"><div class="study001-v3-head"><span>探测器倒空间 q = [qₓ, qᵧ]</span><span class="legend">${showGT?'<span><i class="study001-v3-legend-dot"></i>GT 峰</span><span><i class="study001-v3-legend-ring"></i>仅 GT</span>':""}${showACOM?'<span><i class="study001-v3-legend-cross">×</i>ACOM 预测峰</span><span><i class="study001-v3-legend-cross only">×</i>仅 ACOM</span>':""}</span></div><svg id="study001-example-detector" viewBox="0 0 560 400" role="img" aria-label="exact 001 GT and ACOM predicted reciprocal-space peaks">${study001ExampleDetectorMarkup(e)}</svg><div class="study001-v3-note">当前显示：${study001ExampleDisplayMode==="gt"?"全部 GT 峰":study001ExampleDisplayMode==="acom"?"全部 ACOM 预测峰":"全部 GT 与 ACOM 峰叠加"}；GT ${e.oracle_peaks.length} 个，ACOM ${e.acom_predicted_peaks.length} 个，一对一匹配 ${m.matched_count} 个（全部峰均显示）。${selected?`诊断选择为 GT HKL [${selected.hkl.join(", ")}]。`:""}</div></section><section class="study001-v3-plot"><div class="study001-v3-head"><span>R 的三列：样品坐标轴在晶体 XY 平面的投影</span><span class="legend">${showGT?'<span><i class="study001-v3-legend-line"></i>R GT</span>':""}${showACOM?'<span><i class="study001-v3-legend-line acom"></i>R ACOM '+study001ExampleOrientationLabel()+"</span>":""}</span></div><svg id="study001-example-axes" viewBox="0 0 560 400" role="img" aria-label="exact 001 GT and ACOM orientation axes">${study001ExampleAxesMarkup(e)}</svg><div class="study001-v3-note">${study001ExampleDisplayMode==="gt"?"仅显示 canonical GT；紫色为所选 GT 反射的 g_c 方向。":study001ExampleDisplayMode==="acom"?`仅显示 ACOM ${study001ExampleOrientationLabel()} 代表。`:`叠加 canonical GT（实线）与 ACOM ${study001ExampleOrientationLabel()}（虚线）；紫色为所选 GT 反射的 g_c 方向。`}</div></section></div><div class="study001-v3-metrics"><span><b>${e.oracle_peaks.length}</b>GT peaks</span><span><b>${e.acom_predicted_peaks.length}</b>ACOM peaks</span><span><b>${m.matched_count}</b>q matched</span><span><b>${m.unmatched_oracle_count}</b>only GT</span><span><b>${m.unmatched_predicted_count}</b>only ACOM</span><span><b>${num(m.q_rmse_Ainv,4)} Å⁻¹</b>q RMSE</span></div><div class="study001-v3-detail"><div class="formula">correlation = ${num(c.correlation,6)}\nraw representative error = ${num(c.strict_error_deg,3)}°\nsymmetry + Friedel error = ${num(c.friedel_error_deg,3)}°\nmirror branch = ${c.mirror_match?"used":"not used"}\nplan index = [${c.plan_index.join(", ")}]</div><div class="result-callout"><b>图的含义：</b>左图的点集重合只说明二维倒空间位置相近；右图显示 ACOM Top‑1 的三维取向代表。该样本在对称性与 Friedel 对齐后仍有 ${num(c.friedel_error_deg,3)}° 误差，因此不是单纯的等价代表未对齐。高对称 exact [001] 的二维点阵可高度相似，但候选的三维取向仍然错误。</div></div>`;
+ section.querySelectorAll("#study001-example-view-tabs button").forEach(button=>button.onclick=()=>{study001ExampleDisplayMode=button.dataset.mode;drawStudy001PeakExample()});
+ section.querySelectorAll("#study001-example-orientation-tabs button").forEach(button=>button.onclick=()=>{study001ExampleOrientationMode=button.dataset.mode;drawStudy001PeakExample()});
+};
 function renderFiles(){const labels={expectation:"Clean‑E expectation",counted:"Clean‑C Poisson counts",dose_noiseless:"Noiseless expected counts",oracle:"Physical oracle peaks",trace:"Per-reflection trace",acom_top5:"ACOM Top‑5",pyxem_top5:"Pyxem Top‑5",study_001:"[001] independent study"};const show=v=>typeof v==="object"?JSON.stringify(v,null,2):String(v);$("file-grid").innerHTML=Object.entries(DATA.files).map(([k,v])=>`<div class="panel"><h3>${labels[k]||k}</h3>${Object.entries(v).map(([a,b])=>`<div><b>${a}</b><pre class="file">${show(b)}</pre></div>`).join("")}</div>`).join("")}
 function cleanERow(scope,method){return method==="pyxem"?aggregateScoped(scope,"pyxem","track",{track:"Clean-E"}):aggregateScoped(scope,"acom","clean_e_input",{track:"Clean-E",input:method})}
-function renderSummary(){const methods=Object.keys(METHODS),rows=methods.map(m=>({m,row:cleanCRow(m,1000000,"poisson_only")})),best=rows.sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-headline").textContent=`${METHODS[best.m].label}: ${pct(best.row.top_k[4].accuracy_all_inputs_within_2deg)}`;const s001=["oracle","autodisk","dog_rgm","py4dstem","pyxem"].map(m=>({m,row:cleanERow("study001",m)})).sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-001").textContent=`${s001.m==="pyxem"?"Pyxem":DETECTOR_LABEL[s001.m]||"Oracle"}: ${pct(s001.row.top_k[4].accuracy_all_inputs_within_2deg)}`;$("summary-disks").textContent=`${DATA.disk_recovery.headline.num_conditions} + ${DATA.disk_recovery.study_001.num_conditions} conditions`}
+function renderSummary(){const headlineDose=1000000,noise="poisson_only",methods=METHOD_ORDER,rows=methods.map(m=>({m,row:cleanCRow(m,headlineDose,noise)})),best=[...rows].sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-headline").textContent=`${METHODS[best.m].label}: ${pct(best.row.top_k[4].accuracy_all_inputs_within_2deg)}`;const s001=["oracle","autodisk","dog_rgm","py4dstem","pyxem"].map(m=>({m,row:cleanERow("study001",m)})).sort((a,b)=>b.row.top_k[4].accuracy_all_inputs_within_2deg-a.row.top_k[4].accuracy_all_inputs_within_2deg)[0];$("summary-001").textContent=`${s001.m==="pyxem"?"Pyxem":DETECTOR_LABEL[s001.m]||"Oracle"}: ${pct(s001.row.top_k[4].accuracy_all_inputs_within_2deg)}`;$("summary-disks").textContent=`${DATA.disk_recovery.headline.num_conditions} + ${DATA.disk_recovery.study_001.num_conditions} conditions`;const endpointSeries=metricSeries(rows.map(x=>x.row),"acc2");groupedBarChart($("summary-endpoint-chart"),methods.map(m=>METHOD_SHORT[m]),endpointSeries,{yTitle:"Top‑K Acc@2°",fixed:true});legend("summary-endpoint-legend",endpointSeries);const detectors=Object.keys(DETECTOR_LABEL),diskSeries=[{name:"Recall",color:"#2563eb",values:detectors.map(d=>diskRow("headline",d,headlineDose,noise).recall_mean)},{name:"Precision",color:"#ea580c",values:detectors.map(d=>diskRow("headline",d,headlineDose,noise).precision_mean)}];groupedBarChart($("summary-disk-chart"),detectors.map(d=>DETECTOR_LABEL[d]),diskSeries,{yTitle:"检峰率",fixed:true});legend("summary-disk-legend",diskSeries);const doseColors=["#2563eb","#ea580c","#15803d","#7c3aed"],doseSeries=methods.map((m,i)=>({name:METHODS[m].label,color:doseColors[i],values:DATA.dataset.doses.map(d=>cleanCRow(m,d,noise).top_k[4].accuracy_all_inputs_within_2deg)}));chart($("summary-dose-chart"),DATA.dataset.doses,doseSeries,{logX:true,yTitle:"Top‑5 Acc@2°",fixed:true});legend("summary-dose-legend",doseSeries);const images=Object.fromEntries((DATA.noise_gallery?.images||[]).map(x=>[x.id,x])),imageTargets={expectation:"expectation",noiseless:"noiseless",poisson_only:"poisson"};for(const [id,target] of Object.entries(imageTargets)){const image=images[id];if(image)$("summary-image-"+target).src=image.image_url}}
 function drawStudy001(){const data=DATA.study_001.topk_groups,method=$("study001-method").value,key=`topk_${$("study001-metric").value}`,rows=data.tilts.filter(r=>r.method===method),labels=rows.map(r=>r.tilt_deg),series=[1,2,3,4,5].map((k,i)=>({name:`Top-${k}`,color:COLORS[i],values:rows.map(r=>r[key][k-1])}));chart($("study001-tilt-chart"),labels,series,{yTitle:`[001] ${$("study001-metric").selectedOptions[0].textContent}`,fixed:true});legend("study001-legend",series)}
-function renderStudy001(){const s=DATA.study_001,labels=s.topk_groups.method_labels;$("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>为何单独研究：</b>接近 [001] 时，投影反射的简并和高对称性会增加候选取向歧义。该实验用 exact、near、transition 和两个控制组区分“高对称区固有歧义”与“检峰错误”。</div>`;const groups=s.topk_groups.groups,ordered=["exact_001","near_001","transition_001","control_100","control_110"];$("study001-tables").innerHTML=`<h3>Clean‑E Top‑1 / Top‑5 Acc@2° by group</h3><div class="table-wrap"><table><thead><tr><th>Method</th>${ordered.map(g=>`<th>${g}<br>Top‑1 / Top‑5</th>`).join("")}</tr></thead><tbody>${Object.keys(labels).map(method=>`<tr><td>${labels[method]}</td>${ordered.map(group=>{const r=groups.find(x=>x.method===method&&x.group===group);return `<td>${pct(r.topk_acc2[0])} / <b>${pct(r.topk_acc2[4])}</b><br><span class="small muted">N=${r.samples}</span></td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;drawStudy001()}
+function renderStudy001(){
+ const s=DATA.study_001,labels=s.topk_groups.method_labels;
+ const oracle=cleanERow("study001","oracle"),auto=cleanERow("study001","autodisk"),dog=cleanERow("study001","dog_rgm"),py4=cleanERow("study001","py4dstem"),pyxem=cleanERow("study001","pyxem");
+ const groups=s.topk_groups.groups;
+ const groupRow=(method,group)=>groups.find(row=>row.method===method&&row.group===group);
+ const exactOracle=groupRow("oracle","exact_001"),exactPyxem=groupRow("pyxem","exact_001"),transitionOracle=groupRow("oracle","transition_001"),transitionPy4=groupRow("py4dstem","transition_001");
+ const exactAuto=(s.detectors.find(x=>x.detector==="autodisk")?.study_group_summary||{}).exact_001;
+ $("study001").innerHTML=`<div class="cards"><div class="card"><strong>${s.manifest.sample_count}</strong><span>independent samples</span></div><div class="card"><strong>${s.manifest.groups.exact_001}</strong><span>exact [001]</span></div><div class="card"><strong>${s.manifest.groups.near_001}+${s.manifest.groups.transition_001}</strong><span>near / transition [001]</span></div><div class="card"><strong>${s.manifest.groups.control_100}+${s.manifest.groups.control_110}</strong><span>[100] / [110] controls</span></div></div><div class="result-callout"><b>当前判定：</b>exact [001] 的 ACOM oracle Top‑1/Top‑5 均为 ${pct(exactOracle.topk_acc2[0])} / ${pct(exactOracle.topk_acc2[4])}；同一组的 AutoDisk Clean‑E 盘 Recall 为 ${exactAuto?pct(exactAuto.recall):"—"}，但接入 ACOM 后仍未恢复正确取向。transition [001] 的 ACOM oracle Top‑5 为 ${pct(transitionOracle.topk_acc2[4])}，find_Bragg_disks 路径为 ${pct(transitionPy4.topk_acc2[4])}。该差异将异常集中定位到 exact [001] 的高对称取向搜索、候选排序或取向表示/评价接口；它不能归因于单一检峰器。Pyxem 在 exact [001] 的 Top‑3/Top‑5 为 ${pct(exactPyxem.topk_acc2[2])} / ${pct(exactPyxem.topk_acc2[4])}，说明二维图像包含可用取向信息，但不能替代对 ACOM 代表矩阵和等价分支的审计。</div>`;
+ $("study001-diagnostic-cards").innerHTML=[
+  [`${pct(oracle.top_k[0].accuracy_all_inputs_within_2deg)}`,"ACOM + oracle · Top‑1 Acc@2°"],
+  [`${pct(oracle.top_k[4].accuracy_all_inputs_within_2deg)}`,"ACOM + oracle · Top‑5 Acc@2°"],
+  [`${num(oracle.top_k[0].median_misorientation_deg_indexed)}°`,"ACOM + oracle · Top‑1 median"],
+  [exactAuto?pct(exactAuto.recall):"—","exact [001] · AutoDisk Clean‑E Recall"]
+ ].map(x=>`<div class="card"><strong>${x[0]}</strong><span>${x[1]}</span></div>`).join("");
+ const methodText=(name,row)=>`${name}: Top‑1 ${pct(row.top_k[0].accuracy_all_inputs_within_2deg)}, Top‑5 ${pct(row.top_k[4].accuracy_all_inputs_within_2deg)}, median ${num(row.top_k[0].median_misorientation_deg_indexed)}°`;
+ $("study001-diagnostic-table").innerHTML=[
+  ["Clean‑E + physical oracle",methodText("ACOM",oracle),"绕过图像噪声和三个检峰器后仍失败；异常位于 ACOM 搜索、取向表示或评价接口。"],
+  ["exact [001] · Clean‑E disk recovery",exactAuto?`AutoDisk Precision ${pct(exactAuto.precision)}, Recall ${pct(exactAuto.recall)}, RMSE ${num(exactAuto.position_rmse_px)} px`:"—","精确 [001] 的自动检峰本身不是主要瓶颈。"],
+  ["三条 ACOM 自动检峰路径",[methodText("AutoDisk",auto),methodText("DoG‑RGM",dog),methodText("find_Bragg_disks",py4)].join("<br>"),"三种检峰输入落入相近误差平台，支持系统性下游异常，而不是单一 detector failure。"],
+  ["Pyxem accelerated template matching",methodText("Pyxem",pyxem),"该路径直接从二维图像与取向模板库计算相关候选，不经过显式检峰；结果仍受高对称取向的候选近简并影响。"]
+ ].map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td><td style="text-align:left;white-space:normal">${r[2]}</td></tr>`).join("");
+ const ordered=["exact_001","near_001","transition_001","control_100","control_110"];
+ $("study001-tables").innerHTML=`<h3>Clean‑E Top‑1 / Top‑5 Acc@2° by group</h3><div class="table-wrap"><table><thead><tr><th>Method</th>${ordered.map(g=>`<th>${g}<br>Top‑1 / Top‑5</th>`).join("")}</tr></thead><tbody>${Object.keys(labels).map(method=>`<tr><td>${labels[method]}</td>${ordered.map(group=>{const r=groups.find(x=>x.method===method&&x.group===group);return `<td>${pct(r.topk_acc2[0])} / <b>${pct(r.topk_acc2[4])}</b><br><span class="small muted">N=${r.samples}</span></td>`}).join("")}</tr>`).join("")}</tbody></table></div>`;
+ drawStudy001()
+}
 function renderLegacy(){const rows=DATA.legacy_v3,series=[{name:"Headline Acc@2°",color:"#2563eb",values:rows.map(r=>r.headline.accuracy_within_2deg)},{name:"40 grid probes Acc@2°",color:"#ea580c",values:rows.map(r=>r.grid_probe.accuracy_within_2deg)}];chart($("legacy-chart"),rows.map(r=>`${r.angle_step_deg}°`),series,{yTitle:"V3 Acc@2°",fixed:true});legend("legacy-legend",series);$("legacy-table").innerHTML=rows.map(r=>`<tr><td>${r.angle_step_deg}°</td><td>${r.headline.num_samples}</td><td>${pct(r.headline.accuracy_within_2deg)}</td><td>${num(r.headline.median_misorientation_deg)}°</td><td>${r.grid_probe.num_samples}</td><td>${pct(r.grid_probe.accuracy_within_2deg)}</td><td>${num(r.grid_probe.median_misorientation_deg)}°</td></tr>`).join("")}
-function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderImageComparison();renderParameterTables();renderFiles();renderStudy001();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();drawStudy001Quick();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));$("study001-quick-method").addEventListener("change",drawStudy001Quick);$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
-let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();drawStudy001Quick();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes();drawComparisonOverlay()},120)});
+function init(){$("condition-count").textContent=`${DATA.acom.conditions} / ${DATA.pyxem.conditions}`;$("matrix-a").textContent=matrixText(DATA.dataset.direct_basis_A_Angstrom);$("matrix-b").textContent=matrixText(DATA.dataset.reciprocal_basis_B_Ainv);$("parameter-json").textContent=JSON.stringify(DATA.parameters,null,2);setupSelectors();renderSummary();renderNoiseGallery();renderImageComparison();renderParameterTables();renderFiles();renderStudy001();drawStudy001PeakExample();renderLegacy();buildOverview();drawDiskDose();drawDose();drawNoise();drawCleanE();drawCondition();drawStudy001Summary();drawStudy001Quick();updateCase();["dose-scope","dose-method","dose-noise","dose-metric"].forEach(id=>$(id).addEventListener("change",drawDose));["noise-scope","noise-method","noise-dose","noise-metric"].forEach(id=>$(id).addEventListener("change",drawNoise));["condition-scope","condition-method","condition-dose","condition-noise"].forEach(id=>$(id).addEventListener("change",drawCondition));["disk-scope","disk-noise","disk-metric"].forEach(id=>$(id).addEventListener("change",drawDiskDose));["disk-fixed-dose","disk-detector"].forEach(id=>$(id).addEventListener("change",drawDiskNoise));["study001-method","study001-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001));["study001-angle-rank","study001-angle-threshold","study001-disk-angle-metric"].forEach(id=>$(id).addEventListener("change",drawStudy001Summary));$("study001-quick-method").addEventListener("change",drawStudy001Quick);$("cleane-metric").addEventListener("change",drawCleanE);$("overview-metric").addEventListener("change",drawOverview);$("case-select").addEventListener("change",updateCase);$("reflection-select").addEventListener("change",updateReflection);["show-oracle","show-detected","show-links"].forEach(id=>$(id).addEventListener("change",drawOverlay));$("axis-raw").onclick=()=>{axisAligned=false;$("axis-raw").classList.add("active");$("axis-aligned").classList.remove("active");drawAxes()};$("axis-aligned").onclick=()=>{axisAligned=true;$("axis-aligned").classList.add("active");$("axis-raw").classList.remove("active");drawAxes()}}
+let resizeTimer;window.addEventListener("resize",()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{drawDiskDose();drawDose();drawNoise();drawCleanE();drawOverview();drawStudy001();drawStudy001Summary();drawStudy001Quick();drawStudy001PeakExample();renderLegacy();drawCoordinateTrace();drawOverlay();drawAxes();drawComparisonOverlay()},120)});
 init();
 drawMethodComparison();
 ["method-comparison-scope","method-comparison-dose","method-comparison-noise","method-comparison-metric","detection-comparison-metric"].forEach(id=>$(id).addEventListener("change",drawMethodComparison));
