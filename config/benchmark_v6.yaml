@@ -189,6 +189,11 @@ v6:
     resume: true
   acom:
     cuda: true
+    # Native py4DSTEM ACOM launches small per-pattern kernels. Controlled
+    # same-user sharing improves occupancy without changing the matcher.
+    max_processes_per_gpu: 2
+    shared_gpu_max_memory_MiB: 4096
+    shared_gpu_process_command_token: scripts/07_run_acom_baseline.py
     angle_step_zone_axis_deg: 2.0
     angle_step_in_plane_deg: 2.0
     num_matches_return: 5

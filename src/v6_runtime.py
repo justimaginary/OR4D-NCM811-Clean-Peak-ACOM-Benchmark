@@ -62,8 +62,27 @@ def enforce_server_write_scopes(
     ]
 
 
-def require_empty_bound_gpu(config: dict[str, Any]) -> str:
-    """Validate the one physical GPU exposed to a CUDA worker before use."""
+def _process_command(pid: str) -> str:
+    return Path(f"/proc/{pid}/cmdline").read_bytes().replace(b"\0", b" ").decode(
+        errors="replace"
+    )
+
+
+def _process_owned_by_current_user(pid: str) -> bool:
+    return Path(f"/proc/{pid}").stat().st_uid == os.getuid()
+
+
+def require_empty_bound_gpu(
+    config: dict[str, Any],
+    *,
+    workload: str = "exclusive",
+) -> str:
+    """Validate the physical GPU exposed to one CUDA worker.
+
+    Dataset generation and peak detection remain exclusive. ACOM may opt into
+    a small, configured number of same-user ACOM processes because one native
+    matcher process launches kernels too small to saturate the GPU.
+    """
     visible = os.environ.get("CUDA_VISIBLE_DEVICES", "").strip()
     if not visible.isdigit():
         raise RuntimeError(
@@ -103,10 +122,35 @@ def require_empty_bound_gpu(config: dict[str, Any]) -> str:
         if len(fields) == 2 and fields[0] == gpu_uuid:
             active_pids.append(fields[1])
     runtime = config["v6"]["runtime"]
-    if (
-        active_pids
-        or memory > int(runtime["empty_gpu_max_memory_MiB"])
-        or utilization > int(runtime["empty_gpu_max_utilization_percent"])
+    if workload == "acom":
+        acom = config["v6"]["acom"]
+        process_limit = int(acom["max_processes_per_gpu"])
+        if process_limit < 1:
+            raise ValueError("v6.acom.max_processes_per_gpu must be positive")
+        if active_pids and process_limit > 1:
+            command_token = str(acom["shared_gpu_process_command_token"])
+            try:
+                allowed_existing = all(
+                    _process_owned_by_current_user(pid)
+                    and command_token in _process_command(pid)
+                    for pid in active_pids
+                )
+            except (FileNotFoundError, PermissionError, ProcessLookupError):
+                allowed_existing = False
+            if (
+                not allowed_existing
+                or len(active_pids) >= process_limit
+                or memory > int(acom["shared_gpu_max_memory_MiB"])
+            ):
+                raise RuntimeError(
+                    f"Physical GPU {visible} cannot accept another ACOM process: "
+                    f"{memory} MiB, {utilization}%, compute PIDs={active_pids}, "
+                    f"limit={process_limit}"
+                )
+            return visible
+
+    if active_pids or memory > int(runtime["empty_gpu_max_memory_MiB"]) or (
+        utilization > int(runtime["empty_gpu_max_utilization_percent"])
     ):
         raise RuntimeError(
             f"Physical GPU {visible} is not empty: {memory} MiB, {utilization}%, "

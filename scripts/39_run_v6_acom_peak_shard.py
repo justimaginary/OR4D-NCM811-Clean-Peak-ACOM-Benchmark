@@ -77,7 +77,7 @@ def main() -> None:
         raise ValueError("--job-id may contain only letters, numbers and underscores")
     config_path = args.config.resolve()
     config = load_config(config_path)
-    physical_gpu = require_empty_bound_gpu(config)
+    physical_gpu = require_empty_bound_gpu(config, workload="acom")
     peak_file = args.peak_file.resolve()
     orientation_file = Path(
         args.orientation_file or config["v6"]["paths"]["orientations"]
