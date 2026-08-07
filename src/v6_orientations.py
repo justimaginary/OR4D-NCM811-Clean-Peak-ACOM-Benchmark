@@ -258,4 +258,3 @@ def build_v6_orientation_records(
         ),
     }
     return records, summary
-
