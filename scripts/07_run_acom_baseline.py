@@ -530,6 +530,7 @@ def main() -> None:
     search_seed_tree = cKDTree(search_seed_matrices.reshape(-1, 9))
 
     audit_rows: list[dict] = []
+    audit_distance_cache: dict[tuple[str, bytes], tuple[float, float]] = {}
     probe_threshold = float(
         acom["min_probe_discrete_seed_misorientation_deg"]
     )
@@ -542,17 +543,30 @@ def main() -> None:
             gt["orientation_matrix_sample_to_crystal"],
             dtype=float,
         )
-        discrete_distance = min_discrete_seed_distance_deg(
-            matrix_gt,
-            search_seed_tree,
-            symmetries,
+        source_id = str(
+            gt.get(
+                "source_sample_id",
+                gt.get("orientation_id", gt.get("ground_truth_source_id", "")),
+            )
         )
-        zone_distance = min_zone_axis_node_distance_deg(
-            matrix_gt,
-            crystal,
-            symmetries,
-            inversion_symmetry,
-        )
+        distance_key = (source_id, matrix_gt.astype(np.float64).tobytes())
+        distances = audit_distance_cache.get(distance_key)
+        if distances is None:
+            distances = (
+                min_discrete_seed_distance_deg(
+                    matrix_gt,
+                    search_seed_tree,
+                    symmetries,
+                ),
+                min_zone_axis_node_distance_deg(
+                    matrix_gt,
+                    crystal,
+                    symmetries,
+                    inversion_symmetry,
+                ),
+            )
+            audit_distance_cache[distance_key] = distances
+        discrete_distance, zone_distance = distances
         policy = str(gt.get("acom_offgrid_policy", "report_only"))
         if policy not in allowed_policies:
             raise ValueError(f"{sample_id} has unknown ACOM off-grid policy {policy}")
@@ -609,6 +623,7 @@ def main() -> None:
         "sample_counts_by_role": dict(
             Counter(row["sample_role"] for row in audit_rows)
         ),
+        "unique_orientation_distance_evaluations": len(audit_distance_cache),
         "samples": audit_rows,
     }
     audit_path = (
